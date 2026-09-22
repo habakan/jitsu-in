@@ -2,14 +2,15 @@
 # dependencies = ["wasmtime", "embit"]
 # ///
 """Tests build/parser.wasm itself under wasmtime.
-1) no imports  2) Bitcoin Core's rpc_psbt.json  3) plans match expectations  4) signature insertion and failures"""
+1) no imports  2) Bitcoin Core's rpc_psbt.json  3) plans match expectations  4) signature insertion and failures
+5) animated-QR (UR) reassembly of the same PSBTs, encoded by the reference encoder"""
 import glob, json, os, re, struct, sys
 import wasmtime
 from embit import ec
 from embit.psbt import PSBT
 from embit.transaction import Transaction
 
-WASM, VEC, RPC = sys.argv[1], sys.argv[2], sys.argv[3]
+WASM, VEC, RPC, URV = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 P_OK, P_ERR_TX, P_ERR_UNSUPPORTED, P_ERR_UTXO = 0, 4, 5, 7
 # The defect in invalid_with_msg[15] is the value length of PSBT_IN_MUSIG2_PARTIAL_SIG (0x1c); its message omits musig2
 MUSIG2_BY_FIELD = {15}
@@ -67,6 +68,11 @@ class Parser:
     def prevtx(self, i):
         n = self.call("parser_prevtx_len", i)
         return self.read(self.call("parser_prevtx_off", i), n) if n else b""
+
+    def ur(self, part):
+        raw = part.encode()
+        self.mem.write(self.store, raw, self.call("parser_input"))
+        return self.call("parser_ur_receive", len(raw))
 
     def finalize(self, sigs):
         buf = b"".join(bytes([i]) + pub.ljust(33, b"\0") + bytes([len(sig)]) + sig.ljust(73, b"\0")
@@ -154,6 +160,45 @@ for path in sorted(glob.glob(os.path.join(VEC, "own_*.psbt"))):
     check(p.finalize([(i0, b"\x05" + pub0[1:], sig0)])[0] < 0, f"{name}: bad pubkey prefix")
 
 check(Parser().finalize([])[0] < 0, "finalize before parse")
+
+# 5) UR: drop every third pure part so mixed parts have to fill the gaps
+UR_ERR_MISMATCH, UR_ERR_TYPE = -4, -7
+ur = json.load(open(URV))
+for v in ur["vectors"]:
+    name = f"{v['name']} {v['type']}/{v['fragment_len']}"
+    psbt = bytes.fromhex(v["psbt_hex"])
+    exp = json.load(open(os.path.join(VEC, v["name"] + ".json")))
+    p = Parser()
+    p.call("parser_ur_reset")
+    rc, fed = 0, 0
+    for part in v["parts"]:
+        m = re.match(r"UR:[A-Z-]+/(\d+)-\d+/", part)
+        if m and int(m.group(1)) <= v["seq_len"] and int(m.group(1)) % 3 == 0:
+            continue
+        rc = p.ur(part)
+        fed += 1
+        if rc:
+            break
+        progress = p.call("parser_ur_progress")
+        check(progress >> 16 == v["seq_len"], f"{name}: progress {progress >> 16} != {v['seq_len']}")
+    check(rc == len(psbt) and p.read(p.call("parser_input"), rc) == psbt, f"{name}: reassembled (rc={rc}, {fed} parts)")
+    check(p.call("parser_parse", rc, exp["fingerprint"]) == P_OK if rc > 0 else False, f"{name}: parses")
+
+# a UR that is not a PSBT, and a part from another message in the middle of one
+bytes_ur = "ur:bytes/hdeymejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtgwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsdwkbrkch"
+p = Parser()
+p.call("parser_ur_reset")
+check(p.ur(bytes_ur) == UR_ERR_TYPE, "bytes UR rejected")
+multi = [v for v in ur["vectors"] if v["seq_len"] > 3]
+a, b = multi[0], multi[1]
+p = Parser()
+p.call("parser_ur_reset")
+check(p.ur(a["parts"][0]) == 0, "first part")
+check(p.ur(b["parts"][1]) == UR_ERR_MISMATCH, "part of another message rejected")
+rc = 0
+for part in a["parts"][1:]:
+    rc = rc or p.ur(part)
+check(rc == len(bytes.fromhex(a["psbt_hex"])), "completes after the foreign part")
 
 print("rpc_psbt.json:", {f"{k}/{'accepted' if ok else 'rejected'}": v for (k, ok), v in sorted(counts.items())})
 for f in failures:

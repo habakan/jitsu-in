@@ -35,4 +35,11 @@ plan_sig_t *parser_sigs(void);
 int parser_finalize(unsigned n);
 unsigned char *parser_output(void);
 
+/* Animated QR: reset, then for each QR payload write it to parser_input() and call parser_ur_receive(len).
+ * A positive result is the PSBT length, with the PSBT already in parser_input() for parser_parse().
+ * Negative results are UR_ERR_* from ur.h */
+void parser_ur_reset(void);
+int parser_ur_receive(unsigned len);
+unsigned parser_ur_progress(void);
+
 #endif

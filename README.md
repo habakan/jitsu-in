@@ -1,6 +1,7 @@
 # wasm-psbt-parser
 
-A PSBT v0 (BIP174) parser that compiles to a ~7 KB WebAssembly module with **no imports and no keys**.
+A PSBT v0 (BIP174) parser, with animated-QR (UR) reassembly, that compiles to a ~14 KB WebAssembly module with
+**no imports and no keys**.
 It turns an untrusted PSBT into a fixed-layout *plan* (`include/plan.h`) that a signer can check and sign,
 and inserts the signer's signatures back into the PSBT.
 
@@ -21,6 +22,24 @@ computation and signing stay in native code outside the sandbox:
 The signer is still responsible for checking the plan (key ownership, change detection, fees, and the SegWit v0
 fee attack via `non_witness_utxo`). A reference signer lives in
 [baremetal-wasm-signer](https://github.com/habakan/baremetal-wasm-signer) (currently private).
+
+## Animated QR (UR)
+
+PSBTs usually arrive as animated QR codes in the [Uniform Resources](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-005-ur.md)
+format (`ur:crypto-psbt/...` or `ur:psbt/...`). The module reassembles them itself, so the fountain decoding of
+untrusted QR payloads also stays inside the sandbox:
+
+```
+parser_ur_reset()
+parser_ur_receive(len) -> PSBT length once complete (the PSBT is then in the input buffer for parser_parse),
+                          0 while more parts are needed, or a negative UR_ERR_* (include/ur.h)
+parser_ur_progress()   -> parts expected (upper 16 bits) and fragments recovered (lower 16 bits)
+```
+
+Parts may arrive in any order, in either case, with duplicates, and mixed with parts of another message (those are
+rejected without disturbing the rest). Limits: 1024 parts per message, and up to 64 mixed parts (16 KB) kept while
+waiting to be reduced; the oldest is dropped when full. The PRNG, alias sampler and shuffle that decide which
+fragments a mixed part combines match the Blockchain Commons reference implementation bit for bit.
 
 ## Interface
 
@@ -66,7 +85,13 @@ make          # build/parser.wasm and its SHA-256
 make test
 ```
 
-The tests run `build/parser.wasm` itself under wasmtime:
+The UR building blocks are first checked natively (with ASan / UBSan) against the expected values of the
+[bc-ur](https://github.com/BlockchainCommons/bc-ur) test suite (`tests/bc-ur-test.cpp`, extracted by
+`tools/gen_ur_ref_vectors.py`): CRC32, Bytewords, the Xoshiro256** sequences, 500 sampler draws, shuffles,
+200 degree choices, fragment choices, and the single-part and 20-part example URs. On a sequence with a dropped
+part in reverse order, the decoder needs the same number of parts (16) as the reference decoder.
+
+The tests then run `build/parser.wasm` itself under wasmtime:
 
 - the module has no imports;
 - Bitcoin Core's `test/functional/data/rpc_psbt.json`: no traps; every invalid vector is rejected except 15 whose
@@ -75,7 +100,10 @@ The tests run `build/parser.wasm` itself under wasmtime:
 - PSBTs built with [embit](https://github.com/diybitcoinhardware/embit) (P2WPKH, P2TR, mixed, a foreign input):
   every plan field matches the values the PSBT was built from, and a different fingerprint selects no keys;
 - signature insertion: the signed PSBT parses with embit, the transaction is unchanged, the signatures are in the
-  right inputs, and invalid signature lists are rejected.
+  right inputs, and invalid signature lists are rejected;
+- UR: the same PSBTs encoded as `crypto-psbt` and `psbt` URs by [@ngraveio/bc-ur](https://github.com/ngraveio/bc-ur)
+  (`tests/ur_vectors.json`, from `tools/gen_ur_vectors.cjs`) reassemble to the original bytes with every third pure
+  part dropped, and then parse.
 
 ## License
 

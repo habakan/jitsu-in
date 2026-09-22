@@ -5,6 +5,7 @@
 #include "psbt_parser.h"
 #include "reader.h"
 #include "tx.h"
+#include "ur.h"
 
 #ifdef __wasm__
 #define EXPORT(name) __attribute__((export_name(#name))) name
@@ -370,4 +371,40 @@ int EXPORT(parser_finalize)(unsigned n) {
     memcpy(out_buf + o, in_buf + prev, in_len - prev);
     o += in_len - prev;
     return (int)o;
+}
+
+/* ---- UR (animated QR) ---- */
+
+static int ur_ready;
+
+/* Starts a new UR. The reassembly buffer is out_buf, which is free until parser_finalize() */
+void EXPORT(parser_ur_reset)(void) {
+    ur_decoder_reset(out_buf, sizeof(out_buf));
+    ur_ready = 1;
+}
+
+/* Called after the host writes one QR payload (len bytes) to parser_input(). Returns the PSBT length once the
+ * UR is complete, with the PSBT now at the start of parser_input() for parser_parse(); 0 while more parts are
+ * needed; a negative UR_ERR_* for a rejected part, which does not disturb the parts received so far */
+int EXPORT(parser_ur_receive)(unsigned len) {
+    const uint8_t *psbt;
+    size_t psbt_len;
+    long n;
+
+    if (!ur_ready) parser_ur_reset();
+    if (len > PSBT_MAX) return UR_ERR_LIMIT;
+    if ((n = ur_decoder_receive((char *)in_buf, len)) <= 0) return (int)n;
+    if ((strcmp(ur_decoder_type(), "crypto-psbt") && strcmp(ur_decoder_type(), "psbt")) ||
+        !ur_cbor_bytes(ur_decoder_message(), (size_t)n, &psbt, &psbt_len))
+        return UR_ERR_TYPE;
+    if (psbt_len > PSBT_MAX) return UR_ERR_LIMIT;
+    memmove(in_buf, psbt, psbt_len);
+    return (int)psbt_len;
+}
+
+/* Parts expected (upper 16 bits; 0 until the first multipart part) and fragments recovered (lower 16 bits) */
+unsigned EXPORT(parser_ur_progress)(void) {
+    unsigned expected, received;
+    ur_decoder_progress(&expected, &received);
+    return expected << 16 | received;
 }

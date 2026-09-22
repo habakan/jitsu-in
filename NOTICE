@@ -3,3 +3,10 @@ tests/rpc_psbt.json is copied from Bitcoin Core
 
 Copyright (c) 2009-2026 The Bitcoin Core developers
 Distributed under the MIT software license (https://opensource.org/licenses/MIT).
+
+tests/bc-ur-test.cpp is copied from Blockchain Commons bc-ur
+(https://github.com/BlockchainCommons/bc-ur/blob/master/test/test.cpp), and tests/ur_ref_vectors.h holds
+values extracted from it.
+
+Copyright (c) Blockchain Commons
+Distributed under the BSD-2-Clause Plus Patent License (https://spdx.org/licenses/BSD-2-Clause-Patent.html).
