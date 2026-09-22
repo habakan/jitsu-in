@@ -64,7 +64,7 @@ int main(void) {
     {
         static const double w[4] = {1, 2, 4, 8};
         double probs[4];
-        int aliases[4];
+        int16_t aliases[4];
         ur_sampler_init(w, 4, probs, aliases);
         seed_str(&r, "Wolf");
         for (int i = 0; i < 500; i++) CHECK(ur_sampler_next(probs, aliases, 4, &r) == REF_SAMPLER[i], "sampler [%d]", i);

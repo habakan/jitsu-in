@@ -82,58 +82,59 @@ int ur_bytewords_decode(const char *s, size_t n, uint8_t *out, size_t cap) {
     return (int)len;
 }
 
-void ur_sampler_init(const double *w, size_t n, double *probs, int *aliases) {
-    static double p[UR_MAX_SEQ_LEN];
-    static int small[UR_MAX_SEQ_LEN], large[UR_MAX_SEQ_LEN];
+/* w may alias probs: each weight is read before its slot is written, and a slot that has been finalized
+ * (popped from the small stack) is never read again. The small and large stacks share one array, growing
+ * from opposite ends, since every index sits in exactly one of them */
+void ur_sampler_init(const double *w, size_t n, double *probs, int16_t *aliases) {
+    static int16_t stack[UR_MAX_SEQ_LEN];
     size_t ns = 0, nl = 0;
     double sum = 0;
 
     for (size_t i = 0; i < n; i++) sum += w[i];
-    for (size_t i = 0; i < n; i++) p[i] = w[i] * (double)n / sum;
+    for (size_t i = 0; i < n; i++) probs[i] = w[i] * (double)n / sum;
     /* reversed index order, as in the reference */
     for (int i = (int)n - 1; i >= 0; i--) {
-        if (p[i] < 1)
-            small[ns++] = i;
+        if (probs[i] < 1)
+            stack[ns++] = (int16_t)i;
         else
-            large[nl++] = i;
+            stack[n - 1 - nl++] = (int16_t)i;
     }
-    for (size_t i = 0; i < n; i++) probs[i] = 0, aliases[i] = 0;
+    for (size_t i = 0; i < n; i++) aliases[i] = 0;
     while (ns && nl) {
-        int a = small[--ns], g = large[--nl];
-        probs[a] = p[a];
-        aliases[a] = g;
-        p[g] += p[a] - 1;
-        if (p[g] < 1)
-            small[ns++] = g;
+        int a = stack[--ns], g = stack[n - nl--];
+        aliases[a] = (int16_t)g;
+        probs[g] += probs[a] - 1;
+        if (probs[g] < 1)
+            stack[ns++] = (int16_t)g;
         else
-            large[nl++] = g;
+            stack[n - 1 - nl++] = (int16_t)g;
     }
-    while (nl) probs[large[--nl]] = 1;
-    while (ns) probs[small[--ns]] = 1;
+    while (nl) probs[stack[n - nl--]] = 1;
+    while (ns) probs[stack[--ns]] = 1;
 }
 
-int ur_sampler_next(const double *probs, const int *aliases, size_t n, ur_rng_t *r) {
+int ur_sampler_next(const double *probs, const int16_t *aliases, size_t n, ur_rng_t *r) {
     double r1 = ur_rng_next_double(r), r2 = ur_rng_next_double(r);
     int i = (int)((double)n * r1);
     return r2 < probs[i] ? i : aliases[i];
 }
 
 size_t ur_choose_degree(size_t seq_len, ur_rng_t *r) {
-    static double w[UR_MAX_SEQ_LEN], probs[UR_MAX_SEQ_LEN];
-    static int aliases[UR_MAX_SEQ_LEN];
-    for (size_t i = 1; i <= seq_len; i++) w[i - 1] = 1.0 / (double)i;
-    ur_sampler_init(w, seq_len, probs, aliases);
+    static double probs[UR_MAX_SEQ_LEN];
+    static int16_t aliases[UR_MAX_SEQ_LEN];
+    for (size_t i = 1; i <= seq_len; i++) probs[i - 1] = 1.0 / (double)i;
+    ur_sampler_init(probs, seq_len, probs, aliases);
     return (size_t)ur_sampler_next(probs, aliases, seq_len, r) + 1;
 }
 
+/* The reference moves the chosen item from a "remaining" list to the result. Here the result grows at the
+ * front of items and the remaining items stay behind it in their original order */
 void ur_shuffle(uint16_t *items, size_t n, ur_rng_t *r) {
-    static uint16_t remaining[UR_MAX_SEQ_LEN];
-    size_t left = n;
-    memcpy(remaining, items, n * sizeof(uint16_t));
-    for (size_t k = 0; k < n; k++, left--) {
-        size_t i = (size_t)ur_rng_next_int(r, 0, left - 1);
-        items[k] = remaining[i];
-        memmove(remaining + i, remaining + i + 1, (left - i - 1) * sizeof(uint16_t));
+    for (size_t k = 0; k < n; k++) {
+        size_t i = (size_t)ur_rng_next_int(r, 0, n - k - 1);
+        uint16_t item = items[k + i];
+        memmove(items + k + 1, items + k, i * sizeof(uint16_t));
+        items[k] = item;
     }
 }
 

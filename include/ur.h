@@ -33,9 +33,9 @@ double ur_rng_next_double(ur_rng_t *r);
 uint64_t ur_rng_next_int(ur_rng_t *r, uint64_t low, uint64_t high);
 /* Minimal-style Bytewords (two letters per byte) with the trailing CRC32 checked and removed */
 int ur_bytewords_decode(const char *s, size_t n, uint8_t *out, size_t cap);
-/* Sampler over weights w[0..n-1] (Vose's alias method as in the reference implementation) */
-void ur_sampler_init(const double *w, size_t n, double *probs, int *aliases);
-int ur_sampler_next(const double *probs, const int *aliases, size_t n, ur_rng_t *r);
+/* Sampler over weights w[0..n-1] (Vose's alias method as in the reference implementation). w may be probs */
+void ur_sampler_init(const double *w, size_t n, double *probs, int16_t *aliases);
+int ur_sampler_next(const double *probs, const int16_t *aliases, size_t n, ur_rng_t *r);
 size_t ur_choose_degree(size_t seq_len, ur_rng_t *r);
 void ur_shuffle(uint16_t *items, size_t n, ur_rng_t *r);
 /* Fragment indexes mixed into part seq_num, as a bitset of seq_len bits; returns the count */
