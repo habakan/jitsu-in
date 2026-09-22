@@ -174,6 +174,30 @@ int main(void) {
     ur_decoder_reset(work, 200);
     CHECK(feed(REF_PARTS[0]) == UR_ERR_LIMIT, "work buffer limit");
 
+    /* encoder: the reference's nominal fragment lengths, then its example URs character for character */
+    CHECK(ur_nominal_fragment_len(12345, 1005, 1955) == 1764, "nominal fragment length 1");
+    CHECK(ur_nominal_fragment_len(12345, 1005, 30000) == 12345, "nominal fragment length 2");
+    {
+        static char text[2048];
+        uint8_t msg[256];
+        long len;
+        make_message(msg, sizeof(msg), "Wolf");
+        CHECK(ur_encoder_start("bytes", msg, sizeof(msg), 30) == 9, "encoder seq_len");
+        for (int i = 0; i < 20; i++) {
+            len = ur_encoder_next(text, sizeof(text));
+            int same = len == (long)strlen(REF_PARTS[i]);
+            for (long k = 0; same && k < len; k++) same = (text[k] | 32) == (REF_PARTS[i][k] | 32);
+            CHECK(same, "encoder part %d", i + 1);
+        }
+        make_message(msg, 50, "Wolf");
+        CHECK(ur_encoder_start("bytes", msg, 50, 1000) == 1, "single part seq_len");
+        len = ur_encoder_next(text, sizeof(text));
+        int same = len == (long)strlen(REF_SINGLE_PART);
+        for (long k = 0; same && k < len; k++) same = (text[k] | 32) == (REF_SINGLE_PART[k] | 32);
+        CHECK(same, "encoder single part");
+        CHECK(ur_encoder_next(text, 100) == UR_ERR_LIMIT, "encoder output limit");
+    }
+
     printf("%d/%d checks passed\n", checks - failures, checks);
     return failures != 0;
 }

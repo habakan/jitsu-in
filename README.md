@@ -1,6 +1,6 @@
 # wasm-psbt-parser
 
-A PSBT v0 (BIP174) parser, with animated-QR (UR) reassembly, that compiles to a ~14 KB WebAssembly module with
+A PSBT v0 (BIP174) parser, with animated-QR (UR) decoding and encoding, that compiles to a ~16 KB WebAssembly module with
 **no imports and no keys**.
 It turns an untrusted PSBT into a fixed-layout *plan* (`include/plan.h`) that a signer can check and sign,
 and inserts the signer's signatures back into the PSBT.
@@ -35,6 +35,17 @@ parser_ur_receive(len) -> PSBT length once complete (the PSBT is then in the inp
                           0 while more parts are needed, or a negative UR_ERR_* (include/ur.h)
 parser_ur_progress()   -> parts expected (upper 16 bits) and fragments recovered (lower 16 bits)
 ```
+
+The signed PSBT goes back the same way:
+
+```
+parser_ur_encode_start(len, max_fragment_len) -> number of pure parts (len is what parser_finalize() returned)
+parser_ur_encode_next()                       -> length of the next part, written to the input buffer
+```
+
+Parts are uppercase (QR alphanumeric mode) `ur:crypto-psbt` parts. After the pure parts come mixed ones, so a
+device can loop them and a scanner that missed some still recovers the PSBT. The encoder builds each fragment on
+the fly from the output buffer, without a second copy of the message.
 
 Parts may arrive in any order, in either case, with duplicates, and mixed with parts of another message (those are
 rejected without disturbing the rest). Limits: 1024 parts per message, and up to 64 mixed parts (16 KB) kept while
@@ -103,7 +114,10 @@ The tests then run `build/parser.wasm` itself under wasmtime:
   right inputs, and invalid signature lists are rejected;
 - UR: the same PSBTs encoded as `crypto-psbt` and `psbt` URs by [@ngraveio/bc-ur](https://github.com/ngraveio/bc-ur)
   (`tests/ur_vectors.json`, from `tools/gen_ur_vectors.cjs`) reassemble to the original bytes with every third pure
-  part dropped, and then parse.
+  part dropped, and then parse;
+- UR encoding: the module encodes each of those PSBTs part for part identically to the reference encoder, and its
+  parts decode back to the PSBT. Natively, it reproduces bc-ur's 20-part and single-part example URs character for
+  character.
 
 ## License
 

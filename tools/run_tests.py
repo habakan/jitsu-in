@@ -3,7 +3,8 @@
 # ///
 """Tests build/parser.wasm itself under wasmtime.
 1) no imports  2) Bitcoin Core's rpc_psbt.json  3) plans match expectations  4) signature insertion and failures
-5) animated-QR (UR) reassembly of the same PSBTs, encoded by the reference encoder"""
+5) animated-QR (UR) reassembly of the same PSBTs, encoded by the reference encoder
+6) UR encoding of the output, part for part against the reference encoder, and back through the decoder"""
 import glob, json, os, re, struct, sys
 import wasmtime
 from embit import ec
@@ -183,6 +184,37 @@ for v in ur["vectors"]:
         check(progress >> 16 == v["seq_len"], f"{name}: progress {progress >> 16} != {v['seq_len']}")
     check(rc == len(psbt) and p.read(p.call("parser_input"), rc) == psbt, f"{name}: reassembled (rc={rc}, {fed} parts)")
     check(p.call("parser_parse", rc, exp["fingerprint"]) == P_OK if rc > 0 else False, f"{name}: parses")
+
+# 6) encoding: parser_finalize() with no signatures returns the PSBT unchanged, which the reference encoded too
+for v in [v for v in ur["vectors"] if v["type"] == "crypto-psbt"]:
+    name = f"encode {v['name']}/{v['fragment_len']}"
+    psbt = bytes.fromhex(v["psbt_hex"])
+    exp = json.load(open(os.path.join(VEC, v["name"] + ".json")))
+    p = Parser()
+    check(p.parse(psbt, exp["fingerprint"]) == P_OK, f"{name}: parse")
+    n, out = p.finalize([])
+    check(n == len(psbt) and out == psbt, f"{name}: finalize without signatures")
+    if v["fragment_len"] > 1000:  # UR_MAX_FRAGMENT; the single-part form is checked natively against bc-ur
+        check(p.call("parser_ur_encode_start", n, v["fragment_len"]) == -5, f"{name}: fragment limit")
+        continue
+    check(p.call("parser_ur_encode_start", n, v["fragment_len"]) == v["seq_len"], f"{name}: seq_len")
+    ours = []
+    for _ in range(v["seq_len"] * 3 + 2):
+        k = p.call("parser_ur_encode_next")
+        ours.append(p.read(p.call("parser_input"), k).decode())
+    if v["seq_len"] == 1:
+        check(ours[0] == v["parts"][0], f"{name}: single part")
+    else:
+        by_seq = {int(re.match(r"UR:[A-Z-]+/(\d+)-", x).group(1)): x for x in ours}
+        for ref in v["parts"]:
+            seq = int(re.match(r"UR:[A-Z-]+/(\d+)-", ref).group(1))
+            check(by_seq.get(seq) == ref, f"{name}: part {seq}")
+    d = Parser()
+    d.call("parser_ur_reset")
+    rc = 0
+    for part in ours[1::2] + ours[0::2]:  # odd parts first, pure ones dropped at first
+        rc = rc or d.ur(part)
+    check(rc == len(psbt) and d.read(d.call("parser_input"), rc) == psbt, f"{name}: round trip")
 
 # a UR that is not a PSBT, and a part from another message in the middle of one
 bytes_ur = "ur:bytes/hdeymejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtgwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsdwkbrkch"

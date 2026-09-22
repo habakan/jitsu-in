@@ -408,3 +408,18 @@ unsigned EXPORT(parser_ur_progress)(void) {
     ur_decoder_progress(&expected, &received);
     return expected << 16 | received;
 }
+
+/* Encodes the first len bytes of parser_output() (the signed PSBT from parser_finalize()) as a crypto-psbt UR
+ * with fragments of at most max_fragment_len bytes. Returns the number of pure parts, or a negative UR_ERR_*.
+ * Part text is written over parser_input(), so parse again before another parser_finalize() */
+int EXPORT(parser_ur_encode_start)(unsigned len, unsigned max_fragment_len) {
+    if (len > sizeof(out_buf)) return UR_ERR_LIMIT;
+    parsed = 0;
+    return (int)ur_encoder_start("crypto-psbt", out_buf, len, max_fragment_len);
+}
+
+/* Writes the next part to parser_input() and returns its length. Parts after the pure ones are mixed, so
+ * showing them in a loop lets a scanner that missed some recover the message */
+int EXPORT(parser_ur_encode_next)(void) {
+    return (int)ur_encoder_next((char *)in_buf, sizeof(in_buf));
+}

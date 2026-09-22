@@ -410,3 +410,117 @@ long ur_decoder_receive(char *s, size_t n) {
         return d.done = d.message_len;
     }
 }
+
+/* ---- encoder ---- */
+
+static struct {
+    char type[32];
+    const uint8_t *data;
+    size_t data_len, head_len, message_len, frag_len, seq_len;
+    uint8_t head[5];
+    uint32_t checksum, seq_num;
+} e;
+
+size_t ur_nominal_fragment_len(size_t message_len, size_t min_len, size_t max_len) {
+    size_t frag_len = message_len;
+    for (size_t count = 1; count <= message_len / min_len; count++) {
+        frag_len = (message_len + count - 1) / count;
+        if (frag_len <= max_len) break;
+    }
+    return frag_len;
+}
+
+static uint8_t message_byte(size_t i) {
+    return i < e.head_len ? e.head[i] : i < e.message_len ? e.data[i - e.head_len] : 0;
+}
+
+/* Minimal CBOR head, as the reference encoder writes it */
+static size_t cbor_head(uint8_t *out, int major, uint64_t v) {
+    int extra = v < 24 ? 0 : v < 0x100 ? 1 : v < 0x10000 ? 2 : v < 0x100000000ull ? 4 : 8;
+    out[0] = (uint8_t)(major << 5 | (extra == 0 ? v : extra == 1 ? 24 : extra == 2 ? 25 : extra == 4 ? 26 : 27));
+    for (int k = 0; k < extra; k++) out[1 + k] = (uint8_t)(v >> (8 * (extra - 1 - k)));
+    return 1 + (size_t)extra;
+}
+
+long ur_encoder_start(const char *type, const uint8_t *data, size_t len, size_t max_fragment_len) {
+    uint32_t c = 0xffffffffu;
+    memset(&e, 0, sizeof(e));
+    if (strlen(type) >= sizeof(e.type) || max_fragment_len < 10 || max_fragment_len > UR_MAX_FRAGMENT)
+        return UR_ERR_LIMIT;
+    strcpy(e.type, type);
+    e.data = data, e.data_len = len;
+    e.head_len = cbor_head(e.head, 2, len);
+    e.message_len = e.head_len + len;
+    e.frag_len = ur_nominal_fragment_len(e.message_len, 10, max_fragment_len);
+    e.seq_len = (e.message_len + e.frag_len - 1) / e.frag_len;
+    if (e.seq_len > UR_MAX_SEQ_LEN) return UR_ERR_LIMIT;
+    for (size_t i = 0; i < e.message_len; i++) { /* ur_crc32() over the virtual message */
+        c ^= message_byte(i);
+        for (int k = 0; k < 8; k++) c = (c >> 1) ^ (0xedb88320u & (0u - (c & 1)));
+    }
+    e.checksum = ~c;
+    return (long)e.seq_len;
+}
+
+static size_t put_str(char *out, const char *s) {
+    size_t n = strlen(s);
+    memcpy(out, s, n);
+    return n;
+}
+
+static size_t put_uint(char *out, uint32_t v) {
+    char t[10];
+    size_t n = 0, o = 0;
+    do t[n++] = (char)('0' + v % 10); while (v /= 10);
+    while (n) out[o++] = t[--n];
+    return o;
+}
+
+/* Uppercase minimal Bytewords of b followed by its CRC32 */
+static size_t put_bytewords(char *out, const uint8_t *b, size_t n) {
+    uint32_t c = ur_crc32(b, n);
+    size_t o = 0;
+    for (size_t i = 0; i < n + 4; i++) {
+        uint8_t v = i < n ? b[i] : (uint8_t)(c >> (8 * (3 - (i - n))));
+        out[o++] = (char)(WORDS[4 * v] - 32);
+        out[o++] = (char)(WORDS[4 * v + 3] - 32);
+    }
+    return o;
+}
+
+long ur_encoder_next(char *out, size_t cap) {
+    static uint8_t part[1 + 4 * 5 + 3 + UR_MAX_FRAGMENT];
+    uint8_t bits[BITS_BYTES];
+    size_t o = 0, n = 0;
+
+    /* "UR:" + type + "/" + "<seq>-<len>/" (at most 22) + two letters per byte of the part and its CRC32.
+     * A single-part message is no longer than one fragment, so this bounds both forms */
+    if (!e.seq_len || cap < 3 + strlen(e.type) + 1 + 22 + 2 * (1 + 4 * 5 + 3 + e.frag_len + 4)) return UR_ERR_LIMIT;
+    o += put_str(out, "UR:");
+    for (const char *t = e.type; *t; t++) out[o++] = (char)(*t >= 'a' && *t <= 'z' ? *t - 32 : *t);
+    out[o++] = '/';
+    if (e.seq_len == 1) { /* single-part form: the whole message */
+        for (size_t i = 0; i < e.message_len; i++) part[i] = message_byte(i);
+        return (long)(o + put_bytewords(out + o, part, e.message_len));
+    }
+    e.seq_num++;
+    memset(bits, 0, sizeof(bits));
+    ur_choose_fragments(e.seq_num, e.seq_len, e.checksum, bits);
+    part[n++] = 0x85;
+    n += cbor_head(part + n, 0, e.seq_num);
+    n += cbor_head(part + n, 0, e.seq_len);
+    n += cbor_head(part + n, 0, e.message_len);
+    n += cbor_head(part + n, 0, e.checksum);
+    n += cbor_head(part + n, 2, e.frag_len);
+    memset(part + n, 0, e.frag_len);
+    for (size_t f = 0; f < e.seq_len; f++) {
+        if (!(bits[f / 8] >> (f % 8) & 1)) continue;
+        for (size_t k = 0; k < e.frag_len; k++) part[n + k] ^= message_byte(f * e.frag_len + k);
+    }
+    n += e.frag_len;
+    o += put_uint(out + o, e.seq_num);
+    out[o++] = '-';
+    o += put_uint(out + o, (uint32_t)e.seq_len);
+    out[o++] = '/';
+    return (long)(o + put_bytewords(out + o, part, n));
+}

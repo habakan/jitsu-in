@@ -41,5 +41,9 @@ unsigned char *parser_output(void);
 void parser_ur_reset(void);
 int parser_ur_receive(unsigned len);
 unsigned parser_ur_progress(void);
+/* Signed PSBT as an animated QR: parser_ur_encode_start(len returned by parser_finalize(), max fragment bytes),
+ * then parser_ur_encode_next() for each frame, reading the text from parser_input() */
+int parser_ur_encode_start(unsigned len, unsigned max_fragment_len);
+int parser_ur_encode_next(void);
 
 #endif
