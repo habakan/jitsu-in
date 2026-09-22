@@ -1,0 +1,5 @@
+tests/rpc_psbt.json is copied from Bitcoin Core
+(https://github.com/bitcoin/bitcoin/blob/master/test/functional/data/rpc_psbt.json).
+
+Copyright (c) 2009-2026 The Bitcoin Core developers
+Distributed under the MIT software license (https://opensource.org/licenses/MIT).
