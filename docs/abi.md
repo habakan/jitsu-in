@@ -1,0 +1,227 @@
+# parser.wasm ABI
+
+Everything a host needs to drive `parser.wasm` from any language. The module has **zero imports**
+and does not use WASI, so any runtime that can execute WebAssembly works: WAMR on a microcontroller,
+V8 or JavaScriptCore in a browser, wasmtime, wasmi, Chicory (JVM), WasmKit (Swift), WasmEdge.
+
+This file describes ABI **version 1** (`plan_t.version`). Sizes and offsets below are asserted at
+compile time in `include/plan.h` and are stable for a given version.
+
+## The module
+
+```
+imports   none
+memory    exported as "memory", 3 pages (196,608 bytes), not growable
+globals   __data_end, __heap_base (both 136064; the module never allocates)
+```
+
+All buffers are static. The exported accessors return **offsets into the linear memory**,
+not host pointers. A host must bounds-check every offset and length against the memory size
+before reading or writing — the module is untrusted from the host's point of view.
+
+## Exported functions
+
+| Export | Signature | Meaning |
+|---|---|---|
+| `parser_input` | `() -> i32` | Offset of the input buffer. PSBT bytes, UR text, and the UR encoder's output all go here |
+| `parser_input_cap` | `() -> i32` | Capacity of that buffer (32,768) |
+| `parser_parse` | `(len: i32, fingerprint: i32) -> i32` | Parse the PSBT in the input buffer. `0` on success, else a positive `P_ERR_*` |
+| `parser_plan` | `() -> i32` | Offset of the `plan_t` filled by `parser_parse` |
+| `parser_prevtx_off` | `(i: i32) -> i32` | Offset **within the input buffer** of input `i`'s `non_witness_utxo` |
+| `parser_prevtx_len` | `(i: i32) -> i32` | Its length, or `0` if the input has none |
+| `parser_sigs` | `() -> i32` | Offset of an array of 16 `plan_sig_t` the host fills in |
+| `parser_finalize` | `(n: i32) -> i32` | Insert the first `n` signatures. Returns the signed PSBT length, or `-P_ERR_SIG` |
+| `parser_output` | `() -> i32` | Offset of the signed PSBT written by `parser_finalize` |
+| `parser_ur_reset` | `() -> ()` | Drop decoder state before a new animated QR |
+| `parser_ur_receive` | `(len: i32) -> i32` | Feed one UR part from the input buffer. `>0`: PSBT length, now in the input buffer. `0`: more parts needed. `<0`: `UR_ERR_*` |
+| `parser_ur_progress` | `() -> i32` | Parts received so far (for a progress display only) |
+| `parser_ur_encode_start` | `(len: i32, max_fragment_len: i32) -> i32` | Begin encoding the signed PSBT in the output buffer. Returns `seq_len`, or a negative `UR_ERR_*` |
+| `parser_ur_encode_next` | `() -> i32` | Write the next part as uppercase text into the input buffer. Returns its length, or a negative `UR_ERR_*` |
+
+`fingerprint` is the signer's master fingerprint — the first 4 bytes of `HASH160(master pubkey)`
+read big-endian, so `73c5da0a` is passed as `0x73c5da0a`. It is not a secret. Only BIP32 derivations
+carrying this fingerprint become key candidates in the plan.
+
+## Flow
+
+### Signing
+
+```
+write PSBT into parser_input()
+parser_parse(len, fingerprint)        -> 0
+read parser_plan()                    -> show it to the user, derive keys, sign
+write signatures into parser_sigs()
+parser_finalize(n)                    -> signed length
+read parser_output()
+```
+
+### Animated QR in
+
+```
+parser_ur_reset()
+for each QR payload:
+    write the text into parser_input()
+    rc = parser_ur_receive(len)
+    rc > 0 -> the PSBT is now in parser_input(), length rc; continue with parser_parse
+```
+
+### Animated QR out
+
+```
+seq_len = parser_ur_encode_start(signed_len, 100)   // fragment size tuned for the display
+loop:
+    n = parser_ur_encode_next()
+    render parser_input()[0..n] as a QR
+```
+
+Parts are a fountain code (BCR-2020-005): the first `seq_len` parts are the pure fragments and the
+rest are mixed. A receiver that only understands pure parts can still finish if the sender loops
+over the first `seq_len`. Calling `parser_ur_encode_start` again restarts the sequence.
+
+## Memory map (version 1, informative)
+
+Offsets are what the accessors return today. **Do not hard-code them**; call the accessors.
+
+| Buffer | Offset | Size |
+|---|---:|---:|
+| input | 17,744 | 32,768 |
+| plan | 50,512 | 5,016 |
+| sigs | 55,536 | 1,728 (16 × 108) |
+| output | 57,264 | 34,816 |
+
+## `plan_t`
+
+The parser's whole output. No pointers and no `long`, so wasm32, rv32 and 64-bit hosts share one layout.
+
+```c
+#define PLAN_MAGIC       0x4e4c5042u /* "BPLN" */
+#define PLAN_VERSION     1
+#define PLAN_MAX_INPUTS  16
+#define PLAN_MAX_OUTPUTS 16
+#define PLAN_MAX_SPK     83
+#define PLAN_MAX_DEPTH   8
+
+typedef struct { uint8_t len; uint8_t bytes[83]; } plan_script_t;          /* 84 */
+
+typedef struct {
+    uint8_t  depth;         /* 0 = this is not ours */
+    uint32_t fingerprint;
+    uint32_t path[8];       /* hardened steps keep the high bit set */
+} plan_keypath_t;                                                          /* 40 */
+
+typedef struct {
+    uint8_t  prev_txid[32]; /* internal byte order, as serialized */
+    uint32_t prev_vout;
+    uint32_t sequence;
+    uint64_t amount;        /* from witness_utxo */
+    plan_script_t spk;      /* from witness_utxo */
+    plan_keypath_t key;     /* depth = 0 for inputs not to be signed */
+    uint8_t  sighash_type;
+} plan_input_t;                                                            /* 176 */
+
+typedef struct {
+    uint64_t amount;
+    plan_script_t spk;
+    plan_keypath_t key;     /* change candidate; the signer re-derives to confirm */
+} plan_output_t;                                                           /* 136 */
+
+typedef struct {
+    uint32_t magic, version;
+    int32_t  tx_version;
+    uint32_t locktime;
+    uint8_t  n_inputs, n_outputs;
+    plan_input_t  inputs[16];
+    plan_output_t outputs[16];
+} plan_t;                                                                  /* 5016 */
+```
+
+Field offsets a non-C host needs:
+
+| | offset | |
+|---|---:|---|
+| `plan_t.inputs` | 24 | stride 176 |
+| `plan_t.outputs` | 2,840 | stride 136 |
+| `plan_input_t.amount` | 40 | u64 little-endian |
+| `plan_input_t.spk` | 48 | 1 byte length + 83 bytes |
+| `plan_input_t.key` | 132 | |
+| `plan_output_t.amount` | 0 | |
+| `plan_output_t.spk` | 8 | |
+| `plan_output_t.key` | 92 | |
+| `plan_keypath_t.depth` | 0 | |
+| `plan_keypath_t.fingerprint` | 4 | u32 |
+| `plan_keypath_t.path` | 8 | 8 × u32 |
+
+All integers are little-endian, as in the WebAssembly linear memory.
+
+A host **must** check `magic == 0x4e4c5042` and `version == 1` before trusting the rest.
+
+## `plan_sig_t`
+
+```c
+typedef struct {
+    uint8_t input;      /* index into plan.inputs */
+    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH; 0x00 + x-only output key for P2TR */
+    uint8_t sig_len;
+    uint8_t sig[73];    /* DER + sighash byte for ECDSA; 64 or 65 bytes for Schnorr */
+} plan_sig_t;           /* 108 */
+```
+
+## Error codes
+
+`parser_parse` returns `0` or a positive value:
+
+| | | |
+|---:|---|---|
+| 0 | `P_OK` | |
+| 1 | `P_ERR_MAGIC` | not a PSBT |
+| 2 | `P_ERR_FORMAT` | BIP174 violation: key/value lengths, v2-only fields, trailing bytes |
+| 3 | `P_ERR_DUPLICATE` | duplicate key within a map |
+| 4 | `P_ERR_TX` | no unsigned tx, scriptSig or witness present, non-canonical serialization |
+| 5 | `P_ERR_UNSUPPORTED` | PSBT v2, script longer than 83 bytes, sighash that does not fit in a byte |
+| 6 | `P_ERR_LIMIT` | more than 16 inputs or outputs, PSBT larger than 32,768 bytes |
+| 7 | `P_ERR_UTXO` | input without utxo data, `non_witness_utxo` txid or output mismatch |
+| 8 | `P_ERR_SIG` | invalid signatures passed to `parser_finalize` (returned negated) |
+
+The UR functions return negative values:
+
+| | | |
+|---:|---|---|
+| −1 | `UR_ERR_SCHEME` | not `ur:<type>/...` |
+| −2 | `UR_ERR_BYTEWORDS` | invalid characters or CRC32 |
+| −3 | `UR_ERR_PART` | malformed part CBOR or sequence component |
+| −4 | `UR_ERR_MISMATCH` | part disagrees with earlier parts |
+| −5 | `UR_ERR_LIMIT` | beyond the decoder's limits or the caller's buffer |
+| −6 | `UR_ERR_MESSAGE` | reassembled message fails its CRC32 |
+| −7 | `UR_ERR_TYPE` | complete, but not a PSBT |
+
+## What is accepted
+
+- PSBT v0 only (BIP174). v2 is rejected with `P_ERR_UNSUPPORTED`
+- At most 16 inputs and 16 outputs, 32,768 bytes total
+- Every input needs `witness_utxo` or `non_witness_utxo`; when both are present the `non_witness_utxo`
+  must hash to `prev_txid` and its output must match the `witness_utxo`
+- scriptPubKey at most 83 bytes
+- The unsigned transaction must be canonical and carry no scriptSig or witness
+
+## What the host must still do
+
+The parser is untrusted. It shapes bytes into a struct; it does not decide anything.
+
+- **Bounds-check** every offset and length against the exported memory
+- **Check `magic` and `version`**
+- **Re-derive keys.** `plan_keypath_t` is a claim. The signer derives the key itself and compares the
+  resulting scriptPubKey with `spk` before treating an input as its own or an output as change
+- **Compute the fee itself** from the amounts it has verified, and show it
+- **Bind display to signature.** The reference implementation hashes the reviewed plan and requires the
+  same hash at signing time, so what the user approved is what gets signed
+
+## Versioning
+
+`plan_t.version` is `1`. Adding a field, changing a size, or changing a meaning bumps it.
+A host that sees an unknown version must refuse rather than guess.
+Export names and error numbers are part of the ABI and do not change within a version.
+
+## Reproducing the binary
+
+`parser.wasm` is reproducible: wasi-sdk 34.0 and binaryen 132, pinned by hash. macOS arm64 and
+Linux x86_64 produce the same `a53bd5f7772268b776752b7b7a95e479f4196920e0feab9331559dd70320a07f`.
