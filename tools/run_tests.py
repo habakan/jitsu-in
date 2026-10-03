@@ -67,8 +67,9 @@ class Parser:
                 "outputs": outs}
 
     def prevtx(self, i):
+        # The offset is relative to parser_input(), so add the base
         n = self.call("parser_prevtx_len", i)
-        return self.read(self.call("parser_prevtx_off", i), n) if n else b""
+        return self.read(self.call("parser_input") + self.call("parser_prevtx_off", i), n) if n else b""
 
     def ur(self, part):
         raw = part.encode()

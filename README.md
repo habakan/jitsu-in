@@ -122,3 +122,8 @@ The tests then run `build/parser.wasm` itself under wasmtime:
 ## License
 
 MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for the bundled test data.
+
+## Fuzzing
+
+`make check-fuzz` runs both harnesses for a fixed number of iterations; `make fuzz-psbt` and
+`make fuzz-ur` run until stopped. See [docs/abi.md](docs/abi.md).

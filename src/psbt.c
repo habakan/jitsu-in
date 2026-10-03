@@ -224,7 +224,9 @@ static int parse_input(rd_t *r, unsigned idx, uint32_t fp) {
         tx_info_t info;
         if (!tx_parse(nwu->val, nwu->vlen, &v, &info)) return P_ERR_UTXO;
         if (!pc.found || memcmp(info.txid, in->prev_txid, 32)) return P_ERR_UTXO;
-        prevtx_off[idx] = (uint32_t)(uintptr_t)nwu->val; /* an offset into linear memory on wasm32 */
+        /* Relative to in_buf, not the raw pointer: on wasm32 they happen to be the same, but
+         * linking these sources natively truncated a 64-bit pointer and handed the host a bogus offset */
+        prevtx_off[idx] = (uint32_t)((const uint8_t *)nwu->val - in_buf);
         prevtx_len[idx] = (uint32_t)nwu->vlen;
     }
     if (wu) {

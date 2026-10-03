@@ -231,3 +231,19 @@ Export names and error numbers are part of the ABI and do not change within a ve
 
 `parser.wasm` is reproducible: wasi-sdk 34.0 and binaryen 132, pinned by hash. macOS arm64 and
 Linux x86_64 produce the same `a53bd5f7772268b776752b7b7a95e479f4196920e0feab9331559dd70320a07f`.
+
+## Fuzzing
+
+```sh
+make check-fuzz     # short deterministic run
+make fuzz-psbt      # run until stopped
+make fuzz-ur
+```
+
+Two harnesses cover everything an attacker controls: `tests/fuzz_psbt.c` feeds arbitrary bytes to
+`parser_parse` and then checks the invariants a host relies on (magic, version, counts, script
+lengths, derivation depth, and that `parser_prevtx_off/len` stay inside the input buffer), and
+`tests/fuzz_ur.c` feeds arbitrary UR parts, one per line, the way an animated QR arrives.
+
+Needs a clang with libFuzzer. Apple's does not ship it; Homebrew's `llvm` does, and the Makefile
+links with `lld` because Apple's linker rejects its objects.
