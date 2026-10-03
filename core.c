@@ -267,11 +267,13 @@ int core_display(const plan_t *p, const core_review_t *r, core_display_t *d) {
     return CORE_OK;
 }
 
-static int sign_input(const plan_t *p, unsigned i, core_rng_t rng, core_sig_t *s) {
+static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
     const plan_input_t *in = &p->inputs[i];
-    uint8_t digest[32], aux[32], xonly[32];
+    uint8_t digest[32], xonly[32];
     secp256k1_ecdsa_signature sig;
     secp256k1_keypair kp;
+    secp256k1_pubkey pub;
+    secp256k1_xonly_pubkey xpub;
     bip32_node_t node;
     size_t len = 72;
     int ok = owns(&in->key, &in->spk, &node);
@@ -288,14 +290,22 @@ static int sign_input(const plan_t *p, unsigned i, core_rng_t rng, core_sig_t *s
             counter++;
             for (int k = 0; k < 4; k++) extra[k] = (uint8_t)(counter >> (8 * k));
         } while (ok && compact[0] >= 0x80);
-        ok = ok && secp256k1_ecdsa_signature_serialize_der(ctx, s->sig, &len, &sig)
+        /* 外に出す前に自分で検証する。グリッチで壊れた署名を揃えられると鍵が復元されうる */
+        ok = ok && secp256k1_ec_pubkey_create(ctx, &pub, node.key)
+          && secp256k1_ecdsa_verify(ctx, &sig, digest, &pub)
+          && secp256k1_ecdsa_signature_serialize_der(ctx, s->sig, &len, &sig)
           && bip32_pubkey(ctx, node.key, s->pubkey);
         s->sig[len] = 0x01;
         s->sig_len = (uint8_t)(len + 1);
     } else if (ok) {
-        ok = rng(aux, 32) && taproot_tweak(node.key, xonly, &kp)
+        /* aux は 0。BIP340 の安全性は aux の質に依存せず、決定論的なら同じ PSBT から同じ署名が出て
+         * 他の実装と突き合わせられる。Core / Trezor / Jade / BDK も同じ。
+         * マルチシグに広げるときは決定論的 nonce が危険になるので、ここを見直すこと */
+        ok = taproot_tweak(node.key, xonly, &kp)
           && sighash_bip341_keypath(ctx, p, i, in->sighash_type, digest)
-          && secp256k1_schnorrsig_sign32(ctx, s->sig, digest, &kp, aux);
+          && secp256k1_schnorrsig_sign32(ctx, s->sig, digest, &kp, NULL)
+          && secp256k1_xonly_pubkey_parse(ctx, &xpub, xonly)
+          && secp256k1_schnorrsig_verify(ctx, s->sig, digest, 32, &xpub);
         s->pubkey[0] = 0;
         memcpy(s->pubkey + 1, xonly, 32);
         s->sig_len = 64;
@@ -303,21 +313,24 @@ static int sign_input(const plan_t *p, unsigned i, core_rng_t rng, core_sig_t *s
     }
     wipe(&node, sizeof(node));
     wipe(&kp, sizeof(kp));
-    wipe(aux, sizeof(aux));
     return ok;
 }
 
 int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS], unsigned *n_sigs) {
-    uint8_t h[32];
+    uint8_t h[32], blind[32];
 
     *n_sigs = 0;
     sha256((const uint8_t *)p, sizeof(*p), h);
     if (!reviewed || memcmp(h, reviewed_hash, 32)) return CORE_ERR_NOT_REVIEWED;
+    /* 秘密鍵を使う計算の中間値を毎回変える。電力波形を重ねて平均を取る攻撃を効かなくする。
+     * ここの乱数は質を問われない（予測されても安全性は落ちず、効果が無くなるだけ） */
+    if (rng && rng(blind, 32) && !secp256k1_context_randomize(ctx, blind)) return CORE_ERR_CRYPTO;
+    wipe(blind, sizeof(blind));
     /* review と同じ plan であることはハッシュで保証済み。review が所有を確かめた入力だけがここを通る */
     for (unsigned i = 0; i < p->n_inputs; i++) {
         const plan_input_t *in = &p->inputs[i];
         if (in->key.depth == 0 || in->key.fingerprint != master_fp) continue;
-        if (!sign_input(p, i, rng, &sigs[*n_sigs])) {
+        if (!sign_input(p, i, &sigs[*n_sigs])) {
             wipe(sigs, sizeof(core_sig_t) * PLAN_MAX_INPUTS);
             *n_sigs = 0;
             return CORE_ERR_CRYPTO;
