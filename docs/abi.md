@@ -139,6 +139,12 @@ Field offsets a non-C host needs:
 
 | | offset | |
 |---|---:|---|
+| `plan_t.magic` | 0 | u32, must be `0x4e4c5042` |
+| `plan_t.version` | 4 | u32, must be 1 |
+| `plan_t.tx_version` | 8 | i32 |
+| `plan_t.locktime` | 12 | u32 |
+| `plan_t.n_inputs` | 16 | u8 |
+| `plan_t.n_outputs` | 17 | u8 |
 | `plan_t.inputs` | 24 | stride 176 |
 | `plan_t.outputs` | 2,840 | stride 136 |
 | `plan_input_t.amount` | 40 | u64 little-endian |
