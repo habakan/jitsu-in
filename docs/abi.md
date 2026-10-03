@@ -230,7 +230,7 @@ Export names and error numbers are part of the ABI and do not change within a ve
 ## Reproducing the binary
 
 `parser.wasm` is reproducible: wasi-sdk 34.0 and binaryen 132, pinned by hash. macOS arm64 and
-Linux x86_64 produce the same `a53bd5f7772268b776752b7b7a95e479f4196920e0feab9331559dd70320a07f`.
+Linux x86_64 produce the same `a6766d13e1eb2e79fe036658ab5d3a6b60609e7b83d8bd3309dbed0eee156356`.
 
 ## Fuzzing
 
