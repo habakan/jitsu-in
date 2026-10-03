@@ -1,5 +1,8 @@
 # Needs clang with the wasm32 target and a wasi-libc sysroot. With Homebrew: llvm / lld / wasi-libc / wasi-runtimes
+# WASM_OPT is called explicitly: the clang driver would otherwise run whatever wasm-opt is on PATH,
+# which silently changes the output (2.7 KB and a different hash when it is missing)
 LLVM    ?= /opt/homebrew/opt/llvm/bin
+WASM_OPT ?= wasm-opt
 WASI    ?= /opt/homebrew/opt/wasi-libc/share/wasi-sysroot
 RTLIB   ?= /opt/homebrew/opt/wasi-runtimes/share/wasi-runtimes/lib/wasm32-unknown-wasip1
 SRC     := src/psbt.c src/ur.c src/tx.c src/sha256.c
@@ -11,7 +14,9 @@ build/parser.wasm: $(SRC) include/*.h
 	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs -Oz -Wall -Wextra \
 	  -Iinclude -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
 	  -Wl,--export=__heap_base -Wl,--export=__data_end -Wl,--initial-memory=196608 -Wl,--max-memory=196608 \
+	  --no-wasm-opt -Wl,--keep-section=target_features \
 	  -o $@ $(SRC) -lc $(RTLIB)/libclang_rt.builtins.a
+	$(WASM_OPT) $@ -Oz -o $@
 	shasum -a 256 $@
 
 build/vectors/own_p2wpkh_1in.psbt: tools/gen_vectors.py tests/rpc_psbt.json
