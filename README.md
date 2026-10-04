@@ -22,6 +22,12 @@ computation and signing stay in native code outside the sandbox:
 The signer is still responsible for checking the plan (key ownership, change detection, fees, and the SegWit v0
 fee attack via `non_witness_utxo`); see [the ABI](docs/abi.md) for the full list of what a host must do.
 
+## Releases
+
+Each release carries a `SHA256SUMS`, a detached PGP signature over it, and a GitHub build
+provenance attestation — and the build is reproducible, so you can skip all three and check the
+bytes yourself. See [docs/releases.md](docs/releases.md).
+
 ## Animated QR (UR)
 
 PSBTs usually arrive as animated QR codes in the [Uniform Resources](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-005-ur.md)
