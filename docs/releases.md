@@ -15,8 +15,9 @@ gpg --verify SHA256SUMS.asc SHA256SUMS
 gh attestation verify parser.wasm --repo habakan/wasm-psbt-parser
 ```
 
-The maintainer's public key is at https://github.com/habakan.gpg. The fingerprint is also in
-[SECURITY.md](../SECURITY.md).
+The maintainer's public key is at https://github.com/habakan.gpg, fingerprint
+`8BD4 8DD6 70AF 9B34 7EA0  41CF 36D4 93A2 8A8B EB79`
+(also in [SECURITY.md](../SECURITY.md)).
 
 Step 3 is independent of step 2: it does not depend on the maintainer's key at all, only on GitHub's
 signing of the build. Steps 2 and 3 fail for different reasons, which is the point of having both.

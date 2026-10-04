@@ -8,6 +8,8 @@ Use GitHub's private vulnerability reporting on this repository
 ([Security → Report a vulnerability](https://github.com/habakan/wasm-psbt-parser/security/advisories/new)),
 or email the maintainer. Public key: https://github.com/habakan.gpg
 
+Fingerprint: `8BD4 8DD6 70AF 9B34 7EA0  41CF 36D4 93A2 8A8B EB79`
+
 We aim to acknowledge a report within one week and to publish a fix within 90 days.
 
 ### What to include
