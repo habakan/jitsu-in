@@ -46,20 +46,31 @@ export class KeyOrigin {
 export class Parser {
   /** @param {BufferSource} parserWasm the contents of parser.wasm */
   static async load(parserWasm) {
-    const { instance } = await WebAssembly.instantiate(parserWasm, {});
-    return new Parser(instance);
+    const module = await WebAssembly.compile(parserWasm);
+    Parser.#assertNoImports(module);
+    return new Parser(await WebAssembly.instantiate(module, {}));
   }
 
   /** Synchronous variant, for Node or anywhere compiling on the main thread is fine. */
   static loadSync(parserWasm) {
-    return new Parser(new WebAssembly.Instance(new WebAssembly.Module(parserWasm), {}));
+    const module = new WebAssembly.Module(parserWasm);
+    Parser.#assertNoImports(module);
+    return new Parser(new WebAssembly.Instance(module, {}));
+  }
+
+  /** The module must not be able to call the host at all. Checked before it is instantiated. */
+  static #assertNoImports(module) {
+    const imports = WebAssembly.Module.imports(module);
+    if (imports.length) {
+      const names = imports.map(i => `${i.module}.${i.name}`).join(", ");
+      throw new Error(`parser.wasm must have no imports, found ${imports.length}: ${names}`);
+    }
   }
 
   constructor(instance) {
     this.exports = instance.exports;
     const need = ["memory", "parser_input", "parser_input_cap", "parser_parse", "parser_plan"];
     for (const n of need) if (!this.exports[n]) throw new Error(`not a parser.wasm module: ${n} missing`);
-    if (WebAssembly.Module.imports?.length) { /* instance already built; imports were rejected above */ }
     this.#refresh();
   }
 

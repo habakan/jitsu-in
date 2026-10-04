@@ -105,5 +105,17 @@ for (const name of vectors) {
   check(got && Buffer.compare(Buffer.from(got), Buffer.from(out)) === 0, "round trip is byte identical");
 }
 
+// --- a module with imports is refused before it is instantiated
+{
+  // (module (import "env" "f" (func)) (memory 1 1))
+  const withImport = new Uint8Array([
+    0, 97, 115, 109, 1, 0, 0, 0,
+    1, 4, 1, 96, 0, 0,                                  // type: () -> ()
+    2, 9, 1, 3, 101, 110, 118, 1, 102, 0, 0,            // import "env" "f"
+    5, 4, 1, 1, 1, 1,                                   // memory 1 1
+  ]);
+  throws(() => Parser.loadSync(withImport), "must have no imports", "a module with imports is refused");
+}
+
 console.log(`${checks - failures}/${checks} checks passed`);
 process.exit(failures ? 1 : 0);
