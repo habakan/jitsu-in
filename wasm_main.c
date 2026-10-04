@@ -24,14 +24,16 @@ static core_sig_t sigs[PLAN_MAX_INPUTS];
 static uint8_t in[512];   /* mnemonic || passphrase, or a 64-byte seed */
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 
-unsigned char *EXPORT(signer_in)(void) { return in; }
+unsigned char *EXPORT(signer_input)(void) { return in; }
+/* So a host can bounds-check before writing, as parser.wasm's parser_input_cap lets it */
+unsigned int EXPORT(signer_input_cap)(void) { return (unsigned int)sizeof(in); }
 plan_t *EXPORT(signer_plan)(void) { return &plan; }
 unsigned char *EXPORT(signer_prevtx)(void) { return prevtx_buf; }
-core_review_t *EXPORT(signer_review_out)(void) { return &review; }
-core_display_t *EXPORT(signer_display_out)(void) { return &display; }
+core_review_t *EXPORT(signer_review_output)(void) { return &review; }
+core_display_t *EXPORT(signer_display_output)(void) { return &display; }
 core_sig_t *EXPORT(signer_sigs)(void) { return sigs; }
-char *EXPORT(signer_xpub_out)(void) { return xpub; }
-char *EXPORT(signer_desc_out)(void) { return desc; }
+char *EXPORT(signer_xpub_output)(void) { return xpub; }
+char *EXPORT(signer_desc_output)(void) { return desc; }
 
 int EXPORT(signer_init)(int testnet) {
     memset(prevtx, 0, sizeof(prevtx));

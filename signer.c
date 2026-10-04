@@ -19,15 +19,15 @@ static secp256k1_context *ctx;
 /* The handover area: seckey[32] msg[32] aux[32] out[64] */
 static unsigned char io[160];
 
-unsigned char *EXPORT(signer_io)(void) { return io; }
+unsigned char *EXPORT(prim_io)(void) { return io; }
 
-int EXPORT(signer_init)(void) {
+int EXPORT(prim_init)(void) {
     if (secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE) > sizeof(ctx_mem)) return 0;
     ctx = secp256k1_context_preallocated_create(ctx_mem, SECP256K1_CONTEXT_NONE);
     return ctx != NULL;
 }
 
-int EXPORT(signer_sign_ecdsa)(void) {
+int EXPORT(prim_sign_ecdsa)(void) {
     secp256k1_ecdsa_signature sig;
     int ok = secp256k1_ecdsa_sign(ctx, &sig, io + 32, io, NULL, NULL)
           && secp256k1_ecdsa_signature_serialize_compact(ctx, io + 96, &sig);
@@ -35,7 +35,7 @@ int EXPORT(signer_sign_ecdsa)(void) {
     return ok;
 }
 
-int EXPORT(signer_sign_schnorr)(void) {
+int EXPORT(prim_sign_schnorr)(void) {
     secp256k1_keypair kp;
     int ok = secp256k1_keypair_create(ctx, &kp, io)
           && secp256k1_schnorrsig_sign32(ctx, io + 96, io + 32, &kp, io + 64);
@@ -43,7 +43,7 @@ int EXPORT(signer_sign_schnorr)(void) {
     return ok;
 }
 
-void EXPORT(signer_zeroize)(void) {
+void EXPORT(prim_zeroize)(void) {
     volatile unsigned char *p = io;
     for (size_t i = 0; i < sizeof(io); i++) p[i] = 0;
 }
@@ -52,9 +52,9 @@ void EXPORT(signer_zeroize)(void) {
 static unsigned char in[512];
 static unsigned char seed[64];
 
-unsigned char *EXPORT(signer_in)(void) { return in; }
+unsigned char *EXPORT(prim_input)(void) { return in; }
 
-int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
+int EXPORT(prim_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
     unsigned char salt[8 + sizeof(in)];
     if (mn_len + pass_len > sizeof(in)) return 0;
     memcpy(salt, "mnemonic", 8);
@@ -66,7 +66,7 @@ int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
 }
 
 /* Derive the key at the path in in[] from the seed, and write the 33-byte compressed pubkey to io+96 */
-int EXPORT(signer_bip32_derive)(unsigned depth) {
+int EXPORT(prim_bip32_derive)(unsigned depth) {
     uint32_t path[16];
     bip32_node_t master, node;
     int ok;
