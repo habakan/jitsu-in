@@ -66,6 +66,13 @@ check-fuzz: build/fuzz_psbt build/fuzz_ur build/corpus/psbt build/corpus/ur
 
 # The JavaScript host. Tests the host itself: hidden offsets, named errors, and that a module
 # returning a bad offset is stopped rather than followed
+# The set of exports is part of the ABI. Growing it by accident is how a module starts offering
+# more than it documents, so the list is pinned and compared
+check-exports: build/parser.wasm
+	wasm-tools print $< | grep -oE '\(export "[^"]+"' | sed 's/(export "//; s/"//' | sort > /tmp/exports.now
+	diff /tmp/exports.now tools/parser.exports && echo "exports unchanged"
+.PHONY: check-exports
+
 check-hosts: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt
 	node hosts/js/test.mjs build/parser.wasm build/vectors
 .PHONY: check-hosts
@@ -74,6 +81,7 @@ test: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt build/test_ur
 	build/test_ur
 	uv run -q tools/run_tests.py build/parser.wasm build/vectors tests/rpc_psbt.json tests/ur_vectors.json
 	$(MAKE) check-hosts
+	$(MAKE) check-exports
 
 clean:
 	rm -rf build

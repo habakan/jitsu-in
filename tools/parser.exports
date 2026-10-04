@@ -1,0 +1,17 @@
+__data_end
+__heap_base
+memory
+parser_finalize
+parser_input
+parser_input_cap
+parser_output
+parser_parse
+parser_plan
+parser_prevtx_len
+parser_prevtx_off
+parser_sigs
+parser_ur_encode_next
+parser_ur_encode_start
+parser_ur_progress
+parser_ur_receive
+parser_ur_reset
