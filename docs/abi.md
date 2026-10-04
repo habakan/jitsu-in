@@ -82,6 +82,55 @@ Parts are a fountain code ([BCR-2020-005](https://github.com/BlockchainCommons/R
 rest are mixed. A receiver that only understands pure parts can still finish if the sender loops
 over the first `seq_len`. Calling `parser_ur_encode_start` again restarts the sequence.
 
+## A minimal host, start to finish
+
+Node, no dependencies. Every other host is this shape: write bytes where the module tells you,
+call a function, read a struct back at a documented offset.
+
+```js
+import { readFileSync } from "fs";
+
+const w = new WebAssembly.Instance(
+  new WebAssembly.Module(readFileSync("parser.wasm")), {}).exports;
+const u8 = new Uint8Array(w.memory.buffer);
+const dv = new DataView(w.memory.buffer);
+
+// 1. write the PSBT where the module expects it
+const psbt = readFileSync("tx.psbt");
+if (psbt.length > w.parser_input_cap()) throw new Error("too large");
+u8.set(psbt, w.parser_input());
+
+// 2. parse, passing the signer's master fingerprint
+const rc = w.parser_parse(psbt.length, 0x73c5da0a);
+if (rc !== 0) throw new Error("P_ERR " + rc);
+
+// 3. read the plan. Offsets are in this document; never hard-code the buffer address
+const plan = w.parser_plan();
+if (dv.getUint32(plan, true) !== 0x4e4c5042) throw new Error("bad magic");  // "BPLN"
+if (dv.getUint32(plan + 4, true) !== 1) throw new Error("unknown ABI version");
+
+const nIn = u8[plan + 16], nOut = u8[plan + 17];
+let totalIn = 0n, totalOut = 0n;
+for (let i = 0; i < nIn; i++) totalIn += dv.getBigUint64(plan + 24 + i * 176 + 40, true);
+for (let i = 0; i < nOut; i++) {
+  const o = plan + 2840 + i * 136;
+  const amount = dv.getBigUint64(o, true);
+  const spkLen = u8[o + 8];
+  const spk = u8.slice(o + 9, o + 9 + spkLen);
+  const mine = u8[o + 92] !== 0;   // key.depth: a *claim* that this output is yours
+  totalOut += amount;
+  console.log(i, Number(amount) / 1e8, Buffer.from(spk).toString("hex"), mine ? "(claimed yours)" : "");
+}
+// The fee is yours to compute. The module does not tell you one
+console.log("fee", Number(totalIn - totalOut) / 1e8);
+```
+
+`mine` above is deliberately named as a claim. Deriving the key and checking that it really produces
+that scriptPubKey is the host's job — see [What the host must still do](#what-the-host-must-still-do).
+
+Examples in other languages, each runnable with `make run`, are in
+[`examples/`](../examples): Kotlin on Chicory, Swift on WasmKit.
+
 ## Memory map (version 1, informative)
 
 Offsets are what the accessors return today. **Do not hard-code them**; call the accessors.
