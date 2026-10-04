@@ -12,7 +12,7 @@ static void h_le(sha256_ctx *h, uint64_t v, int k) {
     sha256_update(h, b, (size_t)k);
 }
 
-/* PLAN_MAX_SPK < 0xfd なので compact size は常に 1 byte */
+/* PLAN_MAX_SPK < 0xfd, so a compact size here is always one byte */
 static void h_script(sha256_ctx *h, const plan_script_t *s) {
     sha256_update(h, &s->len, 1);
     sha256_update(h, s->bytes, s->len);
@@ -64,7 +64,7 @@ int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, uint8_t out[32]) {
 
 int sighash_bip341_keypath(const secp256k1_context *ctx, const plan_t *p, unsigned index, uint8_t hash_type,
                            uint8_t out[32]) {
-    /* epoch(1) + hash_type(1) + version/locktime(8) + sha_*(5x32) + spend_type(1) + input(最大 36+8+84+4) + single(32) */
+    /* epoch(1) + hash_type(1) + version/locktime(8) + sha_*(5x32) + spend_type(1) + input(at most 36+8+84+4) + single(32) */
     uint8_t msg[1 + 1 + 8 + 160 + 1 + 132 + 32], d[32];
     size_t n = 0;
     int acp = hash_type & 0x80, out_type = hash_type & 3;
@@ -96,7 +96,7 @@ int sighash_bip341_keypath(const secp256k1_context *ctx, const plan_t *p, unsign
         for (unsigned i = 0; i < p->n_outputs; i++) h_output(&h, &p->outputs[i]);
         sha256_final(&h, msg + n), n += 32;
     }
-    msg[n++] = 0; /* spend_type: key path, annex なし */
+    msg[n++] = 0; /* spend_type: key path, no annex */
     if (acp) {
         memcpy(msg + n, in->prev_txid, 32), n += 32;
         put_le(msg + n, in->prev_vout, 4), n += 4;

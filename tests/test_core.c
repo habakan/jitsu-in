@@ -21,7 +21,8 @@ static void unhex(const char *s, uint8_t *out) {
 
 static int zero_rng(uint8_t *buf, size_t len) { memset(buf, 0, len); return 1; }
 
-/* 生の取引から plan を組む。スクリプトと額は utxo 側から与える（parser.wasm の代役） */
+/* Build a plan from a raw transaction, taking scripts and amounts from the utxo side. Stands in for
+ * parser.wasm so that core can be tested on its own */
 typedef struct { plan_t *p; } build_t;
 static int b_in(void *c, uint32_t i, const uint8_t prevout[36], size_t script_sig_len, uint32_t seq) {
     (void)script_sig_len;
@@ -109,7 +110,7 @@ static void test_bip341(void) {
     secp256k1_context_destroy(ctx);
 }
 
-/* amount を vout 番目の出力に持つ最小の取引を作り、その txid を返す */
+/* The smallest transaction carrying amount at output vout, returning its txid */
 static size_t make_prevtx(uint8_t *raw, uint32_t vout, uint64_t amount, const uint8_t *spk, size_t spk_len,
                           uint8_t txid[32]) {
     size_t n = 0;
@@ -162,7 +163,7 @@ static void test_review_and_sign(void) {
     CHECK(core_review(&(plan_t){0}, NULL, &r) == CORE_ERR_NO_SEED, "no seed");
     CHECK(core_load_seed(TV_SEED) && core_fingerprint() == TV_FP, "fingerprint");
 
-    /* P2WPKH 1 入力、外部 + お釣り */
+    /* one P2WPKH input, paying out plus change */
     base_plan(&p);
     CHECK(core_review(&p, NULL, &r) == CORE_OK, "p2wpkh review");
     CHECK(r.fee == 1000 && r.owner[0] == CORE_OUT_EXTERNAL && r.owner[1] == CORE_OUT_CHANGE && r.n_sign == 1,
@@ -187,18 +188,18 @@ static void test_review_and_sign(void) {
     }
     CHECK(core_sign(&p, zero_rng, sigs, &n) == CORE_ERR_NOT_REVIEWED, "sign twice needs review");
 
-    /* review 後に plan を差し替えると署名しない */
+    /* swapping the plan after review must not produce a signature */
     base_plan(&p);
     core_review(&p, NULL, &r);
     p.outputs[0].amount = 1;
     CHECK(core_sign(&p, zero_rng, sigs, &n) == CORE_ERR_NOT_REVIEWED && n == 0, "plan swapped after review");
 
-    /* お釣りを名乗るがスクリプトが外部 */
+    /* claims to be change, but the script is not ours */
     base_plan(&p);
     p.outputs[0].key = p.outputs[1].key;
     CHECK(core_review(&p, NULL, &r) == CORE_OK && r.owner[0] == CORE_OUT_EXTERNAL, "fake change is external");
 
-    /* 受取チェーンへの出力は自分宛て。手数料以外は支出にならない */
+    /* an output on the receive chain is ours, so nothing but the fee is actually spent */
     base_plan(&p);
     set_spk(&p.outputs[0].spk, TV_SPK_P2WPKH_0_1, 22);
     set_key(&p.outputs[0].key, 84 | H, H, H, 0, 1);
@@ -209,12 +210,12 @@ static void test_review_and_sign(void) {
               "self transfer");
     }
 
-    /* index の上限を超えるものは自分のアドレスとみなさない */
+    /* past the index limit it no longer counts as our address */
     base_plan(&p);
     p.outputs[1].key.path[4] = 100000;
     CHECK(core_review(&p, NULL, &r) == CORE_OK && r.owner[1] == CORE_OUT_EXTERNAL, "change index cap");
 
-    /* OP_RETURN と非標準スクリプトは 16 進で全体を見せる */
+    /* OP_RETURN and non-standard scripts are shown whole, in hex */
     base_plan(&p);
     {
         static const uint8_t opret[6] = {0x6a, 0x04, 0xde, 0xad, 0xbe, 0xef}, odd[3] = {0x51, 0x01, 0x02};
@@ -229,13 +230,13 @@ static void test_review_and_sign(void) {
         CHECK(core_display(&p, &r, &d) == CORE_ERR_NOT_REVIEWED, "display needs same plan");
     }
 
-    /* 別アカウントの change はお釣りとみなさない */
+    /* change on a different account is not our change */
     base_plan(&p);
     set_spk(&p.outputs[1].spk, TV_SPK_P2WPKH_ACCT1_1_0, 22);
     set_key(&p.outputs[1].key, 84 | H, H, 1 | H, 1, 0);
     CHECK(core_review(&p, NULL, &r) == CORE_OK && r.owner[1] == CORE_OUT_EXTERNAL, "other account change is external");
 
-    /* 自分の fingerprint を名乗るのに鍵とスクリプトが一致しない */
+    /* claims our fingerprint, but the key does not produce the script */
     base_plan(&p);
     set_spk(&p.inputs[0].spk, TV_SPK_P2WPKH_0_1, 22);
     CHECK(core_review(&p, NULL, &r) == CORE_ERR_NOT_OURS, "not ours");
@@ -248,7 +249,7 @@ static void test_review_and_sign(void) {
     p.inputs[0].sighash_type = 0x83;
     CHECK(core_review(&p, NULL, &r) == CORE_ERR_SIGHASH, "p2wpkh acp|single rejected");
 
-    /* 形式 */
+    /* malformed */
     base_plan(&p);
     p.outputs[0].spk.bytes[30] = 1;
     CHECK(core_review(&p, NULL, &r) == CORE_ERR_FORMAT, "nonzero padding");
@@ -259,7 +260,8 @@ static void test_review_and_sign(void) {
     p.outputs[0].amount = 2000000;
     CHECK(core_review(&p, NULL, &r) == CORE_ERR_FEE, "outputs exceed inputs");
 
-    /* SegWit v0 を含む 2 入力: 元の取引が無ければ拒否、額が違えば拒否 */
+    /* two inputs including SegWit v0: refused without the previous transaction, and refused if an
+     * amount disagrees with it */
     base_plan(&p);
     p.n_inputs = 2;
     p.inputs[1] = p.inputs[0];
@@ -285,7 +287,8 @@ static void test_review_and_sign(void) {
     q.inputs[1].prev_txid[0] ^= 1;
     CHECK(core_review(&q, prev, &r) == CORE_ERR_PREVTX_MISMATCH, "prevtx wrong txid");
 
-    /* P2TR: 2 入力でも元の取引は不要（BIP341 は全入力の額にコミット）。署名を出力鍵で検証する */
+    /* P2TR needs no previous transaction even with two inputs, because BIP341 commits to every
+     * amount. The signatures are checked against the output key */
     memset(&p, 0, sizeof(p));
     p.magic = PLAN_MAGIC, p.version = PLAN_VERSION, p.tx_version = 2;
     p.n_inputs = 2, p.n_outputs = 1;
@@ -294,7 +297,7 @@ static void test_review_and_sign(void) {
         p.inputs[i].amount = 70000;
         set_spk(&p.inputs[i].spk, i ? TV_SPK_P2TR_0_1 : TV_SPK_P2TR_0_0, 34);
         set_key(&p.inputs[i].key, 86 | H, H, H, 0, i);
-        p.inputs[i].sighash_type = (uint8_t)i; /* DEFAULT と ALL */
+        p.inputs[i].sighash_type = (uint8_t)i; /* DEFAULT and ALL */
     }
     p.outputs[0].amount = 139000;
     set_spk(&p.outputs[0].spk, TV_SPK_P2TR_1_0, 34);
@@ -328,7 +331,8 @@ static void test_address(void) {
         {"tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c", "5120000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433"},
         {"bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", "512079be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"},
     };
-    /* BIP350 の無効例に対応するスクリプト: 1 byte / 41 byte のプログラム、v0 の 16 byte、push 長の不一致 */
+    /* scripts matching BIP350's invalid examples: 1- and 41-byte programs, 16 bytes at v0, and a push
+     * length that disagrees with the script */
     static const char *bad[] = {"510175", "5129751e76e8199196d454941c45d1b3a323f1433bd6751e76e8199196d454941c45d1b3a323f1433bd6aa",
                                 "0010751e76e8199196d454941c45d1b3a323", "0015751e76e8199196d454941c45d1b3a323f1433bd6"};
     uint8_t spk[64];

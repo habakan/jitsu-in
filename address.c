@@ -31,7 +31,7 @@ static void bech32_encode(const char *hrp, const uint8_t *data, size_t n, uint32
     out[o] = 0;
 }
 
-/* 末尾に 4 byte のチェックサムを足して base58 にする。アドレス（21 byte）と xpub（78 byte）で使う */
+/* base58 with a four-byte checksum appended. Used for addresses (21 bytes) and xpubs (78) */
 void base58check_data(const uint8_t *p, size_t n, char *out) {
     uint8_t buf[BASE58CHECK_MAX_IN + 4], chk[32], digits[BASE58CHECK_MAX_OUT] = {0};
     size_t nd = 0, o = 0;
@@ -74,7 +74,7 @@ int address_encode(const uint8_t *spk, size_t len, int testnet, char out[ADDRESS
         base58check(testnet ? 0xc4 : 0x05, spk + 2, out);
         return 1;
     }
-    /* witness program: OP_0 か OP_1〜OP_16 の後に 2〜40 byte の push が 1 個だけ */
+    /* a witness program is OP_0 or OP_1..OP_16 followed by exactly one push of 2 to 40 bytes */
     if (len >= 4 && len <= 42 && (spk[0] == 0 || (spk[0] >= 0x51 && spk[0] <= 0x60)) && spk[1] == len - 2) {
         uint8_t ver = spk[0] ? (uint8_t)(spk[0] - 0x50) : 0, data[1 + 65];
         size_t n = 0, bits = 0;

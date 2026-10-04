@@ -1,8 +1,9 @@
 #ifndef CORE_CORE_H
 #define CORE_CORE_H
 
-/* 鍵を持つ署名中核（docs/architecture-b.md §5, §6）。plan_t は parser.wasm から来る untrusted な入力で、
- * 呼び出し側はネイティブ側にコピーしたものを渡す。core_review() で確認した plan と同じものしか core_sign() は署名しない */
+/* The part that holds keys (docs/architecture-b.md §5, §6). plan_t is untrusted input from
+ * parser.wasm: the caller passes a copy it made on the native side. core_sign() refuses to sign
+ * anything but the exact plan core_review() was shown, which is what binds the screen to the signature */
 
 #include <stddef.h>
 #include <stdint.h>
@@ -10,13 +11,13 @@
 
 enum {
     CORE_OK = 0,
-    CORE_ERR_FORMAT,       /* 上限超過、未使用フィールドが非ゼロ、額の範囲外 */
+    CORE_ERR_FORMAT,       /* over a limit, an unused field is non-zero, or an amount is out of range */
     CORE_ERR_NO_SEED,
-    CORE_ERR_NOT_OURS,     /* 自分の fingerprint を名乗る入力の鍵とスクリプトが一致しない */
+    CORE_ERR_NOT_OURS,     /* an input claims our fingerprint, but its key does not produce its script */
     CORE_ERR_NOTHING_TO_SIGN,
-    CORE_ERR_SIGHASH,      /* 許可しない sighash type */
-    CORE_ERR_SCRIPT,       /* 署名対象の入力が P2WPKH / P2TR 以外 */
-    CORE_ERR_PREVTX_MISSING, /* SegWit v0 を含む 2 入力以上で non_witness_utxo が無い */
+    CORE_ERR_SIGHASH,      /* a sighash type we do not allow */
+    CORE_ERR_SCRIPT,       /* an input to be signed is neither P2WPKH nor P2TR */
+    CORE_ERR_PREVTX_MISSING, /* two or more inputs including SegWit v0, and no non_witness_utxo */
     CORE_ERR_PREVTX_MISMATCH,
     CORE_ERR_FEE,
     CORE_ERR_NOT_REVIEWED,
@@ -26,11 +27,12 @@ enum {
 typedef enum { CORE_MAINNET = 0, CORE_TESTNET = 1 } core_network_t;
 
 typedef struct {
-    const uint8_t *raw; /* non_witness_utxo。無ければ NULL */
+    const uint8_t *raw; /* the non_witness_utxo, or NULL if the PSBT carried none */
     size_t len;
 } core_prevtx_t;
 
-/* 出力の持ち主。CHANGE / SELF はネイティブが鍵を再導出してスクリプトの一致を確かめたものだけ */
+/* Who an output belongs to. CHANGE and SELF are only ever set after re-deriving the key here and
+ * confirming it produces that script */
 enum { CORE_OUT_EXTERNAL = 0, CORE_OUT_CHANGE, CORE_OUT_SELF };
 
 typedef struct {
@@ -40,17 +42,17 @@ typedef struct {
     uint8_t n_sign;
 } core_review_t;
 
-/* 確認画面に出す内容。文字列はすべてネイティブが plan のバイト列から作る */
+/* What the review screens show. Every string is built here from the plan's bytes, never taken from it */
 enum { CORE_TEXT_ADDRESS = 0, CORE_TEXT_OP_RETURN, CORE_TEXT_SCRIPT };
 
 typedef struct {
     uint64_t amount;
     uint8_t owner, text_kind;
-    char text[2 * PLAN_MAX_SPK + 1]; /* アドレス、または OP_RETURN のデータ / スクリプト全体の 16 進 */
+    char text[2 * PLAN_MAX_SPK + 1]; /* an address, or hex of the OP_RETURN data or the whole script */
 } core_display_output_t;
 
 typedef struct {
-    uint64_t fee, spend; /* spend は外部出力の合計。自分宛て・お釣りは含めない */
+    uint64_t fee, spend; /* spend is the total of external outputs; ours and change are excluded */
     uint8_t n_outputs;
     core_display_output_t outputs[PLAN_MAX_OUTPUTS];
 } core_display_t;
@@ -66,10 +68,10 @@ uint32_t core_fingerprint(void);
 int core_review(const plan_t *p, const core_prevtx_t prev[PLAN_MAX_INPUTS], core_review_t *r);
 int core_display(const plan_t *p, const core_review_t *r, core_display_t *d);
 int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS], unsigned *n_sigs);
-/* 8 桁の小数で BTC 表記にする（例: 60000 -> "0.00060000"） */
+/* BTC with eight decimals (60000 -> "0.00060000") */
 void core_format_btc(uint64_t sats, char out[21]);
 
-/* 口座の拡張公開鍵（m/84'/coin'/0'）と出力ディスクリプタ。PC 側をウォッチオンリーにするために渡す */
+/* The account xpub (m/84'/coin'/0') and an output descriptor, so the PC side can be watch-only */
 #define CORE_XPUB_MAX 120
 #define CORE_DESC_MAX 180
 int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);

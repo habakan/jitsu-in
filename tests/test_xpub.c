@@ -1,4 +1,4 @@
-/* xpub と出力ディスクリプタを BIP32 のベクタと突き合わせる */
+/* The xpub and the output descriptor, against BIP32's vectors */
 #include <stdio.h>
 #include <string.h>
 #include "core.h"
@@ -18,7 +18,7 @@ int main(void) {
     CHECK(core_init(CORE_MAINNET) && core_load_seed(seed), "load mainnet");
     CHECK(core_account_xpub(xpub, desc), "mainnet xpub");
     printf("  mainnet %s\n  %s\n", xpub, desc);
-    /* BIP84 の公式テストベクタ（m/84'/0'/0'） */
+    /* BIP84's own test vector (m/84'/0'/0') */
     CHECK(!strcmp(xpub, "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V"), "BIP84 test vector");
 
     CHECK(core_init(CORE_TESTNET) && core_load_seed(seed), "load testnet");

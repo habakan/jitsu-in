@@ -16,7 +16,7 @@
 
 static unsigned char ctx_mem[256] __attribute__((aligned(16)));
 static secp256k1_context *ctx;
-/* ホストとの受け渡し領域。seckey[32] msg[32] aux[32] out[64] */
+/* The handover area: seckey[32] msg[32] aux[32] out[64] */
 static unsigned char io[160];
 
 unsigned char *EXPORT(signer_io)(void) { return io; }
@@ -48,7 +48,7 @@ void EXPORT(signer_zeroize)(void) {
     for (size_t i = 0; i < sizeof(io); i++) p[i] = 0;
 }
 
-/* 入力領域。seed_from_mnemonic では mnemonic || passphrase、bip32_derive では uint32 LE のパス */
+/* The input area: mnemonic || passphrase for seed_from_mnemonic, a little-endian uint32 path for bip32_derive */
 static unsigned char in[512];
 static unsigned char seed[64];
 
@@ -65,7 +65,7 @@ int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
     return 1;
 }
 
-/* seed から in[] のパスで秘密鍵を導出し、圧縮公開鍵 33 byte を io+96 に書く */
+/* Derive the key at the path in in[] from the seed, and write the 33-byte compressed pubkey to io+96 */
 int EXPORT(signer_bip32_derive)(unsigned depth) {
     uint32_t path[16];
     bip32_node_t master, node;

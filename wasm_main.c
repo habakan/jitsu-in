@@ -1,5 +1,6 @@
-/* bitcoin-signer.wasm の入口。parser.wasm が作った plan_t を受け取り、鍵を再導出して検証し、署名を返す。
- * 判断は core.c が持つ。ここはホストとの受け渡しだけを並べる（docs/abi.md と対になる形） */
+/* The entry points of signer.wasm. It takes the plan_t parser.wasm produced, re-derives the keys to
+ * check it, and returns signatures. Every judgement lives in core.c; this file is only the handover
+ * to the host, laid out the way parser.wasm's ABI is */
 #include <string.h>
 #include "core.h"
 #include "sha512.h"
@@ -13,14 +14,14 @@
 
 #define PREVTX_MAX 32768
 
-/* ホストが書き込む領域。すべて静的で、割り当ては一切しない */
+/* Where the host writes. All static: this module never allocates */
 static plan_t plan;
 static uint8_t prevtx_buf[PREVTX_MAX];
 static core_prevtx_t prevtx[PLAN_MAX_INPUTS];
 static core_review_t review;
 static core_display_t display;
 static core_sig_t sigs[PLAN_MAX_INPUTS];
-static uint8_t in[512];   /* ニーモニック‖パスフレーズ、または 64 byte の seed */
+static uint8_t in[512];   /* mnemonic || passphrase, or a 64-byte seed */
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 
 unsigned char *EXPORT(signer_in)(void) { return in; }
@@ -37,7 +38,8 @@ int EXPORT(signer_init)(int testnet) {
     return core_init(testnet ? CORE_TESTNET : CORE_MAINNET);
 }
 
-/* in に書いたニーモニックとパスフレーズから鍵を作る。PBKDF2 2048 回はブラウザでも 0.5 秒ほど */
+/* Build the key from the mnemonic and passphrase written to in. PBKDF2 2048 rounds takes about half
+ * a second, in a browser as on the device */
 int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
     uint8_t salt[8 + sizeof(in)], seed[64];
     int ok = 0;
@@ -53,7 +55,7 @@ int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
     return ok;
 }
 
-/* in の先頭 64 byte を seed として使う */
+/* Use the first 64 bytes of in as the seed */
 int EXPORT(signer_load_seed)(void) {
     int ok = core_load_seed(in);
     wipe(in, sizeof(in));
@@ -70,7 +72,7 @@ void EXPORT(signer_unload)(void) {
 
 unsigned EXPORT(signer_fingerprint)(void) { return core_fingerprint(); }
 
-/* 入力 i の non_witness_utxo が prevtx_buf のどこにあるか。len が 0 なら無し */
+/* Where input i's non_witness_utxo sits inside prevtx_buf. A len of 0 means it has none */
 int EXPORT(signer_set_prevtx)(unsigned i, unsigned off, unsigned len) {
     if (i >= PLAN_MAX_INPUTS || off > PREVTX_MAX || len > PREVTX_MAX - off) return 0;
     prevtx[i].raw = len ? prevtx_buf + off : 0;
@@ -81,8 +83,9 @@ int EXPORT(signer_set_prevtx)(unsigned i, unsigned off, unsigned len) {
 int EXPORT(signer_review)(void) { return core_review(&plan, prevtx, &review); }
 int EXPORT(signer_display)(void) { return core_display(&plan, &review, &display); }
 
-/* 署名して本数を返す。負なら CORE_ERR_*。rng は渡さない（import を増やさないため）ので
- * context のブラインド化は効かない。電力解析が関係するのは実機の側で、そちらはネイティブが行う */
+/* Sign and return how many. A negative result is -CORE_ERR_*. No rng is passed — that would mean an
+ * import — so the secp256k1 context is not blinded here. Power analysis is a concern on the device,
+ * and the device runs this same core natively, where it does blind */
 int EXPORT(signer_sign)(void) {
     unsigned n = 0;
     int rc = core_sign(&plan, 0, sigs, &n);

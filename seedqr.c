@@ -1,8 +1,9 @@
-/* SeedQR（SeedSigner 互換）を読んでニーモニックに戻す。これは秘密そのものを運ぶので、解析器（WASM）には
- * 渡さずネイティブ側で扱う。BIP39 のチェックサムを必ず確かめ、合わないものは受け取らない。
+/* Reads a SeedQR (SeedSigner's format) back into a mnemonic. This carries the secret itself, so it is
+ * handled natively and never goes through the parser. The BIP39 checksum is always verified and
+ * anything that fails it is refused.
  *
- * 標準 SeedQR: 単語の番号を 4 桁ずつ並べた数字列（12 語なら 48 桁、24 語なら 96 桁）
- * CompactSeedQR: エントロピーのバイト列そのもの（16 または 32 byte） */
+ * Standard SeedQR: four digits per word index (48 digits for 12 words, 96 for 24)
+ * CompactSeedQR: the raw entropy (16 or 32 bytes) */
 #include "seedqr.h"
 #include <string.h>
 #include "bip39_words.h"
@@ -16,7 +17,7 @@ static void sha256_of(const uint8_t *p, size_t n, uint8_t out[32]) {
     sha256_final(&c, out);
 }
 
-/* 単語の番号から 11bit ずつ取り出してエントロピーとチェックサムに戻し、SHA-256 で検算する */
+/* Take 11 bits per word index back into entropy and checksum, then verify it with SHA-256 */
 static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t cap) {
     uint8_t ent[32], hash[32];
     unsigned ent_bits = n * 11 - n / 3, ent_len = ent_bits / 8, cs_bits = n / 3;
@@ -53,7 +54,7 @@ int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap) {
     unsigned n;
     int r;
 
-    if (len == 48 || len == 96) { /* 標準 SeedQR: 4 桁ずつの番号 */
+    if (len == 48 || len == 96) { /* standard SeedQR: four digits per index */
         n = (unsigned)len / 4;
         for (unsigned i = 0; i < n; i++) {
             unsigned v = 0;
@@ -65,7 +66,7 @@ int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap) {
             if (v > 2047) return 0;
             idx[i] = (uint16_t)v;
         }
-    } else if (len == 16 || len == 32) { /* CompactSeedQR: エントロピーそのもの */
+    } else if (len == 16 || len == 32) { /* CompactSeedQR: the raw entropy */
         uint8_t hash[32];
         unsigned ent_bits = (unsigned)len * 8;
         n = ent_bits / 32 * 3;

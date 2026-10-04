@@ -4,13 +4,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* scriptPubKey を標準のアドレス文字列にする。P2PKH / P2SH は base58check、witness v0 は bech32、
- * v1〜v16 は bech32m（BIP173 / BIP350）。標準形でなければ 0 を返し、呼び出し側はスクリプトを 16 進で見せる */
-#define ADDRESS_MAX 75 /* v1〜v16 の 40 byte プログラム: hrp 2 + '1' + 65 + checksum 6 + NUL */
+/* scriptPubKey to a standard address string: base58check for P2PKH and P2SH, bech32 for witness v0,
+ * bech32m for v1-v16 (BIP173 / BIP350). Returns 0 for anything non-standard, and the caller is
+ * expected to show the raw script in hex instead */
+#define ADDRESS_MAX 75 /* the longest case, a 40-byte v1-v16 program: hrp 2 + '1' + 65 + checksum 6 + NUL */
 
 int address_encode(const uint8_t *spk, size_t len, int testnet, char out[ADDRESS_MAX]);
 
-/* 末尾に 4 byte のチェックサムを足して base58 にする。xpub（78 byte）もこれで作る */
+/* base58 with a four-byte checksum appended. Also how the 78-byte xpub is encoded */
 #define BASE58CHECK_MAX_IN 78
 #define BASE58CHECK_MAX_OUT 120
 void base58check_data(const uint8_t *p, size_t n, char *out);

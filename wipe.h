@@ -3,7 +3,8 @@
 
 #include <stddef.h>
 
-/* 関数末尾の memset は dead store として消されうるので、秘密値の消去は volatile 経由で書く */
+/* A memset at the end of a function can be dropped as a dead store, so secrets are cleared through
+ * a volatile pointer instead */
 static inline void wipe(void *p, size_t n) {
     volatile unsigned char *v = p;
     while (n--) *v++ = 0;

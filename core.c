@@ -12,7 +12,7 @@
 
 #define H 0x80000000u
 #define MAX_MONEY 2100000000000000ull
-#define MAX_ADDRESS_INDEX 100000 /* 自分のアドレスと認める index の上限。外れた値は外部出力として表示する */
+#define MAX_ADDRESS_INDEX 100000 /* highest index we will call ours; anything beyond shows as external */
 
 static uint8_t ctx_mem[256] __attribute__((aligned(16)));
 static secp256k1_context *ctx;
@@ -31,7 +31,7 @@ static int spk_type(const plan_script_t *s) {
     return SPK_OTHER;
 }
 
-/* BIP86: スクリプトツリー無しの tweak。seckey を出力鍵側に変換し、x-only 出力鍵を返す */
+/* BIP86 tweak, no script tree: moves the secret key to the output key and returns the x-only form */
 static int taproot_tweak(uint8_t seckey[32], uint8_t xonly_out[32], secp256k1_keypair *kp) {
     secp256k1_xonly_pubkey internal, output;
     uint8_t internal_ser[32], tweak[32];
@@ -46,7 +46,7 @@ static int taproot_tweak(uint8_t seckey[32], uint8_t xonly_out[32], secp256k1_ke
     return ok;
 }
 
-/* key のパスで導出した鍵が spk を支配しているか。一致すれば node に鍵を残す */
+/* Does the key at this derivation actually control spk? On a match the key is left in node */
 static int owns(const plan_keypath_t *key, const plan_script_t *spk, bip32_node_t *node) {
     uint8_t pub[33], h[20], xonly[32];
     secp256k1_keypair kp;
@@ -125,7 +125,8 @@ static int prevtx_ok(const plan_input_t *in, const core_prevtx_t *prev) {
     return tx_parse(prev->raw, prev->len, &v, &info) && m.found && !memcmp(info.txid, in->prev_txid, 32);
 }
 
-/* 自分の出力と認めるのは、署名する入力と同じアカウント配下の受取（0）/ お釣り（1）チェーンで、スクリプトが一致するものだけ */
+/* An output counts as ours only on the receive (0) or change (1) chain of the same account as the
+ * inputs we sign, and only when the re-derived key produces that exact script */
 static int output_owner(const plan_t *p, const core_review_t *r, const plan_output_t *o) {
     const plan_keypath_t *k = &o->key;
     int type = spk_type(&o->spk);
@@ -200,7 +201,8 @@ int core_review(const plan_t *p, const core_prevtx_t prev[PLAN_MAX_INPUTS], core
     }
     if (!r->n_sign) return CORE_ERR_NOTHING_TO_SIGN;
 
-    /* BIP143 は署名する入力の額にしかコミットしないので、2 入力以上なら全入力の額を元の取引で確かめる */
+    /* BIP143 commits only to the amount of the input being signed, so with two or more inputs every
+     * amount is checked against the previous transaction it claims to come from */
     for (unsigned i = 0; i < p->n_inputs; i++) {
         const core_prevtx_t *pv = prev ? &prev[i] : NULL;
         if (pv && pv->raw) {
@@ -279,7 +281,7 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
 
     s->input = (uint8_t)i;
     if (ok && spk_type(&in->spk) == SPK_P2WPKH) {
-        /* Bitcoin Core と同じ low-R grinding: R が 0x80 未満になるまで counter を RFC6979 の追加データにして引き直す */
+        /* low-R grinding, as Bitcoin Core does it: retry with a counter as RFC6979 extra data until R < 0x80 */
         uint8_t extra[32] = {0}, compact[64];
         uint32_t counter = 0;
         ok = sighash_bip143_p2wpkh(p, i, digest);
@@ -289,7 +291,7 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
             counter++;
             for (int k = 0; k < 4; k++) extra[k] = (uint8_t)(counter >> (8 * k));
         } while (ok && compact[0] >= 0x80);
-        /* 外に出す前に自分で検証する。グリッチで壊れた署名を揃えられると鍵が復元されうる */
+        /* Verify before letting it out: collecting a glitched signature next to a good one can recover the key */
         ok = ok && secp256k1_ec_pubkey_create(ctx, &pub, node.key)
           && secp256k1_ecdsa_verify(ctx, &sig, digest, &pub)
           && secp256k1_ecdsa_signature_serialize_der(ctx, s->sig, &len, &sig)
@@ -297,9 +299,10 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
         s->sig[len] = 0x01;
         s->sig_len = (uint8_t)(len + 1);
     } else if (ok) {
-        /* aux は 0。BIP340 の安全性は aux の質に依存せず、決定論的なら同じ PSBT から同じ署名が出て
-         * 他の実装と突き合わせられる。Core / Trezor / Jade / BDK も同じ。
-         * マルチシグに広げるときは決定論的 nonce が危険になるので、ここを見直すこと */
+        /* aux is zero. BIP340's security does not depend on its quality, and being deterministic means
+         * the same PSBT always yields the same signature, which another implementation can reproduce.
+         * Core, Trezor, Jade and BDK all do this. **Revisit before adding multisig**: BIP340 says
+         * deterministic nonces are unsafe there */
         ok = taproot_tweak(node.key, xonly, &kp)
           && sighash_bip341_keypath(ctx, p, i, in->sighash_type, digest)
           && secp256k1_schnorrsig_sign32(ctx, s->sig, digest, &kp, NULL)
@@ -321,11 +324,12 @@ int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS],
     *n_sigs = 0;
     sha256((const uint8_t *)p, sizeof(*p), h);
     if (!reviewed || memcmp(h, reviewed_hash, 32)) return CORE_ERR_NOT_REVIEWED;
-    /* 秘密鍵を使う計算の中間値を毎回変える。電力波形を重ねて平均を取る攻撃を効かなくする。
-     * ここの乱数は質を問われない（予測されても安全性は落ちず、効果が無くなるだけ） */
+    /* Vary the intermediate values of every computation that touches the key, so power traces cannot
+     * be averaged over repeated runs. The quality of this randomness does not matter: a predictable
+     * value costs nothing in security, it just stops helping */
     if (rng && rng(blind, 32) && !secp256k1_context_randomize(ctx, blind)) return CORE_ERR_CRYPTO;
     wipe(blind, sizeof(blind));
-    /* review と同じ plan であることはハッシュで保証済み。review が所有を確かめた入力だけがここを通る */
+    /* The hash above already proved this is the plan review saw, so only inputs review confirmed get here */
     for (unsigned i = 0; i < p->n_inputs; i++) {
         const plan_input_t *in = &p->inputs[i];
         if (in->key.depth == 0 || in->key.fingerprint != master_fp) continue;
@@ -340,8 +344,8 @@ int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS],
     return CORE_OK;
 }
 
-/* 口座の拡張公開鍵（m/84'/coin'/0'）と、それを使う出力ディスクリプタを作る。
- * これを PC 側へ渡せば、PC は鍵を知らないままウォッチオンリーで使える */
+/* The account xpub (m/84'/coin'/0') and an output descriptor built from it. Hand these to the PC and
+ * it can watch the wallet without ever holding a key */
 int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
     const uint32_t coin = network == CORE_TESTNET ? 1u : 0u;
     uint32_t path[3] = {84u | H, coin | H, 0u | H};
@@ -351,12 +355,12 @@ int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
     int ok = 0;
 
     if (!master_fp) return 0;
-    /* 親（m/84'/coin'）の指紋が要るので 2 段で導出する */
+    /* Derived in two steps because the serialization needs the parent's (m/84'/coin') fingerprint */
     if (!bip32_derive(ctx, &master, path, 2, &parent) || !bip32_pubkey(ctx, parent.key, pub)) goto done;
     hash160(pub, sizeof(pub), h);
     if (!bip32_derive(ctx, &parent, path + 2, 1, &node) || !bip32_pubkey(ctx, node.key, pub)) goto done;
 
-    /* version(4) depth(1) 親の指紋(4) 子番号(4) chain code(32) 公開鍵(33) */
+    /* version(4) depth(1) parent fingerprint(4) child number(4) chain code(32) pubkey(33) */
     {
         const uint32_t ver = network == CORE_TESTNET ? 0x043587cfu : 0x0488b21eu;
         unsigned o = 0;
@@ -371,8 +375,8 @@ int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
 
     for (int i = 0; i < 8; i++) fp[i] = "0123456789abcdef"[master_fp >> (28 - 4 * i) & 15];
     fp[8] = 0;
-    /* Sparrow などがそのまま読める出力ディスクリプタ。受取と釣りの両方を 1 行で表す。
-     * snprintf は wasm で stdio ごと引き込むので使わない */
+    /* An output descriptor Sparrow and others read as is; <0;1> covers receive and change in one line.
+     * Built by hand because snprintf drags the whole of stdio into the wasm build */
     {
         const char *parts[] = {"wpkh([", fp, "/84h/", coin ? "1" : "0", "h/0h]", out, "/<0;1>/*)"};
         size_t o = 0;

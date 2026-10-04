@@ -1,4 +1,4 @@
-/* SeedQR の読み取りを公式ベクタで確かめる */
+/* SeedQR decoding, against the published vectors */
 #include <stdio.h>
 #include <string.h>
 #include "seedqr.h"
@@ -8,10 +8,10 @@ static int checks, failures;
 
 int main(void) {
     char out[256];
-    /* BIP39 の全ゼロ: abandon x11 + about。番号は 0,0,...,0,3 */
+    /* BIP39 all-zero entropy: abandon x11 + about, so the indices are 0,0,...,0,3 */
     const char *d12 = "000000000000000000000000000000000000000000000003";
     const uint8_t e12[16] = {0};
-    /* 24 語の全ゼロ: abandon x23 + art（番号 0 x23, 134） */
+    /* the 24-word all-zero case: abandon x23 + art (indices 0 x23, 134) */
     const char *d24 = "000000000000000000000000000000000000000000000000"
                       "000000000000000000000000000000000000000000000102";
     const uint8_t e24[32] = {0};
@@ -25,12 +25,12 @@ int main(void) {
     CHECK(seedqr_decode(e12, 16, out, sizeof(out)) > 0 && !strcmp(out, want12), "12 words from entropy");
     CHECK(seedqr_decode(e24, 32, out, sizeof(out)) > 0 && !strcmp(out, want24), "24 words from entropy");
 
-    /* チェックサムが合わないものは受け取らない */
+    /* a bad checksum is refused */
     memcpy(bad, d12, 49);
     bad[47] = '4';
     CHECK(seedqr_decode((const uint8_t *)bad, 48, out, sizeof(out)) == 0, "bad checksum rejected");
-    /* 番号が 2047 を超える、桁が数字でない、長さが違う。
-     * 2048 は低位 11bit が 0 と同じなのでチェックサムは通る。範囲検査が無いと単語表の外を読む */
+    /* an index above 2047, a non-digit, a wrong length. 2048 has the same low 11 bits as 0, so the
+     * checksum passes: without a range check this reads past the end of the word list */
     memcpy(bad, d12, 49);
     bad[0] = '2', bad[1] = '0', bad[2] = '4', bad[3] = '8';
     CHECK(seedqr_decode((const uint8_t *)bad, 48, out, sizeof(out)) == 0, "index 2048 rejected");
