@@ -44,17 +44,15 @@ export class KeyPath {
 }
 
 export class Parser {
-  /**
-   * @param {BufferSource} moduleBytes the contents of the parser.wasm **file** — not a PSBT
-   */
-  static async load(moduleBytes) {
-    const { instance } = await WebAssembly.instantiate(moduleBytes, {});
+  /** @param {BufferSource} parserWasm the contents of parser.wasm */
+  static async load(parserWasm) {
+    const { instance } = await WebAssembly.instantiate(parserWasm, {});
     return new Parser(instance);
   }
 
   /** Synchronous variant, for Node or anywhere compiling on the main thread is fine. */
-  static loadSync(moduleBytes) {
-    return new Parser(new WebAssembly.Instance(new WebAssembly.Module(moduleBytes), {}));
+  static loadSync(parserWasm) {
+    return new Parser(new WebAssembly.Instance(new WebAssembly.Module(parserWasm), {}));
   }
 
   constructor(instance) {

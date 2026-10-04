@@ -2,17 +2,13 @@
 
 No dependencies. Works in Node and in a browser, including from `file://`.
 
-Two different byte arrays are involved and it is worth keeping them apart: the **module** is the
-`parser.wasm` file you load once, and the **PSBT** is the transaction you hand it afterwards.
-
 ```js
 import { Parser } from "./parser.mjs";
 
-// once: load the module itself
-const parser = await Parser.load(await fetch("parser.wasm").then(r => r.arrayBuffer()));
+const parserWasm = await fetch("parser.wasm").then(r => r.arrayBuffer());
+const parser = await Parser.load(parserWasm);
 
-// per transaction: hand it a PSBT and the master fingerprint (not a secret)
-const plan = parser.parse(psbt, 0x73c5da0a);
+const plan = parser.parse(psbt, 0x73c5da0a);   // fingerprint of your master key; not a secret
 
 console.log(plan.inputs.length, "in /", plan.outputs.length, "out");
 for (const out of plan.outputs) {
@@ -23,6 +19,8 @@ console.log("fee", Number(plan.fee) / 1e8);
 ```
 
 In Node: `const parser = Parser.loadSync(readFileSync("parser.wasm"));`
+
+You load `parser.wasm` once and keep the `parser`; `parse` is called per transaction.
 
 ## What you get
 
