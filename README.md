@@ -101,6 +101,9 @@ make          # build/parser.wasm and its SHA-256
 make test
 ```
 
+This uses whatever clang you have, which is fine for development but will not reproduce a release
+byte for byte. To do that, use the pinned toolchain — see [docs/releases.md](docs/releases.md).
+
 The UR building blocks are first checked natively (with ASan / UBSan) against the expected values of the
 [bc-ur](https://github.com/BlockchainCommons/bc-ur) test suite (`tests/bc-ur-test.cpp`, extracted by
 `tools/gen_ur_ref_vectors.py`): CRC32, Bytewords, the Xoshiro256** sequences, 500 sampler draws, shuffles,

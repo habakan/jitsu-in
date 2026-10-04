@@ -27,12 +27,34 @@ signing of the build. Steps 2 and 3 fail for different reasons, which is the poi
 The build is reproducible. Check out the tag, build with the pinned toolchain, and compare:
 
 ```sh
-sha256sum build/parser.wasm
+git checkout v0.1.0
+
+# the same toolchain the release was built with, pinned by version and by the hash of its tarball
+curl -sLO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
+echo "b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4  wasi-sdk-34.0-x86_64-linux.tar.gz" | sha256sum -c -
+tar xzf wasi-sdk-34.0-x86_64-linux.tar.gz
+curl -sLO https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz
+echo "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572  binaryen-version_132-x86_64-linux.tar.gz" | sha256sum -c -
+tar xzf binaryen-version_132-x86_64-linux.tar.gz
+
+SDK=$PWD/wasi-sdk-34.0-x86_64-linux
+make build/parser.wasm \
+  LLVM=$SDK/bin WASI=$SDK/share/wasi-sysroot \
+  RTLIB=$SDK/lib/clang/23/lib/wasm32-unknown-wasi \
+  WASM_OPT=$PWD/binaryen-version_132/bin/wasm-opt
+
+sha256sum build/parser.wasm   # must equal what SHA256SUMS says
 ```
 
-macOS arm64 and Linux x86_64 produce the same bytes. The toolchain (wasi-sdk 34.0, binaryen 132)
-is pinned by version and by the SHA-256 of its tarball, so "the same toolchain" is checkable too.
-This is the strongest of the three: it does not require trusting the maintainer or GitHub.
+The macOS arm64 tarballs (`-arm64-macos`) produce the same bytes. `make` alone uses whatever clang is
+on your machine and is **not** expected to reproduce the release: the versions above are the ones that
+do. [.github/workflows/release.yml](../.github/workflows/release.yml) is the authoritative copy of
+these pins, because it is what actually built the artifact.
+
+One trap worth naming: if a different `wasm-opt` is earlier on your `PATH`, `WASM_OPT` above is what
+decides, so set it explicitly as shown rather than relying on the `PATH`.
+
+This is the strongest of the three checks: it does not require trusting the maintainer or GitHub.
 
 You can also check the shape of what you downloaded without running it:
 
