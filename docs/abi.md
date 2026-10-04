@@ -7,8 +7,13 @@ It is 56,522 bytes with **zero imports**: no clock, no randomness, no filesystem
 shared conventions are in [../../../docs/module-abi.md](../../../docs/module-abi.md); this page is
 what is specific to this module.
 
-The reference host library is [hosts/js/signer.mjs](../hosts/js/signer.mjs), and
-[hosts/js/test.mjs](../hosts/js/test.mjs) is 24 checks driving it.
+Two host libraries drive it, and `make check-hosts-agree` requires their output to match byte for
+byte:
+
+| | | |
+|---|---|---|
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 24 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 25 checks in [Test.kt](../hosts/kotlin/Test.kt) |
 
 ## What a host must not do
 
