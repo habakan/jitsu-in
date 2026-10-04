@@ -5,6 +5,11 @@ RUNTIME_SHA := 81245b1f832afcf52169e655d2db6a07009864dba352b174b90a444bf096bf6e
 WASM_SHA    := a850df5e77f60411648fd970144f825517a2c076dbb807ff6de95c6cfa439968
 BASE := https://repo1.maven.org/maven2/com/dylibso/chicory
 CP := lib/runtime-$(CHICORY).jar:lib/wasm-$(CHICORY).jar
+# kotlinc brings its own JVM to compile with, but running needs a java that works. macOS ships a
+# /usr/bin/java stub that is on PATH and fails with "Unable to locate a Java Runtime", so a real one
+# is looked for first; Homebrew's openjdk is keg-only and therefore never on PATH
+JAVA ?= $(firstword $(wildcard /opt/homebrew/opt/openjdk/bin/java) \
+                    $(shell command -v java 2>/dev/null))
 ROOT   := ../../../..
 SIGNER ?= $(ROOT)/build/signer.wasm
 PARSER ?= $(ROOT)/build/parser.wasm
@@ -12,13 +17,13 @@ PSBT   ?= $(ROOT)/build/psbt/own_mixed_nwu.psbt
 SIGNED ?= $(ROOT)/build/psbt/own_mixed_nwu.signed
 
 dump: dump.jar
-	@java -cp "dump.jar:$(CP)" DumpKt $(SIGNER) $(PARSER) $(PSBT)
+	@$(JAVA) -cp "dump.jar:$(CP)" DumpKt $(SIGNER) $(PARSER) $(PSBT)
 
 dump.jar: Signer.kt Dump.kt $(subst :, ,$(CP))
 	kotlinc Signer.kt Dump.kt -cp "$(CP)" -include-runtime -d $@
 
 check: test.jar
-	java -cp "test.jar:$(CP)" TestKt $(SIGNER) $(PARSER) $(PSBT) $(SIGNED)
+	$(JAVA) -cp "test.jar:$(CP)" TestKt $(SIGNER) $(PARSER) $(PSBT) $(SIGNED)
 
 test.jar: Signer.kt Test.kt $(subst :, ,$(CP))
 	kotlinc Signer.kt Test.kt -cp "$(CP)" -include-runtime -d $@

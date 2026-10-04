@@ -14,6 +14,7 @@ byte:
 |---|---|---|
 | JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 24 checks in [test.mjs](../hosts/js/test.mjs) |
 | Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 25 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 25 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 
