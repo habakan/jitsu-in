@@ -30,9 +30,9 @@ export class ParserError extends Error {
   }
 }
 
-/** A BIP32 derivation the module read out of the PSBT. It is a *claim*: the host has to derive the
- *  key itself and check that it produces the scriptPubKey before trusting it. */
-export class KeyPath {
+/** A BIP32 derivation the module read out of the PSBT — BIP380 calls this key origin information.
+ *  It is a *claim*: derive the key yourself and check it produces the scriptPubKey before trusting it. */
+export class KeyOrigin {
   constructor(fingerprint, path) {
     this.fingerprint = fingerprint;
     this.path = path;
@@ -89,7 +89,7 @@ export class Parser {
     if (!depth) return null; // depth 0 means "the module found no derivation for this"
     const path = [];
     for (let i = 0; i < depth; i++) path.push(this.#u32(off + L.key.path + i * 4));
-    return new KeyPath(this.#u32(off + L.key.fingerprint), path);
+    return new KeyOrigin(this.#u32(off + L.key.fingerprint), path);
   }
 
   /** How many bytes the input buffer takes. */

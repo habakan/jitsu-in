@@ -36,10 +36,11 @@ class ParserException(val code: Int, kind: String = "P_ERR") : Exception(
 )
 
 /**
- * A BIP32 derivation the module read out of the PSBT. It is a *claim*: derive the key yourself and
- * check that it produces the scriptPubKey before treating an input as yours or an output as change.
+ * A BIP32 derivation the module read out of the PSBT — BIP380 calls this key origin information.
+ * It is a *claim*: derive the key yourself and check that it produces the scriptPubKey before
+ * treating an input as yours or an output as change.
  */
-class KeyPath(val fingerprint: Int, val path: IntArray) {
+class KeyOrigin(val fingerprint: Int, val path: IntArray) {
     override fun toString(): String {
         val fp = "%08x".format(fingerprint)
         return (listOf(fp) + path.map { if (it < 0) "${it and 0x7fffffff}h" else "$it" }).joinToString("/")
@@ -48,13 +49,13 @@ class KeyPath(val fingerprint: Int, val path: IntArray) {
 
 class PlanInput(
     val prevTxid: ByteArray, val prevVout: Int, val sequence: Int,
-    val amount: Long, val spk: ByteArray, val key: KeyPath?, val sighashType: Int,
+    val amount: Long, val spk: ByteArray, val key: KeyOrigin?, val sighashType: Int,
     /** The previous transaction, if the PSBT carried one. Checking it against [prevTxid] is the only
      *  way to know [amount] is real. */
     val prevtx: ByteArray?,
 )
 
-class PlanOutput(val amount: Long, val spk: ByteArray, val key: KeyPath?)
+class PlanOutput(val amount: Long, val spk: ByteArray, val key: KeyOrigin?)
 
 /** What the module read out of the PSBT. Every field is a claim until the host checks it. */
 class Plan(val txVersion: Int, val locktime: Int, val inputs: List<PlanInput>, val outputs: List<PlanOutput>) {
@@ -101,10 +102,10 @@ class Parser(parserWasm: ByteArray) {
         (0..7).fold(0L) { acc, i -> acc or ((b[i].toLong() and 0xffL) shl (8 * i)) }
     }
     private fun script(off: Int): ByteArray = bytes(off + 1, u8(off))
-    private fun key(off: Int): KeyPath? {
+    private fun key(off: Int): KeyOrigin? {
         val depth = u8(off + L.KEY_DEPTH)
         if (depth == 0) return null                 // depth 0: the module found no derivation
-        return KeyPath(i32(off + L.KEY_FINGERPRINT), IntArray(depth) { i32(off + L.KEY_PATH + it * 4) })
+        return KeyOrigin(i32(off + L.KEY_FINGERPRINT), IntArray(depth) { i32(off + L.KEY_PATH + it * 4) })
     }
 
     /** How many bytes the input buffer takes. */

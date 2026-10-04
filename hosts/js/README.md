@@ -29,7 +29,7 @@ You load `parser.wasm` once and keep the `parser`; `parse` is called per transac
 
 `plan.outputs[i]` — `amount`, `spk`, `key`.
 
-`key` is a `KeyPath` or `null`. It prints as `73c5da0a/84h/0h/0h/0/0`. **It is a claim**: the module
+`key` is a `KeyOrigin?` — BIP380's name for this. It prints as `73c5da0a/84h/0h/0h/0/0`. **It is a claim**: the module
 read it out of the PSBT. Derive the key yourself and check it produces `spk` before you call an
 output change, or an input yours.
 

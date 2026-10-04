@@ -3,7 +3,7 @@
 // returns a bad offset is stopped rather than followed.
 //   node hosts/js/test.mjs [build/parser.wasm] [build/vectors]
 import { readFileSync, readdirSync } from "fs";
-import { Parser, ParserError, KeyPath } from "./parser.mjs";
+import { Parser, ParserError, KeyOrigin } from "./parser.mjs";
 
 const wasmPath = process.argv[2] ?? "build/parser.wasm";
 const vectorDir = process.argv[3] ?? "build/vectors";
@@ -36,7 +36,7 @@ for (const name of vectors) {
   for (const i of plan.inputs) {
     check(i.prevTxid.length === 32, `${name}: txid is 32 bytes`);
     check(i.spk.length > 0 && i.spk.length <= 83, `${name}: input spk length`);
-    check(i.key === null || i.key instanceof KeyPath, `${name}: input key type`);
+    check(i.key === null || i.key instanceof KeyOrigin, `${name}: input key type`);
     check(i.prevtx === null || i.prevtx.length > 60, `${name}: prevtx looks like a transaction`);
   }
   for (const o of plan.outputs) check(o.spk.length > 0 && o.spk.length <= 83, `${name}: output spk length`);
