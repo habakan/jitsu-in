@@ -1,5 +1,5 @@
-# Chicory は Maven Central から取り、ハッシュを検証する。Gradle を使わないのは、
-# wrapper の jar（バイナリ）を鍵を扱うリポジトリに置きたくないため
+# Chicory comes from Maven Central and its hash is checked. No Gradle on purpose: that would mean
+# committing gradle-wrapper.jar, and a binary blob is not something this repository should ask you to trust
 CHICORY := 1.4.0
 RUNTIME_SHA := 81245b1f832afcf52169e655d2db6a07009864dba352b174b90a444bf096bf6e
 WASM_SHA    := a850df5e77f60411648fd970144f825517a2c076dbb807ff6de95c6cfa439968

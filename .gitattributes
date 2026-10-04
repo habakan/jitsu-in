@@ -1,5 +1,5 @@
-# 上流から持ってきたもの。ビルドされず、期待値の出どころとしてだけ置いてある
+# Copied from upstream. Never built; it is where the UR expected values come from
 tests/bc-ur-test.cpp linguist-vendored
 tests/rpc_psbt.json  linguist-vendored
-# 生成物
+# Generated
 tests/ur_ref_vectors.h linguist-generated
