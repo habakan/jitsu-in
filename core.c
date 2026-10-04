@@ -1,6 +1,5 @@
 #include "core.h"
 #include <string.h>
-#include <stdio.h>
 #include "wipe.h"
 #include "bip32.h"
 #include "hash.h"
@@ -372,9 +371,19 @@ int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
 
     for (int i = 0; i < 8; i++) fp[i] = "0123456789abcdef"[master_fp >> (28 - 4 * i) & 15];
     fp[8] = 0;
-    /* Sparrow などがそのまま読める出力ディスクリプタ。受取と釣りの両方を 1 行で表す */
-    if ((size_t)snprintf(desc, CORE_DESC_MAX, "wpkh([%s/84h/%luh/0h]%s/<0;1>/*)", fp, (unsigned long)coin, out) >= CORE_DESC_MAX)
-        goto done;
+    /* Sparrow などがそのまま読める出力ディスクリプタ。受取と釣りの両方を 1 行で表す。
+     * snprintf は wasm で stdio ごと引き込むので使わない */
+    {
+        const char *parts[] = {"wpkh([", fp, "/84h/", coin ? "1" : "0", "h/0h]", out, "/<0;1>/*)"};
+        size_t o = 0;
+        for (unsigned k = 0; k < sizeof(parts) / sizeof(*parts); k++) {
+            size_t n = strlen(parts[k]);
+            if (o + n + 1 > CORE_DESC_MAX) goto done;
+            memcpy(desc + o, parts[k], n);
+            o += n;
+        }
+        desc[o] = 0;
+    }
     ok = 1;
 done:
     wipe(&parent, sizeof(parent));
