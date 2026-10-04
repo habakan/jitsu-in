@@ -128,8 +128,8 @@ console.log("fee", Number(totalIn - totalOut) / 1e8);
 `mine` above is deliberately named as a claim. Deriving the key and checking that it really produces
 that scriptPubKey is the host's job — see [What the host must still do](#what-the-host-must-still-do).
 
-Examples in other languages, each runnable with `make run`, are in
-[`examples/`](../examples): Kotlin on Chicory, Swift on WasmKit.
+Host libraries for other languages, each runnable with `make run`, are in
+[`hosts/`](../hosts): Kotlin on Chicory, Swift on WasmKit.
 
 ## Memory map (version 1, informative)
 

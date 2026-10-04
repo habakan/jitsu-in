@@ -9,11 +9,17 @@ WASM ?= ../../build/parser.wasm
 PSBT ?= ../../build/vectors/own_p2wpkh_1in.psbt
 FP   ?= 73c5da0a
 
+check: test.jar
+	java -cp "test.jar:$(CP)" TestKt $(WASM) $(dir $(PSBT))
+
+test.jar: Parser.kt Test.kt $(subst :, ,$(CP))
+	kotlinc Parser.kt Test.kt -cp "$(CP)" -include-runtime -d $@
+
 run: plandump.jar
 	java -cp "plandump.jar:$(CP)" PlanDumpKt $(WASM) $(PSBT) $(FP)
 
-plandump.jar: PlanDump.kt $(subst :, ,$(CP))
-	kotlinc $< -cp "$(CP)" -include-runtime -d $@
+plandump.jar: Parser.kt PlanDump.kt $(subst :, ,$(CP))
+	kotlinc Parser.kt PlanDump.kt -cp "$(CP)" -include-runtime -d $@
 
 define fetch
 	mkdir -p lib
@@ -28,5 +34,5 @@ lib/wasm-$(CHICORY).jar:
 	$(call fetch,wasm,$(WASM_SHA))
 
 clean:
-	rm -rf lib plandump.jar
-.PHONY: run clean
+	rm -rf lib plandump.jar test.jar
+.PHONY: run check clean
