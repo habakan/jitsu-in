@@ -50,5 +50,22 @@ jobs:
           grep "$(sha256sum build/parser.wasm | cut -d' ' -f1)" checksums.txt \
             || { echo "parser.wasm changed; update checksums.txt deliberately"; exit 1; }
 
+      # The JVM host is also the Android one, so it is worth running rather than only writing
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Kotlin (pinned by version and by hash)
+        run: |
+          V=2.4.20
+          curl -sL -o /tmp/kc.zip \
+            https://github.com/JetBrains/kotlin/releases/download/v$V/kotlin-compiler-$V.zip
+          echo "59e9ca74c7904ef2c122b12114937673ccce68de820a663f0ed66ccf8799e0b7  /tmp/kc.zip" \
+            | sha256sum -c -
+          unzip -q /tmp/kc.zip -d /tmp
+          echo "/tmp/kotlinc/bin" >> $GITHUB_PATH
+      - name: The JVM host (68 checks)
+        run: make check-hosts-kotlin REQUIRE_KOTLIN=1
+
       - name: Fuzzing, a fixed short run
         run: make check-fuzz LLVM=/usr/bin

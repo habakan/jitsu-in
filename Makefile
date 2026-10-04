@@ -77,6 +77,18 @@ check-hosts: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt
 	node hosts/js/test.mjs build/parser.wasm build/vectors
 .PHONY: check-hosts
 
+# The JVM host, which is also the Android one. REQUIRE_KOTLIN=1 turns a missing kotlinc into a
+# failure; a check that silently succeeds without its tool is worse than no check
+check-hosts-kotlin: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt
+	@set -e; \
+	if ! command -v kotlinc >/dev/null; then \
+	  if [ "$(REQUIRE_KOTLIN)" = "1" ]; then echo "kotlinc not found and REQUIRE_KOTLIN=1"; exit 1; fi; \
+	  echo "kotlinc not found; skipping (pass REQUIRE_KOTLIN=1 to make this a failure)"; exit 0; \
+	fi; \
+	$(MAKE) -C hosts/kotlin check WASM=$(PWD)/build/parser.wasm \
+	  PSBT=$(PWD)/build/vectors/own_p2wpkh_1in.psbt
+.PHONY: check-hosts-kotlin
+
 test: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt build/test_ur
 	build/test_ur
 	uv run -q tools/run_tests.py build/parser.wasm build/vectors tests/rpc_psbt.json tests/ur_vectors.json
