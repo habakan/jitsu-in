@@ -1,3 +1,17 @@
+## Which Swift
+
+WasmKit 0.3.1 onwards declares `swift-tools-version: 6.3`, so **this needs Swift 6.3 or newer**. On
+an older Swift it fails to resolve rather than to compile:
+
+```
+error: 'wasmkit': package 'wasmkit' @ 0.4.1 is using Swift tools version 6.3.0
+       but the installed version is 6.1.0
+```
+
+The versions here are pinned exactly rather than with `from:`. A range keeps working wherever
+`.build` is already populated while failing for anyone starting fresh, which is precisely how this
+went unnoticed until someone tried a clean checkout.
+
 # Swift host
 
 Runs on [WasmKit](https://github.com/swiftwasm/WasmKit), a WebAssembly runtime written in Swift —

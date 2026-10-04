@@ -9,9 +9,13 @@ let package = Package(
         .library(name: "WasmPsbtParser", targets: ["WasmPsbtParser"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/swiftwasm/WasmKit.git", from: "0.4.1"),
+        // Exact, not "from": WasmKit 0.3.1 onwards declares swift-tools-version 6.3, so this needs
+        // Swift 6.3 or newer to resolve at all. A "from:" range picks one of those and then fails on
+        // a fresh checkout while still working wherever .build is already populated, which is how
+        // this went unnoticed here until 2026-10-04
+        .package(url: "https://github.com/swiftwasm/WasmKit.git", exact: "0.4.1"),
         // Only for SHA-256 when checking the module's digest. CryptoKit is Apple-only
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", exact: "3.15.1"),
     ],
     targets: [
         .target(
