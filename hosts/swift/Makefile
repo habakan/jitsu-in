@@ -5,6 +5,9 @@ FP   ?= 73c5da0a
 run:
 	swift run PlanDump $(WASM) $(PSBT) $(FP)
 
+check:
+	swift run ParserCheck $(WASM) $(dir $(PSBT))
+
 clean:
 	rm -rf .build
-.PHONY: run clean
+.PHONY: run check clean

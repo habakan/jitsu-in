@@ -8,10 +8,11 @@ the thing [the ABI](../docs/abi.md) says a host must do and that is easy to forg
 |---|---|---|
 | [js](js) | the browser's own, or Node | No dependencies. Works from `file://` |
 | [kotlin](kotlin) | [Chicory](https://github.com/dylibso/chicory) | Pure Java: no JNI, no NDK. The easy path on Android |
-| [swift](swift) | [WasmKit](https://github.com/swiftwasm/WasmKit) | Pure Swift |
+| [swift](swift) | [WasmKit](https://github.com/swiftwasm/WasmKit) | Pure Swift: no C interop. For iOS |
 
-Each directory has the library, a `make run` demo and `make check` tests. The tests mirror each
-other, so a host that behaves differently from the others shows up as a failing check.
+Each directory has the library, a `make run` demo and `make check` tests. **The tests mirror each
+other**, so a host that behaves differently from the others shows up as a failing check — that is how
+the Kotlin host's handling of exports that return nothing was found.
 
 Adding a language? Copy the shape: one table of offsets, one checked accessor that everything reads
 through, and typed objects out.

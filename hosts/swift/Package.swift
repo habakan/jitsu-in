@@ -1,20 +1,25 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// Reads parser.wasm with WasmKit, a WebAssembly runtime written in Swift.
-// No native toolchain and no WASI: the module has zero imports.
+// WasmPsbtParser is the library; PlanDump and ParserCheck are the demo and the tests.
 let package = Package(
-    name: "PlanDump",
-    platforms: [.macOS(.v15)],
+    name: "WasmPsbtParser",
+    platforms: [.macOS(.v15), .iOS(.v18)],
+    products: [
+        .library(name: "WasmPsbtParser", targets: ["WasmPsbtParser"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/swiftwasm/WasmKit.git", from: "0.4.1"),
     ],
     targets: [
-        .executableTarget(
-            name: "PlanDump",
+        .target(
+            name: "WasmPsbtParser",
             dependencies: [.product(name: "WasmKit", package: "WasmKit")],
-            // Top-level code is main-actor isolated under Swift 6; this example is a plain script.
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .executableTarget(name: "PlanDump", dependencies: ["WasmPsbtParser"],
+                          swiftSettings: [.swiftLanguageMode(.v5)]),
+        .executableTarget(name: "ParserCheck", dependencies: ["WasmPsbtParser"],
+                          swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

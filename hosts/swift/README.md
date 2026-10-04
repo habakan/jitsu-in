@@ -1,50 +1,49 @@
-# Swift + WasmKit
+# Swift host
 
-[WasmKit](https://github.com/swiftwasm/WasmKit) is a WebAssembly runtime written in Swift,
-so this runs with no C interop and no native build step — which is what an iOS app would want.
-
-```sh
-make run
-```
-
-Point it elsewhere with `make run WASM=... PSBT=... FP=...`.
-
-## The code
-
-The full example is [`Sources/PlanDump/main.swift`](Sources/PlanDump/main.swift); this is its core:
+Runs on [WasmKit](https://github.com/swiftwasm/WasmKit), a WebAssembly runtime written in Swift —
+**no C interop and no native build step**, which is what you want inside an iOS app.
+The module has zero imports and does not use WASI, so nothing else is needed.
 
 ```swift
-let module = try parseWasm(bytes: [UInt8](Data(contentsOf: URL(fileURLWithPath: wasmPath))))
-let instance = try module.instantiate(store: Store(engine: Engine()))
-guard case let .memory(memory) = instance.export("memory") else { fatalError("no memory") }
+import WasmPsbtParser
 
-func call(_ name: String, _ a: [Value] = []) throws -> Int32 {
-    guard case let .function(f) = instance.export(name) else { fatalError("missing \(name)") }
-    guard case let .i32(v) = try f.invoke(a).first! else { fatalError("not i32") }
-    return Int32(bitPattern: v)
+let parser = try Parser(parserWasm: parserWasmBytes)      // once
+let plan = try parser.parse(psbt, fingerprint: 0x73c5da0a) // per transaction
+
+print("\(plan.inputs.count) in / \(plan.outputs.count) out, fee \(plan.fee)")
+for out in plan.outputs {
+    print(out.amount, out.key.map { "claimed as \($0)" } ?? "")
 }
-
-// Every read goes through here so the offset and length are checked against the memory size
-func bytes(_ offset: Int, _ count: Int) -> [UInt8] {
-    precondition(offset >= 0 && count >= 0 && offset + count <= memory.data.count)
-    return Array(memory.data[offset ..< offset + count])
-}
-
-// Write the PSBT where the module expects it, then parse
-let psbt = try [UInt8](Data(contentsOf: URL(fileURLWithPath: psbtPath)))
-let input = Int(try call("parser_input"))
-memory.withUnsafeMutableBufferPointer(offset: UInt(input), count: psbt.count) {
-    $0.copyBytes(from: psbt)
-}
-let rc = try call("parser_parse", [.i32(UInt32(psbt.count)), .i32(fingerprint)])
-guard rc == 0 else { fatalError("P_ERR \(rc)") }
-
-// Read the plan it produced. Offsets come from docs/abi.md
-let plan = Int(try call("parser_plan"))
-let nOut = Int(bytes(plan + 17, 1)[0])
 ```
 
-Verified with Swift 6.4 and WasmKit 0.4.1 on macOS 15.
+Add it to your own package:
+
+```swift
+.package(path: "../wasm-psbt-parser/hosts/swift")   // or a URL once this is tagged
+```
+
+## What you get
+
+`plan.inputs[i]` — `prevTxid`, `prevVout`, `sequence`, `amount` (`UInt64`, satoshis), `spk`,
+`key`, `sighashType`, and `prevtx` (the `non_witness_utxo`, or `nil`).
+
+`plan.outputs[i]` — `amount`, `spk`, `key`.
+
+`key` is a `KeyOrigin?` — BIP380's name for this. It prints as `73c5da0a/84h/0h/0h/0/0`.
+**It is a claim**: the module read it out of the PSBT. Derive the key yourself and check it produces
+`spk` before you call an output change, or an input yours. `plan.fee` is `totalIn - totalOut`, and
+those amounts are claims too until each input's `prevtx` is checked against its `prevTxid`.
+
+Anything the module rejects throws a `ParserError` that prints as `P_ERR_MAGIC`, `UR_ERR_BYTEWORDS`
+and so on. `ParserError.outOfBounds` means the module returned an offset outside its own memory —
+that would mean it is not the module you think it is.
+
+## Running it
+
+```sh
+make run      # prints the plan for a test PSBT
+make check    # 66 checks, mirroring hosts/js/test.mjs and hosts/kotlin/Test.kt
+```
 
 ## Toolchain
 
@@ -57,5 +56,4 @@ brew install swiftly && swiftly init --assume-yes --skip-install && swiftly inst
 export PATH="$HOME/.swiftly/bin:$PATH"
 ```
 
-The target uses `swiftLanguageMode(.v5)` because top-level code is main-actor isolated under
-Swift 6 and this example is a plain script.
+Verified with Swift 6.4 and WasmKit 0.4.1 on macOS 15.
