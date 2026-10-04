@@ -14,10 +14,16 @@ version 2  locktime 0  1 in / 2 out
   fee     0.00001000
 ```
 
+Each one runs with `make run` in its own directory.
+
 | | Runtime | Notes |
 |---|---|---|
-| [kotlin](kotlin) | [Chicory](https://github.com/dylibso/chicory) 1.4.0 | Pure Java, no JNI |
-| [swift](swift) | [WasmKit](https://github.com/swiftwasm/WasmKit) | Pure Swift. Needs a recent toolchain (see its README) |
+| [kotlin](kotlin) | [Chicory](https://github.com/dylibso/chicory) 1.4.0 | Pure Java, no JNI. Jars are fetched and checked against their SHA-256 |
+| [swift](swift) | [WasmKit](https://github.com/swiftwasm/WasmKit) 0.4.1 | Pure Swift. Needs a recent toolchain (see its README) |
+
+These are **examples, not published packages.** They show the ABI in a form you can copy into your
+own project; shipping a Maven artifact or a SwiftPM library would be a versioning commitment that
+does not make sense before the ABI has outside users.
 
 The reference host in C lives in [`tests/`](../tests) and in the signer repository; the browser
 host is `web/viewer.html` there.

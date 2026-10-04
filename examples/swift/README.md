@@ -4,8 +4,10 @@
 so this runs with no C interop and no native build step — which is what an iOS app would want.
 
 ```sh
-swift run PlanDump ../../build/parser.wasm ../../build/vectors/own_p2wpkh_1in.psbt 73c5da0a
+make run
 ```
+
+Point it elsewhere with `make run WASM=... PSBT=... FP=...`.
 
 Verified with Swift 6.4 and WasmKit 0.4.1 on macOS 15.
 

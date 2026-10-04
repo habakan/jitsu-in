@@ -1,6 +1,10 @@
-# parser.wasm ABI
+# Driving parser.wasm from your language
 
-Everything a host needs to drive `parser.wasm` from any language. The module has **zero imports**
+Everything a host needs to call `parser.wasm`: the exported functions, the layout of the struct it
+hands back, the error codes, what it accepts, and what you are still responsible for.
+If you are integrating this module, this is the only document you need.
+
+The module has **zero imports**
 and does not use WASI, so any runtime that can execute WebAssembly works: WAMR on a microcontroller,
 V8 or JavaScriptCore in a browser, wasmtime, wasmi, Chicory (JVM), WasmKit (Swift), WasmEdge.
 
