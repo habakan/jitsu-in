@@ -90,6 +90,13 @@ gh release upload v0.1.0 SHA256SUMS.asc
 Signing is deliberately a separate, manual step: **the key never goes near CI.** A key held by a CI
 runner signs whatever the runner is told to sign, which is not the property anyone wants from it.
 
+## Keeping the hash honest
+
+`checksums.txt` holds the hash of the current `parser.wasm`, and CI rebuilds with the pinned toolchain
+and compares against it on every commit. A change to the source changes the hash, and the job fails
+until `checksums.txt` is updated on purpose — so the file cannot quietly drift out of step with what
+gets released.
+
 ## Versioning
 
 Tags are `vMAJOR.MINOR.PATCH`. The number that matters to a host is `plan_t.version`, which is

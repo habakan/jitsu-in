@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang lld
+
+      - name: The pinned toolchain, so this is the build a release reproduces
+        run: |
+          V=34.0
+          curl -sL -o /tmp/sdk.tar.gz \
+            https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-$V-x86_64-linux.tar.gz
+          echo "b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4  /tmp/sdk.tar.gz" | sha256sum -c -
+          tar xzf /tmp/sdk.tar.gz -C /tmp
+          curl -sL -o /tmp/binaryen.tar.gz \
+            https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz
+          echo "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572  /tmp/binaryen.tar.gz" | sha256sum -c -
+          tar xzf /tmp/binaryen.tar.gz -C /tmp
+          W=1.261.0
+          curl -sL -o /tmp/wt.tar.gz \
+            https://github.com/bytecodealliance/wasm-tools/releases/download/v$W/wasm-tools-$W-x86_64-linux.tar.gz
+          tar xzf /tmp/wt.tar.gz -C /tmp
+          sudo install /tmp/wasm-tools-$W-x86_64-linux/wasm-tools /usr/local/bin/
+
+      - name: Vectors, the host libraries, and the set of exports
+        run: |
+          SDK=/tmp/wasi-sdk-34.0-x86_64-linux
+          make test \
+            LLVM=$SDK/bin WASI=$SDK/share/wasi-sysroot \
+            RTLIB=$SDK/lib/clang/23/lib/wasm32-unknown-wasi \
+            WASM_OPT=/tmp/binaryen-version_132/bin/wasm-opt
+
+      # The release is built from these same pins, so this says the hash is still the one we publish
+      - name: Still the bytes we released
+        run: |
+          sha256sum build/parser.wasm
+          grep "$(sha256sum build/parser.wasm | cut -d' ' -f1)" checksums.txt \
+            || { echo "parser.wasm changed; update checksums.txt deliberately"; exit 1; }
+
+      - name: Fuzzing, a fixed short run
+        run: make check-fuzz LLVM=/usr/bin
