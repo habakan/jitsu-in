@@ -200,6 +200,31 @@ The UR functions return negative values:
 | −6 | `UR_ERR_MESSAGE` | reassembled message fails its CRC32 |
 | −7 | `UR_ERR_TYPE` | complete, but not a PSBT |
 
+## Where the rules come from
+
+[BIP174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki) defines the serialization only — it says nothing about how a parsed transaction
+should be represented, so `plan_t` is this project's own shape. What BIP174 *does* define is the
+**Signer role**, and several checks below exist because it requires them:
+
+> The Signer must only use the UTXOs provided in the PSBT to produce signatures for inputs.
+
+> Before signing a non-witness input, the Signer must verify that the TXID of the non-witness UTXO
+> matches the TXID specified in the unsigned transaction.
+
+> Before signing a witness input, the Signer must verify that the witnessScript (if provided) matches
+> the hash specified in the UTXO or the redeemScript, and the redeemScript (if provided) matches the
+> hash in the UTXO.
+
+This module does the first two: a `non_witness_utxo` whose txid or output does not match the unsigned
+transaction is rejected with `P_ERR_UTXO`, and amounts come only from the PSBT's own UTXO data.
+The third does not arise yet — `witnessScript` and `redeemScript` inputs are out of scope
+(single-signature P2WPKH and P2TR key-path only).
+
+BIP174 also says "The Signer may choose to fail to sign a segwit input if a non-witness UTXO is not
+provided." The host decides that, not this module; the reference host requires one when a SegWit v0
+input is signed alongside others, because that is the input amount it would otherwise have to take
+on trust.
+
 ## What is accepted
 
 - PSBT v0 only ([BIP174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki)). v2 is rejected with `P_ERR_UNSUPPORTED`
