@@ -39,7 +39,7 @@ before reading or writing — the module is untrusted from the host's point of v
 | `parser_ur_encode_next` | `() -> i32` | Write the next part as uppercase text into the input buffer. Returns its length, or a negative `UR_ERR_*` |
 
 `fingerprint` is the signer's master fingerprint — the first 4 bytes of `HASH160(master pubkey)`
-read big-endian, so `73c5da0a` is passed as `0x73c5da0a`. It is not a secret. Only BIP32 derivations
+read big-endian, so `73c5da0a` is passed as `0x73c5da0a`. It is not a secret. Only [BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki) derivations
 carrying this fingerprint become key candidates in the plan.
 
 ## Flow
@@ -74,7 +74,7 @@ loop:
     render parser_input()[0..n] as a QR
 ```
 
-Parts are a fountain code (BCR-2020-005): the first `seq_len` parts are the pure fragments and the
+Parts are a fountain code ([BCR-2020-005](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-005-ur.md)): the first `seq_len` parts are the pure fragments and the
 rest are mixed. A receiver that only understands pure parts can still finish if the sender loops
 over the first `seq_len`. Calling `parser_ur_encode_start` again restarts the sequence.
 
@@ -180,7 +180,7 @@ typedef struct {
 |---:|---|---|
 | 0 | `P_OK` | |
 | 1 | `P_ERR_MAGIC` | not a PSBT |
-| 2 | `P_ERR_FORMAT` | BIP174 violation: key/value lengths, v2-only fields, trailing bytes |
+| 2 | `P_ERR_FORMAT` | [BIP174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki) violation: key/value lengths, v2-only fields, trailing bytes |
 | 3 | `P_ERR_DUPLICATE` | duplicate key within a map |
 | 4 | `P_ERR_TX` | no unsigned tx, scriptSig or witness present, non-canonical serialization |
 | 5 | `P_ERR_UNSUPPORTED` | PSBT v2, script longer than 83 bytes, sighash that does not fit in a byte |
@@ -202,7 +202,7 @@ The UR functions return negative values:
 
 ## What is accepted
 
-- PSBT v0 only (BIP174). v2 is rejected with `P_ERR_UNSUPPORTED`
+- PSBT v0 only ([BIP174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki)). v2 is rejected with `P_ERR_UNSUPPORTED`
 - At most 16 inputs and 16 outputs, 32,768 bytes total
 - Every input needs `witness_utxo` or `non_witness_utxo`; when both are present the `non_witness_utxo`
   must hash to `prev_txid` and its output must match the `witness_utxo`

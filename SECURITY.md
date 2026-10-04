@@ -39,5 +39,4 @@ a device with no way to recover.
 
 ## Scope
 
-This repository. Problems in the reference device that consumes it belong in
-[baremetal-wasm-signer](https://github.com/habakan/baremetal-wasm-signer).
+This repository. A problem in a host that consumes this module belongs with that host.

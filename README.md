@@ -1,6 +1,6 @@
 # wasm-psbt-parser
 
-A PSBT v0 (BIP174) parser, with animated-QR (UR) decoding and encoding, that compiles to a ~16 KB WebAssembly module with
+A PSBT v0 ([BIP174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki)) parser, with animated-QR (UR) decoding and encoding, that compiles to a ~16 KB WebAssembly module with
 **no imports and no keys**.
 It turns an untrusted PSBT into a fixed-layout *plan* (`include/plan.h`) that a signer can check and sign,
 and inserts the signer's signatures back into the PSBT.
@@ -20,8 +20,7 @@ computation and signing stay in native code outside the sandbox:
   signer sign what it displays, but not display one transaction and sign another.
 
 The signer is still responsible for checking the plan (key ownership, change detection, fees, and the SegWit v0
-fee attack via `non_witness_utxo`). A reference signer lives in
-[baremetal-wasm-signer](https://github.com/habakan/baremetal-wasm-signer) (currently private).
+fee attack via `non_witness_utxo`); see [the ABI](docs/abi.md) for the full list of what a host must do.
 
 ## Animated QR (UR)
 
@@ -82,7 +81,7 @@ It does not check that public keys are on the curve: the signer is expected to d
 trusting the PSBT.
 
 It never marks these inputs as signable: finalized inputs, inputs that already carry the candidate key's signature, and P2TR inputs with
-a script tree (only BIP86 key-path spends are supported).
+a script tree (only [BIP86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki) key-path spends are supported).
 
 Limits: PSBT up to 32 KB, 16 inputs, 16 outputs, scriptPubKey up to 83 bytes, derivation depth up to 8.
 
