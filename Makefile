@@ -3,6 +3,10 @@
 # which silently changes the output (2.7 KB and a different hash when it is missing)
 LLVM    ?= /opt/homebrew/opt/llvm/bin
 WASM_OPT ?= wasm-opt
+# Lime1: WebAssembly 1.0 plus seven phase-5 features, defined in WebAssembly/tool-conventions/Lime.md
+# and promised not to change. Passing it to the linker makes it a gate: if a dependency ever starts
+# using SIMD or threads, the link fails instead of the module quietly requiring more of a runtime.
+LIME1 := mutable-globals,multivalue,sign-ext,nontrapping-fptoint,bulk-memory-opt,extended-const,call-indirect-overlong
 WASI    ?= /opt/homebrew/opt/wasi-libc/share/wasi-sysroot
 RTLIB   ?= /opt/homebrew/opt/wasi-runtimes/share/wasi-runtimes/lib/wasm32-unknown-wasip1
 SRC     := src/psbt.c src/ur.c src/tx.c src/sha256.c
@@ -12,8 +16,10 @@ SRC     := src/psbt.c src/ur.c src/tx.c src/sha256.c
 build/parser.wasm: $(SRC) include/*.h
 	mkdir -p build
 	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs -Oz -Wall -Wextra \
+	  -mcpu=lime1 -Xlinker --features=$(LIME1) \
 	  -Iinclude -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
-	  -Wl,--export=__heap_base -Wl,--export=__data_end -Wl,--initial-memory=196608 -Wl,--max-memory=196608 \
+	  -Wl,--export=__heap_base -Wl,--export=__data_end \
+	  -Wl,--initial-memory=196608 -Wl,--no-growable-memory \
 	  --no-wasm-opt -Wl,--keep-section=target_features \
 	  -o $@ $(SRC) -lc $(RTLIB)/libclang_rt.builtins.a
 	$(WASM_OPT) $@ -Oz -o $@
