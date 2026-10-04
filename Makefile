@@ -58,9 +58,16 @@ check-fuzz: build/fuzz_psbt build/fuzz_ur build/corpus/psbt build/corpus/ur
 	build/fuzz_ur   build/corpus/ur   -runs=200000 -max_len=40000 -print_final_stats=1
 .PHONY: check-fuzz
 
+# The JavaScript host. Tests the host itself: hidden offsets, named errors, and that a module
+# returning a bad offset is stopped rather than followed
+check-hosts: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt
+	node hosts/js/test.mjs build/parser.wasm build/vectors
+.PHONY: check-hosts
+
 test: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt build/test_ur
 	build/test_ur
 	uv run -q tools/run_tests.py build/parser.wasm build/vectors tests/rpc_psbt.json tests/ur_vectors.json
+	$(MAKE) check-hosts
 
 clean:
 	rm -rf build
