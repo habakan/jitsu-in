@@ -44,18 +44,34 @@ export class KeyOrigin {
 }
 
 export class Parser {
-  /** @param {BufferSource} parserWasm the contents of parser.wasm */
-  static async load(parserWasm) {
+  /**
+   * @param {BufferSource} parserWasm the contents of parser.wasm
+   * @param {{ sha256?: string }} [opts] when given, the module must hash to exactly this, or it is
+   *   refused. Take the value from the project's `checksums.txt`, or from the device's
+   *   `Parser hash` screen if you are checking that you are running what it runs.
+   */
+  static async load(parserWasm, opts = {}) {
+    if (opts.sha256) await Parser.#assertDigest(parserWasm, opts.sha256);
     const module = await WebAssembly.compile(parserWasm);
     Parser.#assertNoImports(module);
     return new Parser(await WebAssembly.instantiate(module, {}));
   }
 
-  /** Synchronous variant, for Node or anywhere compiling on the main thread is fine. */
+  /** Synchronous variant, for Node or anywhere compiling on the main thread is fine.
+   *  It cannot check a digest: SubtleCrypto has no synchronous form. Use `load` if you want one. */
   static loadSync(parserWasm) {
     const module = new WebAssembly.Module(parserWasm);
     Parser.#assertNoImports(module);
     return new Parser(new WebAssembly.Instance(module, {}));
+  }
+
+  /** A hash in a file nobody checks is documentation. Checking it here makes it a gate. */
+  static async #assertDigest(bytes, want) {
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const got = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+    if (got !== want.toLowerCase()) {
+      throw new Error(`parser.wasm is not the expected build: ${got} != ${want.toLowerCase()}`);
+    }
   }
 
   /** The module must not be able to call the host at all. Checked before it is instantiated. */

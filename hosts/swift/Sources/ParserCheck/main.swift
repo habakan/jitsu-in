@@ -1,5 +1,6 @@
 // Tests the host, not the parser: the module itself is covered by the 529 vectors in tools/run_tests.py.
 // Mirrors hosts/js/test.mjs and hosts/kotlin/Test.kt, so a host that behaves differently shows up here.
+import Crypto
 import Foundation
 import WasmPsbtParser
 
@@ -95,6 +96,16 @@ do {
     while got == nil && n < seq.seqLen * 3 { got = try dec.urReceive(try seq.next()); n += 1 }
     check(got != nil, "reassembles")
     check(got == out, "round trip is byte identical")
+}
+
+// the digest gate accepts the real build and refuses anything else
+do {
+    let sha = SHA256.hash(data: Data(parserWasm)).map { String(format: "%02x", $0) }.joined()
+    _ = try Parser(parserWasm: parserWasm, sha256: sha)     // no throw: accepted
+    checks += 1
+    throwsError("not the expected build", "a wrong digest is refused") {
+        _ = try Parser(parserWasm: parserWasm, sha256: String(repeating: "00", count: 32))
+    }
 }
 
 print("\(checks - failures)/\(checks) checks passed")

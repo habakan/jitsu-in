@@ -117,5 +117,20 @@ for (const name of vectors) {
   throws(() => Parser.loadSync(withImport), "must have no imports", "a module with imports is refused");
 }
 
+// --- the digest gate accepts the real build and refuses anything else
+{
+  const digest = await crypto.subtle.digest("SHA-256", parserWasm);
+  const sha256 = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+  await Parser.load(parserWasm, { sha256 });
+  checks++;                                              // no throw: accepted
+  try {
+    await Parser.load(parserWasm, { sha256: "00".repeat(32) });
+    failures++; console.log("FAIL a wrong digest was accepted");
+  } catch (e) {
+    checks++;
+    if (!e.message.includes("not the expected build")) { failures++; console.log(`FAIL ${e.message}`); }
+  }
+}
+
 console.log(`${checks - failures}/${checks} checks passed`);
 process.exit(failures ? 1 : 0);

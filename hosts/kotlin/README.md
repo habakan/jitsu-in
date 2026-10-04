@@ -34,6 +34,16 @@ Anything the module rejects throws a `ParserException` with a readable message (
 `P_ERR_LIMIT`, `UR_ERR_BYTEWORDS`, …). An offset outside the module's memory throws
 `IndexOutOfBoundsException` — that would mean the module is not the one you think it is.
 
+## Checking you have the right module
+
+```kotlin
+val parser = Parser(File("parser.wasm").readBytes(), sha256 = "21ea6dbc…")
+```
+
+The module is refused unless it hashes to exactly that. Take the value from the project's
+`checksums.txt`, or from the device's `Parser hash` screen if you are checking that you run what it
+runs. A hash written in a file nobody checks is documentation; passing it here makes it a gate.
+
 ## Running it
 
 ```sh

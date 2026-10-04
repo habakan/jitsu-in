@@ -17,6 +17,10 @@ the Kotlin host's handling of exports that return nothing was found.
 Adding a language? Copy the shape: one table of offsets, one checked accessor that everything reads
 through, and typed objects out.
 
-**These hosts verify nothing.** They hand you what the module read out of the PSBT. Deriving keys,
+Each host can also be handed the module's expected SHA-256 and will refuse anything else. There is
+no convention for this in the WebAssembly ecosystem — signatures and provenance are attached at
+publish time, and no client checks them before loading — so the hosts do it themselves.
+
+**These hosts verify nothing about the transaction.** They hand you what the module read out of the PSBT. Deriving keys,
 checking the previous transactions and computing the fee you show the user remain yours — see
 [What the host must still do](../docs/abi.md#what-the-host-must-still-do).

@@ -55,6 +55,18 @@ Anything the module rejects throws a `ParserError` with `.code` and a readable `
 (`P_ERR_MAGIC`, `P_ERR_LIMIT`, `UR_ERR_BYTEWORDS`, …). An offset outside the module's memory throws
 a `RangeError` — that would mean the module is not the one you think it is.
 
+## Checking you have the right module
+
+```js
+const parser = await Parser.load(parserWasm, { sha256: "21ea6dbc…" });
+```
+
+The module is refused unless it hashes to exactly that. Take the value from the project's
+`checksums.txt`, or — if you are checking that you run what a device runs — from the device's
+`Parser hash` screen. `loadSync` cannot do this: `SubtleCrypto` has no synchronous form.
+
+A hash written in a file nobody checks is documentation. Passing it here makes it a gate.
+
 ## Tests
 
 ```sh

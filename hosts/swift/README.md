@@ -38,6 +38,16 @@ Anything the module rejects throws a `ParserError` that prints as `P_ERR_MAGIC`,
 and so on. `ParserError.outOfBounds` means the module returned an offset outside its own memory —
 that would mean it is not the module you think it is.
 
+## Checking you have the right module
+
+```swift
+let parser = try Parser(parserWasm: bytes, sha256: "21ea6dbc…")
+```
+
+The module is refused unless it hashes to exactly that. Take the value from the project's
+`checksums.txt`, or from the device's `Parser hash` screen if you are checking that you run what it
+runs. A hash written in a file nobody checks is documentation; passing it here makes it a gate.
+
 ## Running it
 
 ```sh

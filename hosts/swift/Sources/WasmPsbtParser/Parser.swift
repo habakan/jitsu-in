@@ -7,6 +7,7 @@
 // Every read is bounds-checked: the module tells the host where things are, and a host must never
 // take that on trust. See ../../docs/abi.md.
 import Foundation
+import Crypto
 import WasmKit
 
 private let magicValue: UInt32 = 0x4e4c_5042   // "BPLN"
@@ -104,8 +105,19 @@ public final class Parser {
     private let instance: Instance
     private let memory: Memory
 
-    /// - Parameter parserWasm: the contents of parser.wasm
-    public init(parserWasm: [UInt8]) throws {
+    /// - Parameters:
+    ///   - parserWasm: the contents of parser.wasm
+    ///   - sha256: when given, the module must hash to exactly this, or it is refused. Take the
+    ///     value from the project's `checksums.txt`, or from the device's `Parser hash` screen if
+    ///     you are checking that you are running what it runs.
+    public init(parserWasm: [UInt8], sha256: String? = nil) throws {
+        // A hash in a file nobody checks is documentation. Checking it here makes it a gate.
+        if let want = sha256 {
+            let got = SHA256.hash(data: Data(parserWasm)).map { String(format: "%02x", $0) }.joined()
+            guard got == want.lowercased() else {
+                throw ParserError.unexpectedModule("parser.wasm is not the expected build: \(got) != \(want.lowercased())")
+            }
+        }
         let module = try parseWasm(bytes: parserWasm)
         instance = try module.instantiate(store: Store(engine: Engine()))
         guard case let .memory(m) = instance.export("memory") else {

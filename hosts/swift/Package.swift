@@ -10,11 +10,16 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftwasm/WasmKit.git", from: "0.4.1"),
+        // Only for SHA-256 when checking the module's digest. CryptoKit is Apple-only
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
     ],
     targets: [
         .target(
             name: "WasmPsbtParser",
-            dependencies: [.product(name: "WasmKit", package: "WasmKit")],
+            dependencies: [
+                .product(name: "WasmKit", package: "WasmKit"),
+                .product(name: "Crypto", package: "swift-crypto"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(name: "PlanDump", dependencies: ["WasmPsbtParser"],

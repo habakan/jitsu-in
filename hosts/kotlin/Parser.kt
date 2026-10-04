@@ -73,8 +73,24 @@ class UrEncoder internal constructor(val seqLen: Int, private val next: () -> St
     fun next(): String = next.invoke()
 }
 
-/** @param parserWasm the contents of parser.wasm */
-class Parser(parserWasm: ByteArray) {
+/**
+ * @param parserWasm the contents of parser.wasm
+ * @param sha256 when given, the module must hash to exactly this, or it is refused. Take the value
+ *   from the project's `checksums.txt`, or from the device's `Parser hash` screen if you are
+ *   checking that you are running what it runs.
+ */
+class Parser(parserWasm: ByteArray, sha256: String? = null) {
+    init {
+        // A hash in a file nobody checks is documentation. Checking it here makes it a gate.
+        if (sha256 != null) {
+            val got = java.security.MessageDigest.getInstance("SHA-256").digest(parserWasm)
+                .joinToString("") { "%02x".format(it) }
+            require(got == sha256.lowercase()) {
+                "parser.wasm is not the expected build: $got != ${sha256.lowercase()}"
+            }
+        }
+    }
+
     private val instance = Instance.builder(WasmParser.parse(parserWasm)).build()
     private val memory = instance.memory()
     private val limit = memory.pages() * 65536

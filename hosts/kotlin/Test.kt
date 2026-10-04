@@ -94,6 +94,17 @@ fun main(args: Array<String>) {
         check(got != null && got.contentEquals(out), "round trip is byte identical")
     }
 
+    // the digest gate accepts the real build and refuses anything else
+    run {
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(parserWasm)
+            .joinToString("") { "%02x".format(it) }
+        Parser(parserWasm, sha)                 // no throw: accepted
+        checks++
+        throws("not the expected build", "a wrong digest is refused") {
+            Parser(parserWasm, "00".repeat(32))
+        }
+    }
+
     println("${checks - failures}/$checks checks passed")
     kotlin.system.exitProcess(if (failures != 0) 1 else 0)
 }
