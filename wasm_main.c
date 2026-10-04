@@ -14,6 +14,12 @@
 
 #define PREVTX_MAX 32768
 
+/* Three return conventions, and which one a function uses follows from what it does:
+ *   init / seed / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
+ *   review / display / xpub               CORE_OK (0) on success, CORE_ERR_* otherwise
+ *   sign                                  the number of signatures, or -CORE_ERR_*
+ * Buffer accessors return a pointer, fingerprint returns the value, unload returns nothing. */
+
 /* Where the host writes. All static: this module never allocates */
 static plan_t plan;
 static uint8_t prevtx_buf[PREVTX_MAX];
@@ -94,4 +100,8 @@ int EXPORT(signer_sign)(void) {
     return rc ? -rc : (int)n;
 }
 
-int EXPORT(signer_xpub)(void) { return core_account_xpub(xpub, desc); }
+/* 0 on success and CORE_ERR_* otherwise, like review and display. core_account_xpub itself is a
+ * predicate, so the sense is flipped here rather than at every call site */
+int EXPORT(signer_xpub)(void) {
+    return core_account_xpub(xpub, desc) ? CORE_OK : CORE_ERR_NO_SEED;
+}
