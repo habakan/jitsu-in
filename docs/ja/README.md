@@ -1,6 +1,6 @@
 <h1>jitsu-in</h1>
 
-jitsu-in は Bitcoin の署名に使う処理を2つの WebAssembly モジュールとして提供します。
+jitsu-in は Bitcoin の署名に使う処理を WebAssembly モジュールとして提供します。
 `parser.wasm` は未信頼の PSBT を読み、固定レイアウトの plan を作ります。`signer.wasm` は plan を検証し、
 レビュー用の取引情報を作り、取引に署名します。parser は鍵を持たず、signer は PSBT を読みません。
 

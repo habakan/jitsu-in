@@ -2,7 +2,7 @@
 
 <sup>[日本語](docs/ja/README.md)</sup>
 
-**jitsu-in provides two WebAssembly modules for Bitcoin transaction signing.** `parser.wasm` reads
+**jitsu-in provides WebAssembly modules for Bitcoin transaction signing.** `parser.wasm` reads
 an untrusted PSBT and builds a fixed-layout plan. `signer.wasm` checks that plan, prepares transaction
 details for review, and signs the transaction. The parser has no keys; the signer does not read the PSBT.
 
