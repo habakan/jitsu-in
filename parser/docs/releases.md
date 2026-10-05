@@ -5,7 +5,7 @@ How a release is produced, and how you check one.
 ## Checking a release
 
 ```sh
-# 1. the hash of what you downloaded matches the manifest
+# 1. the hashes of both modules match the manifest
 sha256sum -c SHA256SUMS
 
 # 2. the manifest was signed by the maintainer
@@ -13,6 +13,7 @@ gpg --verify SHA256SUMS.asc SHA256SUMS
 
 # 3. the file was built by this repository's workflow, from a known commit
 gh attestation verify parser.wasm --repo habakan/jitsu-in
+gh attestation verify signer.wasm --repo habakan/jitsu-in
 ```
 
 The maintainer's public key is at https://github.com/habakan.gpg, fingerprint
@@ -28,6 +29,7 @@ The build is reproducible. Check out the tag, build with the pinned toolchain, a
 
 ```sh
 git checkout v0.1.0
+gh release download v0.1.0 -p SHA256SUMS
 
 # the same toolchain the release was built with, pinned by version and by the hash of its tarball
 curl -sLO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
@@ -38,18 +40,19 @@ echo "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572  binaryen
 tar xzf binaryen-version_132-x86_64-linux.tar.gz
 
 SDK=$PWD/wasi-sdk-34.0-x86_64-linux
-make build/parser.wasm \
+make deps
+make all \
   LLVM=$SDK/bin WASI=$SDK/share/wasi-sysroot \
   RTLIB=$SDK/lib/clang/23/lib/wasm32-unknown-wasi \
   WASM_OPT=$PWD/binaryen-version_132/bin/wasm-opt
 
-sha256sum build/parser.wasm   # must equal what SHA256SUMS says
+(cd build && sha256sum -c ../SHA256SUMS)
 ```
 
 The macOS arm64 tarballs (`-arm64-macos`) produce the same bytes. `make` alone uses whatever clang is
 on your machine and is **not** expected to reproduce the release: the versions above are the ones that
-do. [.github/workflows/release.yml](../../.github/workflows/release.yml) is the authoritative copy of
-these pins, because it is what actually built the artifact.
+do. [.github/workflows/ci.yml](../../.github/workflows/ci.yml) pins the build tools; the
+[release workflow](../../.github/workflows/release.yml) runs it for the tagged commit.
 
 One trap worth naming: if a different `wasm-opt` is earlier on your `PATH`, `WASM_OPT` above is what
 decides, so set it explicitly as shown rather than relying on the `PATH`.
@@ -59,8 +62,12 @@ This is the strongest of the three checks: it does not require trusting the main
 You can also check the shape of what you downloaded without running it:
 
 ```sh
-wasm-tools validate --features=-all,floats,saturating-float-to-int,bulk-memory-opt,-mutable-global parser.wasm
-wasm-tools print parser.wasm | grep -c '^\s*(import '    # must be 0
+for module in parser.wasm signer.wasm; do
+  features=-all,floats,saturating-float-to-int,bulk-memory-opt,-mutable-global
+  if [ "$module" = signer.wasm ]; then features="$features,sign-extension"; fi
+  wasm-tools validate --features="$features" "$module"
+  test "$(wasm-tools print "$module" | grep -c '^\s*(import ')" = 0
+done
 ```
 
 And a host can refuse anything else:
@@ -76,8 +83,9 @@ git tag -s v0.1.0 -m "v0.1.0"      # -s signs the tag
 git push origin v0.1.0
 ```
 
-The workflow builds `parser.wasm` with the pinned toolchain, checks its shape, writes `SHA256SUMS`,
-attaches a build provenance attestation, and creates the release.
+The workflow runs the CI test suite for the tag, then publishes both `parser.wasm` and `signer.wasm`
+from that tested build. It writes `SHA256SUMS` and attaches a build provenance attestation to each
+module before creating the release.
 
 Then sign the manifest and attach it:
 
@@ -92,10 +100,10 @@ runner signs whatever the runner is told to sign, which is not the property anyo
 
 ## Keeping the hash honest
 
-`checksums.txt` holds the hash of the current `parser.wasm`, and CI rebuilds with the pinned toolchain
-and compares against it on every commit. A change to the source changes the hash, and the job fails
-until `checksums.txt` is updated on purpose — so the file cannot quietly drift out of step with what
-gets released.
+`checksums.txt` holds the hashes of the current `parser.wasm` and `signer.wasm`, and CI rebuilds with
+the pinned toolchain and compares against them on every commit. A change to either module changes its
+hash, and the job fails until `checksums.txt` is updated on purpose — so the files cannot quietly drift
+out of step with what gets released.
 
 ## Versioning
 

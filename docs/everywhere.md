@@ -40,21 +40,10 @@ The device does not use a separate compilation of the parser.
 
 ## Comparing runtimes
 
-Give each runtime the same input and compare the output bytes. A difference is a reason to check the
-runtime, host library, and module behavior:
+Give each runtime the same test vectors and compare the output bytes. A difference is a reason to
+check the runtime, host library, and module behavior:
 
-```mermaid
-flowchart LR
-    input["the same PSBT"]
-    input --> r1["WAMR (device, QEMU)"]
-    input --> r2["V8 (Node, browser)"]
-    input --> r3["Chicory (JVM) · WasmKit (Swift)"]
-    r1 --> cmp{"compare the output"}
-    r2 --> cmp
-    r3 --> cmp
-    cmp -->|"identical"| ok["the outputs agree for this input"]
-    cmp -->|"differ"| bug["investigate the runtime, host, and module"]
-```
+<img src="runtime-comparison.svg" alt="The same PSBT test vectors run in WAMR, V8, Chicory and WasmKit; output bytes are compared for agreement or differences" width="100%">
 
 This comparison has caught a runtime bug. An
 [unaligned `i64.store` in WAMR](https://github.com/wasm-micro-runtime/wasm-micro-runtime/pull/5123)

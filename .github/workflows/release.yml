@@ -3,57 +3,42 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
   attestations: write
 
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-
-      # The toolchain is pinned by version and hash, so this build is the one anyone can repeat
-      - name: Build parser.wasm with the pinned toolchain
-        run: |
-          curl -sL -o /tmp/sdk.tar.gz \
-            https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
-          echo "b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4  /tmp/sdk.tar.gz" | sha256sum -c -
-          tar xzf /tmp/sdk.tar.gz -C /tmp
-          curl -sL -o /tmp/binaryen.tar.gz \
-            https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz
-          echo "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572  /tmp/binaryen.tar.gz" | sha256sum -c -
-          tar xzf /tmp/binaryen.tar.gz -C /tmp
-          SDK=/tmp/wasi-sdk-34.0-x86_64-linux
-          make build/parser.wasm \
-            LLVM=$SDK/bin WASI=$SDK/share/wasi-sysroot \
-            RTLIB=$SDK/lib/clang/23/lib/wasm32-unknown-wasi \
-            WASM_OPT=/tmp/binaryen-version_132/bin/wasm-opt
-
-      - name: Check the shape of what we are about to publish
-        run: |
-          V=1.261.0
-          curl -sL -o /tmp/wt.tar.gz \
-            https://github.com/bytecodealliance/wasm-tools/releases/download/v$V/wasm-tools-$V-x86_64-linux.tar.gz
-          sudo install /tmp/wasm-tools-$V-x86_64-linux/wasm-tools /usr/local/bin/ 2>/dev/null \
-            || { tar xzf /tmp/wt.tar.gz -C /tmp && sudo install /tmp/wasm-tools-$V-x86_64-linux/wasm-tools /usr/local/bin/; }
-          wasm-tools validate --features=-all,floats,saturating-float-to-int,bulk-memory-opt,-mutable-global \
-            build/parser.wasm
-          test "$(wasm-tools print build/parser.wasm | grep -c '^\s*(import ')" = 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-wasm
+          path: build
 
       - name: SHA256SUMS
         run: |
-          cd build && sha256sum parser.wasm > SHA256SUMS && cat SHA256SUMS
+          cd build && sha256sum parser.wasm signer.wasm > SHA256SUMS && cat SHA256SUMS
 
-      # Proves which workflow, from which commit, produced this exact file.
-      # Verify with: gh attestation verify parser.wasm --repo <owner>/<repo>
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: build/parser.wasm
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build/signer.wasm
 
       - name: Release
         env:
@@ -63,6 +48,7 @@ jobs:
         run: |
           {
             echo "Built with the pinned toolchain (wasi-sdk 34.0, binaryen 132)."
+            echo "Both modules passed the CI test workflow before release."
             echo
             echo '```'
             cat build/SHA256SUMS
@@ -71,9 +57,9 @@ jobs:
             echo "Reproduce it yourself: check out this tag and build with the pinned toolchain."
             echo "The same bytes come out on macOS arm64 and Linux x86_64."
             echo
-            echo "Provenance: \`gh attestation verify parser.wasm --repo $REPO\`"
+            echo "Provenance: \`gh attestation verify parser.wasm --repo $REPO\` and \`gh attestation verify signer.wasm --repo $REPO\`"
             echo
             echo "A detached PGP signature over SHA256SUMS is attached when the maintainer signs the release."
           } > notes.md
-          gh release create "$TAG" build/parser.wasm build/SHA256SUMS \
-            --title "$TAG" --notes-file notes.md
+          gh release create "$TAG" build/parser.wasm build/signer.wasm build/SHA256SUMS \
+            --repo "$REPO" --title "$TAG" --notes-file notes.md
