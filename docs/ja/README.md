@@ -26,9 +26,9 @@ jitsu-in は Bitcoin の署名に使う処理を2つの WebAssembly モジュー
 | Kotlin / JVM / **Android** | [Chicory](https://github.com/dylibso/chicory)、純 Java | [parser](../../parser/hosts/kotlin) · [signer](../../signer/hosts/kotlin) |
 | Swift / macOS / **iOS** | [WasmKit](https://github.com/swiftwasm/WasmKit)、純 Swift | [parser](../../parser/hosts/swift) · [signer](../../signer/hosts/swift) |
 
-どれもネイティブビルドを必要としない。JNI も NDK も、アーキテクチャごとの `.so` や
-XCFramework もない。JavaScript のライブラリは素の `.mjs` で、ビルドなしで `import` できる
-（TypeScript 用の `.d.mts` も隣にある）。
+どのホストもネイティブビルドを必要としません。JNI や NDK、アーキテクチャごとの `.so` や
+XCFramework も不要です。JavaScript のライブラリは素の `.mjs` で、ビルドせずに `import` できます
+（TypeScript 用の `.d.mts` も隣にあります）。
 
 JavaScript、Kotlin、Swift のホストライブラリは、モジュールが返すオフセットを範囲検査し、
 モジュールの SHA-256 を固定できます。設定したハッシュと異なるビルドは実行前に拒否できます。
@@ -38,30 +38,30 @@ JavaScript、Kotlin、Swift のホストライブラリは、モジュールが�
 ## ビルドとテスト
 
 ```sh
-make deps     # libsecp256k1 を固定した commit で取得
-make          # build/parser.wasm と build/signer.wasm
-make test     # ベクタ、ホストライブラリ、レイアウト、出力の形
+make deps     # 固定した commit の libsecp256k1 を取得します
+make          # build/parser.wasm と build/signer.wasm をビルドします
+make test     # ベクタ、ホストライブラリ、レイアウト、出力の形を検査します
 make check-c-format check-c-tidy
 ```
 
 `make format-c` は C の書式を整えます。CI では固定した wasi-sdk に含まれる clang-format と clang-tidy を使います。
 
-wasm32 ターゲットの clang、wasi-libc の sysroot、Node が必要。
-Homebrew なら `brew install llvm lld wasi-libc wasi-runtimes node`。
+wasm32 ターゲットの clang、wasi-libc の sysroot、Node が必要です。
+Homebrew では `brew install llvm lld wasi-libc wasi-runtimes node` でインストールできます。
 
-`parser.wasm` を [wasmtime](https://wasmtime.dev/) で動かすテストが1つあるので
-[uv](https://docs.astral.sh/uv/) も要る。それ以外に Python は不要で、
-第二の Bitcoin ライブラリも要らない。独立した意見が必要なところは
-**Bitcoin Core 自身**から取る（`make check-core-diff`、`bitcoind` が必要）。
+`parser.wasm` を [wasmtime](https://wasmtime.dev/) で動かすテストが1つあるため、
+[uv](https://docs.astral.sh/uv/) も必要です。それ以外のテストでは Python を使わず、
+別の Bitcoin ライブラリも必要ありません。独立した照合には**Bitcoin Core 自身**を使います
+（`make check-core-diff`。実行には `bitcoind` が必要です）。
 
-これは手元の clang を使うので開発には十分だが、**リリースをバイト単位で再現はしない**。
-再現には版を固定したツールチェーンを使う ── [parser/docs/releases.md](../../parser/docs/releases.md)。
+通常のビルドでは手元の clang を使います。開発には使えますが、**リリースをバイト単位で再現するものではありません**。
+再現にはバージョンを固定したツールチェーンを使います。詳しくは[リリース手順](../../parser/docs/releases.md)をご覧ください。
 
-JVM と Swift のホストは `kotlinc` と Swift 6.3 以降を要する。
+JVM と Swift のホストには `kotlinc` と Swift 6.3 以降が必要です。
 
 ```sh
 make check-signer-kotlin check-signer-swift
-make check-hosts-agree       # そして全部が同じバイト列を出すことを要求する
+make check-hosts-agree       # すべてのホストで出力が同じバイト列になることを確認します
 ```
 
 
@@ -69,9 +69,9 @@ make check-hosts-agree       # そして全部が同じバイト列を出すこ�
 
 単署名の P2WPKH（[BIP84](https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki)）と
 P2TR の key path（[BIP86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki)）、
-`SIGHASH_ALL` と Taproot の `SIGHASH_DEFAULT`。マルチシグ、スクリプトツリー、
-レガシー P2PKH の署名は扱わない。
+`SIGHASH_ALL` と Taproot の `SIGHASH_DEFAULT` に対応しています。マルチシグ、スクリプトツリー、
+レガシー P2PKH の署名は扱いません。
 
 ## ライセンス
 
-MIT。[NOTICE](../../NOTICE) に記載のあるものを除く。
+ライセンスは MIT です。ただし、[NOTICE](../../NOTICE) に記載したものは除きます。
