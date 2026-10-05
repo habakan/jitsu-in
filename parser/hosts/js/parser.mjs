@@ -97,8 +97,7 @@ export class Parser {
   /**
    * @param {BufferSource} parserWasm the contents of parser.wasm
    * @param {{ sha256?: string }} [opts] when given, the module must hash to exactly this, or it is
-   *   refused. Take the value from the project's `checksums.txt`, or from the device's
-   *   `Parser hash` screen if you are checking that you are running what it runs.
+   *   refused. Take the value from the project's `checksums.txt` or a release's `SHA256SUMS`.
    */
   static async load(parserWasm, opts = {}) {
     if (opts.sha256) await Parser.#assertDigest(parserWasm, opts.sha256);

@@ -62,8 +62,7 @@ const parser = await Parser.load(parserWasm, { sha256: "21ea6dbc…" });
 ```
 
 The module is refused unless it hashes to exactly that. Take the value from the project's
-`checksums.txt`, or — if you are checking that you run what a device runs — from the device's
-`Parser hash` screen. `loadSync` cannot do this: `SubtleCrypto` has no synchronous form.
+`checksums.txt` or a release's `SHA256SUMS`. `loadSync` cannot do this: `SubtleCrypto` has no synchronous form.
 
 A hash written in a file nobody checks is documentation. Passing it here makes it a gate.
 

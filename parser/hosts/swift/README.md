@@ -59,8 +59,7 @@ let parser = try Parser(parserWasm: bytes, sha256: "21ea6dbc…")
 ```
 
 The module is refused unless it hashes to exactly that. Take the value from the project's
-`checksums.txt`, or from the device's `Parser hash` screen if you are checking that you run what it
-runs. A hash written in a file nobody checks is documentation; passing it here makes it a gate.
+`checksums.txt` or a release's `SHA256SUMS`. A hash written in a file nobody checks is documentation; passing it here makes it a gate.
 
 ## Running it
 

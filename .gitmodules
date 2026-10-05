@@ -1,4 +1,4 @@
 [submodule "examples/viewer/vendor/quirc"]
 	path = examples/viewer/vendor/quirc
-	url = git@github.com:habakan/quirc.git
+	url = https://github.com/habakan/quirc.git
 	branch = mcu
