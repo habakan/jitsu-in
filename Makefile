@@ -25,7 +25,7 @@ SECP_DEFS := -DENABLE_MODULE_EXTRAKEYS=1 -DENABLE_MODULE_SCHNORRSIG=1 -DECMULT_W
 
 SIGNER_SRC := signer/wasm_main.c signer/core.c signer/address.c signer/bip32.c signer/sighash.c \
   signer/ripemd160.c signer/sha512.c signer/secp_callbacks.c signer/secp256k1_unity.c \
-  parser/src/tx.c parser/src/sha256.c
+  parser/c/src/tx.c parser/c/src/sha256.c
 
 all: build/parser.wasm build/signer.wasm
 .PHONY: all
@@ -42,16 +42,43 @@ check-deps:
 	  && echo "secp256k1 at its pinned commit" || { echo "secp256k1 is NOT at $(SECP_REV)"; exit 1; }
 .PHONY: check-deps
 
-# The parser keeps its own Makefile: it was released from it, and the build that produced v0.1.0
+# --- which parser ---
+#
+# Both implementations return the same plan for every vector (parser/BENCHMARK.md has the numbers and
+# why they differ). C is the default because it is what the device can afford: on WAMR's interpreter
+# the Rust parse costs 3.5x the instructions, and its AOT form wants more pool than the RP2350 has.
+#
+#   make                      the C
+#   make PARSER_IMPL=rust     the Rust
+PARSER_IMPL ?= c
+
+ifeq ($(PARSER_IMPL),rust)
+build/parser.wasm: build/parser-rs.wasm
+	@mkdir -p build && cp $< $@
+	@shasum -a 256 $@
+else
+# The C keeps its own Makefile: v0.1.0 was released from it, and the build that produced those bytes
 # should not become a different build by being rewritten here
-build/parser.wasm: $(wildcard parser/src/*.c parser/include/*.h)
+build/parser.wasm: $(wildcard parser/c/src/*.c parser/c/include/*.h)
 	$(MAKE) -C parser build/parser.wasm $(TOOLS)
 	@mkdir -p build && cp parser/build/parser.wasm $@
+	@shasum -a 256 $@
+endif
 
-build/signer.wasm: $(SIGNER_SRC) signer/*.h parser/include/*.h | check-deps
+# Which one the last build used, so that a stale build/parser.wasm cannot be mistaken for the other
+which-parser: build/parser.wasm
+	@h=$$(shasum -a 256 build/parser.wasm | cut -d' ' -f1); \
+	c=$$(shasum -a 256 parser/build/parser.wasm 2>/dev/null | cut -d' ' -f1); \
+	r=$$(shasum -a 256 build/parser-rs.wasm 2>/dev/null | cut -d' ' -f1); \
+	if [ "$$h" = "$$c" ]; then echo "build/parser.wasm is the C ($$h)"; \
+	elif [ "$$h" = "$$r" ]; then echo "build/parser.wasm is the Rust ($$h)"; \
+	else echo "build/parser.wasm matches neither; rebuild it ($$h)"; exit 1; fi
+.PHONY: which-parser
+
+build/signer.wasm: $(SIGNER_SRC) signer/*.h parser/c/include/*.h | check-deps
 	mkdir -p build
 	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs \
-	  -Oz -Wall -Wno-unused-function -DNDEBUG $(LIME_FLAGS) -Isigner -Iparser/include \
+	  -Oz -Wall -Wno-unused-function -DNDEBUG $(LIME_FLAGS) -Isigner -Iparser/c/include \
 	  -I$(SECP)/include -I$(SECP)/src $(SECP_DEFS) \
 	  -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
 	  -Wl,--export=__heap_base -Wl,--export=__data_end \
@@ -63,9 +90,9 @@ build/signer.wasm: $(SIGNER_SRC) signer/*.h parser/include/*.h | check-deps
 
 # The structure offsets in the specs and in every host library, against what C says they are. A
 # number written by hand in a document is wrong the moment a struct changes, and nothing else notices
-build/layout: signer/tests/layout.c signer/core.h parser/include/plan.h
+build/layout: signer/tests/layout.c signer/core.h parser/c/include/plan.h
 	@mkdir -p build
-	$(CC) -Isigner -Iparser/include -o $@ $<
+	$(CC) -Isigner -Iparser/c/include -o $@ $<
 
 check-layout: build/layout
 	python3 tools/check_layout.py $<

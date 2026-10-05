@@ -9,15 +9,15 @@ WASM_OPT ?= wasm-opt
 LIME1 := mutable-globals,multivalue,sign-ext,nontrapping-fptoint,bulk-memory-opt,extended-const,call-indirect-overlong
 WASI    ?= /opt/homebrew/opt/wasi-libc/share/wasi-sysroot
 RTLIB   ?= /opt/homebrew/opt/wasi-runtimes/share/wasi-runtimes/lib/wasm32-unknown-wasip1
-SRC     := src/psbt.c src/ur.c src/tx.c src/sha256.c
+SRC     := c/src/psbt.c c/src/ur.c c/src/tx.c c/src/sha256.c
 
 # The input / output buffers (just over 32 KB each) and the UR decoder need three pages of linear memory. With no memory.grow,
 # WAMR's shrunk-memory option trims it down to __heap_base
-build/parser.wasm: $(SRC) include/*.h
+build/parser.wasm: $(SRC) c/include/*.h
 	mkdir -p build
 	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs -Oz -Wall -Wextra \
 	  -mcpu=lime1 -Xlinker --features=$(LIME1) \
-	  -Iinclude -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
+	  -Ic/include -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
 	  -Wl,--export=__heap_base -Wl,--export=__data_end \
 	  -Wl,--initial-memory=196608 -Wl,--no-growable-memory \
 	  --no-wasm-opt -Wl,--keep-section=target_features \
@@ -31,17 +31,17 @@ build/vectors/own_p2wpkh_1in.psbt: tools/expand_rpc_vectors.py tests/rpc_psbt.js
 	python3 $< tests/rpc_psbt.json tests/vectors build/vectors
 
 # UR building blocks against the bc-ur reference tests, natively with sanitizers
-build/test_ur: tests/test_ur.c tests/ur_ref_vectors.h src/ur.c src/sha256.c include/*.h
+build/test_ur: tests/test_ur.c tests/ur_ref_vectors.h c/src/ur.c c/src/sha256.c c/include/*.h
 	mkdir -p build
-	cc -O2 -Wall -Wextra -Iinclude -Itests -fsanitize=address,undefined -o $@ tests/test_ur.c src/ur.c src/sha256.c
+	cc -O2 -Wall -Wextra -Ic/include -Itests -fsanitize=address,undefined -o $@ tests/test_ur.c c/src/ur.c c/src/sha256.c
 
 # Fuzzing. Needs a clang with libFuzzer (Apple's does not ship it; Homebrew's llvm does).
 # The PSBT and the UR parts both come from whoever holds up a QR code, so both are fuzzed.
 FUZZ_CC  := $(LLVM)/clang
-FUZZ_CFLAGS := -O1 -g -Wall -Wextra -Iinclude -fsanitize=fuzzer,address,undefined \
+FUZZ_CFLAGS := -O1 -g -Wall -Wextra -Ic/include -fsanitize=fuzzer,address,undefined \
   -fno-sanitize-recover=all -fuse-ld=lld
 
-build/fuzz_%: tests/fuzz_%.c $(SRC) include/*.h
+build/fuzz_%: tests/fuzz_%.c $(SRC) c/include/*.h
 	mkdir -p build
 	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer -o $@ $< $(SRC)
 
