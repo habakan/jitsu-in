@@ -1,7 +1,8 @@
 <h1><img src="../bitcoin.svg" width="26" align="top" alt=""> jitsu-in</h1>
 
-jitsu-inは**Bitcoin の署名機として必要な機能を抽出した WebAssembly モジュール群**です。
-WebAssemblyにすることによって、どのプラットフォームでも同一のコードから生成された署名ロジックを利用できることと、各モジュールで必要な情報のみをサンドボックス環境で実行できるようにします。
+jitsu-in は Bitcoin の署名に使う処理を2つの WebAssembly モジュールとして提供します。
+`parser.wasm` は未信頼の PSBT を読み、固定レイアウトの plan を作ります。`signer.wasm` は plan を検証し、
+レビュー用の取引情報を作り、取引に署名します。parser は鍵を持たず、signer は PSBT を読みません。
 
 > **状態: このプロジェクトはまだ実験的で、監査を受けていません。** 本物の資金を利用する場合は
 > 十分注意してください。扱える範囲は[対応範囲](#対応範囲)、署名側の制約は
@@ -9,7 +10,7 @@ WebAssemblyにすることによって、どのプラットフォームでも同
 
 <img src="../everywhere.svg" alt="同じバイト列がどこでも動く。中央が jitsu-in、周囲が実際に動かした6箇所" width="940">
 
-どこで動かしたか、この図が主張していないことは [docs/everywhere.md](../everywhere.md)。
+実行した環境と、各環境で確認した範囲は [docs/everywhere.md](../everywhere.md) に記載しています。
 
 | | byte | import | 何をするか |
 |---|---:|---:|---|
@@ -18,7 +19,6 @@ WebAssemblyにすることによって、どのプラットフォームでも同
 
 
 ## 利用方法
-本リポジトリで作成されたwasmモジュールをベースにいずれのプラットフォームでも署名機を作成することができます。
 
 | | ランタイム | |
 |---|---|---|
@@ -30,11 +30,10 @@ WebAssemblyにすることによって、どのプラットフォームでも同
 XCFramework もない。JavaScript のライブラリは素の `.mjs` で、ビルドなしで `import` できる
 （TypeScript 用の `.d.mts` も隣にある）。
 
-どのホストもモジュールが返したオフセットを必ず範囲検査し、SHA-256 が期待したビルドでない
-モジュールを拒否できる。鍵を持つモジュールにとってこれは、**自分の署名器を動かすのか
-他人の署名器を動かすのか** の違いである。
+JavaScript、Kotlin、Swift のホストライブラリは、モジュールが返すオフセットを範囲検査し、
+モジュールの SHA-256 を固定できます。設定したハッシュと異なるビルドは実行前に拒否できます。
 
-設計の背景は [docs/rationale.md](rationale.md)、構成は [ARCHITECTURE.md](ARCHITECTURE.md)。
+設計理由は [docs/rationale.md](rationale.md)、リポジトリの構成は [ARCHITECTURE.md](ARCHITECTURE.md) にあります。
 
 ## ビルドとテスト
 
@@ -42,7 +41,10 @@ XCFramework もない。JavaScript のライブラリは素の `.mjs` で、ビ�
 make deps     # libsecp256k1 を固定した commit で取得
 make          # build/parser.wasm と build/signer.wasm
 make test     # ベクタ、ホストライブラリ、レイアウト、出力の形
+make check-c-format check-c-tidy
 ```
+
+`make format-c` は C の書式を整えます。CI では固定した wasi-sdk に含まれる clang-format と clang-tidy を使います。
 
 wasm32 ターゲットの clang、wasi-libc の sysroot、Node が必要。
 Homebrew なら `brew install llvm lld wasi-libc wasi-runtimes node`。

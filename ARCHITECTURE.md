@@ -21,15 +21,14 @@ docs/
 tools/         checking the shape of the output, the layout, and fetching the pinned toolchain
 ```
 
-**The parser exists twice.** Both are built, and `make check-rust-plan` requires them to return the
-same 5,016-byte plan for every vector and for 20,000 mutated PSBTs. That is not only a migration
-state: two independent implementations held to the same specification is worth more than either
-alone, and it has already found a gap in the vectors that neither one's own tests would have.
+The parser has C and Rust implementations. Both are built, and `make check-rust-plan` requires them
+to return the same 5,016-byte plan for every vector and for 20,000 mutated PSBTs. Comparing the two
+implementations has also exposed a gap that neither implementation's tests found on their own.
 
 `make` builds the C; `make PARSER_IMPL=rust` builds the Rust; `make which-parser` says which one
 `build/parser.wasm` currently is. The device takes the C because WAMR's interpreter charges for every
 bounds check — the parse costs 3.5x the instructions — and because the Rust AOT wants more pool than
 the RP2350 has. [parser/BENCHMARK.md](parser/BENCHMARK.md) has the measurements.
 
-A reference implementation on bare metal — an RP2350 with no operating system, running the same
-`parser.wasm` byte for byte — uses these as a submodule.
+The bare-metal reference implementation runs the same `parser.wasm` on an RP2350 without an
+operating system. It uses this repository as a submodule.

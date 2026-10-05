@@ -1,8 +1,8 @@
 # The same bytes, everywhere
 
-**The part that reads the transaction is separated from the part that holds the keys, and the first
-one is a file you can run anywhere.** So what a signer shows you before you approve it is something
-you can reproduce yourself, on hardware you already own, and compare.
+The parser reads the transaction and builds a plan. The signer checks that plan, prepares the details
+for review, and signs it. The table below lists the runtimes where these modules have been run and
+their output compared.
 
 The module convention is in [module-abi.md](module-abi.md); how to drive each one is in
 [../parser/docs/abi.md](../parser/docs/abi.md) and [../signer/docs/abi.md](../signer/docs/abi.md).
@@ -35,13 +35,13 @@ platforms — not that the path looks like it should work.
 | Linux / macOS | WAMR, the same interpreter the device uses | both |
 | Web viewer | whatever engine the browser has | `parser.wasm`. **No keys in the browser**, so nothing signs |
 
-The device row is the one worth reading twice: `parser.wasm` on the microcontroller is
-**byte-for-byte the file this repository builds**, interpreted by WAMR. It is not a recompilation.
+On the microcontroller, WAMR interprets **the exact `parser.wasm` file built by this repository**.
+The device does not use a separate compilation of the parser.
 
-## Why more than one runtime is a feature, not a cost
+## Comparing runtimes
 
-Several runtimes given the same input must produce the same bytes out. When they do not, the
-disagreement localises the bug:
+Give each runtime the same input and compare the output bytes. A difference is a reason to check the
+runtime, host library, and module behavior:
 
 ```mermaid
 flowchart LR
@@ -52,11 +52,11 @@ flowchart LR
     r1 --> cmp{"compare the output"}
     r2 --> cmp
     r3 --> cmp
-    cmp -->|"identical"| ok["evidence for both the module and the runtimes"]
-    cmp -->|"differ"| bug["a runtime bug, not a parser bug"]
+    cmp -->|"identical"| ok["the outputs agree for this input"]
+    cmp -->|"differ"| bug["investigate the runtime, host, and module"]
 ```
 
-This has already paid for itself once. An
+This comparison has caught a runtime bug. An
 [unaligned `i64.store` in WAMR](https://github.com/wasm-micro-runtime/wasm-micro-runtime/pull/5123)
 showed up only on the real hardware — QEMU did not reproduce it — and having V8 as a second opinion
 is what made it clear the parser was not at fault.
