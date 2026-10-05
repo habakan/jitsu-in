@@ -18,3 +18,8 @@ values extracted from it.
 
 Copyright (c) Blockchain Commons
 Distributed under the BSD-2-Clause Plus Patent License (https://spdx.org/licenses/BSD-2-Clause-Patent.html).
+
+docs/everywhere.svg embeds the WebAssembly logo, drawn by Carlos Baraza
+(https://github.com/WebAssembly/web-assembly-logo).
+
+Dedicated to the public domain under CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/).

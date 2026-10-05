@@ -220,6 +220,11 @@ build/ts/package/bin/tsc:
 	echo "$(TS_SHA)  build/ts/typescript-$(TS_VERSION).tgz" | (shasum -a 256 -c - || sha256sum -c -)
 	cd build/ts && tar xzf typescript-$(TS_VERSION).tgz
 
+# The figure in docs/everywhere.md
+everywhere: tools/draw_everywhere.mjs
+	node $< docs/everywhere.svg
+.PHONY: everywhere
+
 check-types: $(TSC)
 	@set -e; \
 	command -v node >/dev/null || { echo "node not found"; exit 1; }; \
