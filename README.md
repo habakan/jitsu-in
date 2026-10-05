@@ -25,23 +25,41 @@ builds every string it displays from the plan's bytes. **It then refuses to sign
 plan it was shown**, by requiring the SHA-256 to match. So a malicious parser can make the signer
 sign what it displayed, but it cannot display one transaction and sign another.
 
-## Why this is worth sharing
+## What this is for
 
-Compiling Bitcoin logic to wasm is not scarce; libwally and BDK do it too. What is scarce is being
-able to **check rather than trust**:
+Bitcoin's own position is that you should not have to trust anyone — you should be able to check. A
+signer is where that is hardest to live up to: it is the one piece that must be trusted absolutely,
+and almost nobody can read the whole of one.
+
+**This exists to lower the cost of verifying a signer**, by two means.
+
+**Fewer dependencies, so the supply chain is cheaper to check.** Both modules have zero imports,
+pull in no package manager, and are built by a toolchain pinned by version and by hash. The whole of
+`parser.wasm` is 15,570 bytes from four C files.
+
+> This lowers the **cost of checking**, not the risk. A dependency you did not audit is no safer for
+> being pinned; it is only easier to find out what you are running. Pretending otherwise would be
+> the opposite of the point.
+
+**More platforms, so the same program is verified more times.** One module, byte for byte, runs on a
+microcontroller with no OS, in a browser, on Android and on iOS. Every platform that loads it is
+another set of eyes on the same bytes, and a bug found on one is a bug fixed for all of them — which
+is only true because the code is shared rather than reimplemented per platform.
+
+That is what the "runs anywhere" picture is for. Not that portability is convenient: that
+**verification accumulates** instead of starting over on each device.
+
+## What you can check
 
 | | |
 |---|---|
-| **no imports** | neither module can call a host function. Verified in CI, not merely intended |
+| **no imports** | neither module can call a host function — no clock, no network, no syscalls. Verified in CI, not merely intended |
 | **memory cannot grow** | built with `--no-growable-memory`, so neither can take more of the host's memory than it declared |
 | **a pinned feature set** | [Lime1](https://github.com/WebAssembly/tool-conventions/blob/main/Lime.md), enforced at link time, so a dependency cannot quietly widen what a runtime must support |
 | **reproducible** | macOS arm64 and Linux x86_64 give the same bytes from a toolchain pinned by version and by hash |
 | **the same answers as Bitcoin Core** | 37 PSBTs agree on the parse, and 8 signatures are byte-identical, ECDSA and Schnorr alike |
 | **three host libraries that agree** | JavaScript, Kotlin and Swift, required to produce identical output byte for byte |
-
-That combination is what makes the "runs anywhere" picture mean something. It is not about
-portability being convenient — it is that **a review of one of these modules carries over to every
-platform that loads it**. The audit amortizes; that is the point.
+| **no package manager** | no npm, no Gradle, no pip. The one Python left is a vector expander with no dependencies; everything else is C, JavaScript, Kotlin or Swift with its tools pinned by hash |
 
 ## Host libraries
 
