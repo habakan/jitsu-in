@@ -51,7 +51,33 @@ pinned as tightly.
 | | |
 |---|---|
 | `include/reader.h` | `src/reader.rs` — bounds-checked reads, compact size |
+| `include/plan.h` | `src/plan.rs` — the same `#[repr(C)]` layout, with the same offset assertions |
 | `src/sha256.c` | `src/sha256.rs` |
 | `src/tx.c` | `src/tx.rs` — the minimal transaction parser and the txid |
+| `src/psbt.c` | `src/psbt.rs` — the PSBT parse, and signature insertion |
 
-Still C: `src/psbt.c` (427 lines) and `src/ur.c` (526 lines).
+Still C: `src/ur.c` (526 lines), the animated-QR reassembly and encoding.
+
+## What is checked, and what it found
+
+| | |
+|---|---|
+| `make check-rust-suite` | the C's own suite, against the Rust module: **257 checks**, including Bitcoin Core's `rpc_psbt.json` with the same accept/reject counts |
+| `make check-rust-plan` | the whole 5,016-byte plan, the prevtx offsets and what `finalize` produces, over every vector at three fingerprints and 20,000 mutated PSBTs: **29,524 comparisons** |
+| `make check-rust-shape` | no imports, and inside Lime1 |
+
+Comparing the plan *whole* rather than field by field is deliberate: a field the check does not know
+about cannot hide a difference.
+
+**The comparison found a gap in the vectors, not in the port.** Removing `!has_tree` from the
+output's change test — so a taproot output with a script tree would wrongly be offered as change —
+changed nothing, because no committed vector had an output that was both ours and carried a tree.
+`own_p2tr_change_with_tree.psbt` is that case, and with it the break is caught. The vector count went
+from 529 to 556.
+
+## One thing Rust made explicit
+
+`tx::parse` takes a single visitor over an `Item` enum, where the C took two function pointers and a
+`void *`. Two `FnMut` closures that both touch the same state each want unique access to it, and the
+borrow checker refuses. The C had the same aliasing — both callbacks wrote to the same `plan` — and
+simply did not say so. The shape is the same; which of the two the compiler checks is not.

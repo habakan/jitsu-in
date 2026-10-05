@@ -31,18 +31,22 @@ pub struct Info {
     pub txid: [u8; 32],
 }
 
-/// Walks a serialized transaction, handing each input and output to the callbacks, and fills `info`.
-/// Returns false if the bytes are malformed, if a callback refuses, or if anything is left over —
+/// What the walk hands to the visitor.
+pub enum Item<'a> {
+    Input(u32, Input<'a>),
+    Output(u32, Output<'a>),
+}
+
+/// Walks a serialized transaction, handing each input and output to `visit`, and fills `info`.
+/// Returns false if the bytes are malformed, if the visitor refuses, or if anything is left over —
 /// trailing bytes mean this is not the transaction it claims to be.
-pub fn parse<'a, FI, FO>(
-    raw: &'a [u8],
-    mut on_input: FI,
-    mut on_output: FO,
-    info: &mut Info,
-) -> bool
+///
+/// One visitor rather than two closures: both need the same state, and two `FnMut` would each want
+/// unique access to it. The C passed a struct of function pointers and a `void *` for the same
+/// reason; this is that shape, with the borrow checker enforcing what the C left to the author.
+pub fn parse<'a, V>(raw: &'a [u8], mut visit: V, info: &mut Info) -> bool
 where
-    FI: FnMut(u32, &Input<'a>) -> bool,
-    FO: FnMut(u32, &Output<'a>) -> bool,
+    V: FnMut(Item<'a>) -> bool,
 {
     let mut r = Reader::new(raw);
 
@@ -67,7 +71,7 @@ where
         let script_sig_len = r.varint() as usize;
         r.skip(script_sig_len);
         let sequence = r.le(4) as u32;
-        if !r.err() && !on_input(i, &Input { prevout, script_sig_len, sequence }) {
+        if !r.err() && !visit(Item::Input(i, Input { prevout, script_sig_len, sequence })) {
             return false;
         }
     }
@@ -84,7 +88,7 @@ where
         let amount = r.le(8);
         let spk_len = r.varint() as usize;
         let spk = r.take(spk_len).unwrap_or(&[]);
-        if !r.err() && !on_output(i, &Output { amount, spk }) {
+        if !r.err() && !visit(Item::Output(i, Output { amount, spk })) {
             return false;
         }
     }

@@ -152,6 +152,21 @@ build/probe-c.wasm: parser/tests/probe.c parser/src/tx.c parser/src/sha256.c par
 	  --no-wasm-opt -Wl,--keep-section=target_features \
 	  -o $@ parser/tests/probe.c parser/src/tx.c parser/src/sha256.c -lc $(RTLIB)/libclang_rt.builtins.a
 
+# The whole 5,016-byte plan, the prevtx offsets and what finalize produces, compared through the real
+# ABI. Comparing the plan whole means a field this check does not know about cannot hide a difference
+check-rust-plan: build/parser.wasm $(RUST_WASM) parser/build/vectors/own_p2wpkh_1in.psbt
+	@cp $(RUST_WASM) build/parser-rs.wasm
+	node parser/tools/check_rust_plan.mjs build/parser.wasm build/parser-rs.wasm parser/build/vectors
+.PHONY: check-rust-plan
+
+# The suite the C is tested with, run against the Rust module. It drives the module by its exported
+# names, so the UR sections skip themselves until parser_ur_* has been ported
+check-rust-suite: $(RUST_WASM) parser/build/vectors/own_p2wpkh_1in.psbt
+	@cp $(RUST_WASM) build/parser-rs.wasm
+	cd parser && node tools/run_tests.mjs ../build/parser-rs.wasm build/vectors \
+	  tests/rpc_psbt.json tests/ur_vectors.json
+.PHONY: check-rust-suite
+
 check-rust-agrees: build/probe-c.wasm $(RUST_WASM)
 	@set -e; \
 	command -v rustup >/dev/null || { echo "rustup not found; skipping the Rust port check"; exit 0; }; \

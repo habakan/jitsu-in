@@ -18,6 +18,8 @@ fn panic(_: &PanicInfo) -> ! {
     core::arch::wasm32::unreachable()
 }
 
+pub mod plan;
+pub mod psbt;
 pub mod reader;
 pub mod sha256;
 pub mod tx;
