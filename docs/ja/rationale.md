@@ -1,8 +1,8 @@
 # なぜこの形なのか
 
 README は何であるかと使い方を書く。ここには**なぜそうしたか**を置く。
-構成は [../ARCHITECTURE.md](../ARCHITECTURE.md)、
-どこで動かしたかは [everywhere.md](everywhere.md)。
+構成は [../ARCHITECTURE.md](ARCHITECTURE.md)、
+どこで動かしたかは [everywhere.md](../everywhere.md)。
 
 ## なぜ2つに分けるのか
 

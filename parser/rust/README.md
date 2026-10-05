@@ -61,9 +61,9 @@ version is pinned; the bytes are not pinned as tightly.
 - The 48 KB stack is larger than the C's 16 KB. The device gives its native side 32 KB, and whether
   those interact has not been checked
 - The signer stays C: it links libsecp256k1, which is C. Only the parser is in question
-- Which one becomes the shipped module is open. Keeping both is not only a migration cost — two
-  independent implementations required to return the same plan is the arrangement
-  [design.md](../../docs/module-abi.md) argued was stronger than a replacement
+- Which one becomes the shipped module is open. Keeping both is not only a migration cost: two
+  independent implementations held to the same plan catch what neither one's own tests would, and
+  this one already has (see [../../docs/rationale.md](../../docs/rationale.md))
 
 ## How the port is run
 

@@ -1,5 +1,7 @@
 <h1><img src="docs/bitcoin.svg" width="26" align="top" alt=""> jitsu-in</h1>
 
+<sup>[日本語](docs/ja/README.md)</sup>
+
 **jitsu-in is the signing logic a Bitcoin signer needs, pulled out into WebAssembly modules.**
 Being WebAssembly means every platform runs signing logic built from the same source, and each
 module runs sandboxed with only what it needs: one reads the untrusted transaction and holds no

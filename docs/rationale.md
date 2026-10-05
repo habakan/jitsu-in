@@ -1,5 +1,7 @@
 # Why it is shaped this way
 
+<sup>[日本語](ja/rationale.md)</sup>
+
 The README says what this is and how to use it. This says why those choices were made.
 What is where is in [../ARCHITECTURE.md](../ARCHITECTURE.md); where it has been run is in
 [everywhere.md](everywhere.md).

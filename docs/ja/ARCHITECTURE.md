@@ -1,7 +1,7 @@
 # 構成
 
-何であるかと使い方は [README.ja.md](README.ja.md)、
-なぜそうしたかは [docs/rationale.ja.md](docs/rationale.ja.md)。
+何であるかと使い方は [README.md](README.md)、
+なぜそうしたかは [rationale.md](rationale.md)。
 
 ## どこに何があるか
 
@@ -27,7 +27,7 @@ tools/         出力の形とレイアウトの検査、版を固定したツ�
 `make` が C、`make PARSER_IMPL=rust` が Rust、`make which-parser` が
 `build/parser.wasm` がどちらなのかを答える。実機が C を取るのは、WAMR のインタプリタが
 境界検査ごとに課金するため（解析の命令数が3.5倍）と、Rust の AOT が RP2350 の持たない量の
-プールを要求するためである。測定は [parser/BENCHMARK.md](parser/BENCHMARK.md)。
+プールを要求するためである。測定は [parser/BENCHMARK.md](../../parser/BENCHMARK.md)。
 
 ベアメタルの参照実装 ── OS を持たない RP2350 で、同じ `parser.wasm` をバイト単位で同一のまま
 動かすもの ── がこれを submodule として使っている。

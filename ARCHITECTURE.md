@@ -1,5 +1,7 @@
 # Architecture
 
+<sup>[日本語](docs/ja/ARCHITECTURE.md)</sup>
+
 What this is and how to use it is in [README.md](README.md); why it is shaped this way is in
 [docs/rationale.md](docs/rationale.md).
 
