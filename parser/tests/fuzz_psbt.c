@@ -7,7 +7,13 @@
 #include "psbt_parser.h"
 
 /* Named so a crash says which invariant broke; __builtin_trap alone is hard to read */
-#define MUST(cond) do { if (!(cond)) { fprintf(stderr, "broken: %s\n", #cond); abort(); } } while (0)
+#define MUST(cond)                                                                                                     \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            fprintf(stderr, "broken: %s\n", #cond);                                                                    \
+            abort();                                                                                                   \
+        }                                                                                                              \
+    } while (0)
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     unsigned char *in = parser_input();

@@ -26,6 +26,8 @@ SECP_DEFS := -DENABLE_MODULE_EXTRAKEYS=1 -DENABLE_MODULE_SCHNORRSIG=1 -DECMULT_W
 SIGNER_SRC := signer/wasm_main.c signer/core.c signer/address.c signer/bip32.c signer/sighash.c \
   signer/ripemd160.c signer/sha512.c signer/secp_callbacks.c signer/secp256k1_unity.c \
   parser/c/src/tx.c parser/c/src/sha256.c
+PARSER_C_SRC := $(wildcard parser/c/src/*.c)
+C_FORMAT_FILES := $(PARSER_C_SRC) $(wildcard parser/c/include/*.h parser/tests/*.c signer/*.c signer/*.h signer/tests/*.c)
 
 all: build/parser.wasm build/signer.wasm
 .PHONY: all
@@ -78,7 +80,7 @@ which-parser: build/parser.wasm
 build/signer.wasm: $(SIGNER_SRC) signer/*.h parser/c/include/*.h | check-deps
 	mkdir -p build
 	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs \
-	  -Oz -Wall -Wno-unused-function -DNDEBUG $(LIME_FLAGS) -Isigner -Iparser/c/include \
+	  -Oz -Wall -Wextra -Wno-unused-function -DNDEBUG $(LIME_FLAGS) -Isigner -Iparser/c/include \
 	  -I$(SECP)/include -I$(SECP)/src $(SECP_DEFS) \
 	  -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
 	  -Wl,--export=__heap_base -Wl,--export=__data_end \
@@ -97,6 +99,18 @@ build/layout: signer/tests/layout.c signer/core.h parser/c/include/plan.h
 check-layout: build/layout
 	python3 tools/check_layout.py $<
 .PHONY: check-layout
+
+format-c:
+	$(LLVM)/clang-format -i $(C_FORMAT_FILES)
+.PHONY: format-c
+
+check-c-format:
+	$(LLVM)/clang-format --dry-run --Werror $(C_FORMAT_FILES)
+.PHONY: check-c-format
+
+check-c-tidy:
+	$(LLVM)/clang-tidy $(PARSER_C_SRC) -- -std=c11 -Iparser/c/include --target=wasm32-wasip1 --sysroot=$(WASI)
+.PHONY: check-c-tidy
 
 # Vectors, fuzzing and the parser's own three host libraries
 check-parser: build/parser.wasm

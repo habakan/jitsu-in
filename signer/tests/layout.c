@@ -62,17 +62,17 @@ int main(void) {
     printf("  \"desc_max\": %d\n },\n", CORE_DESC_MAX);
 
     printf(" \"errors\": {\n");
-    printf("  \"FORMAT\": %d, \"NO_SEED\": %d, \"NOT_OURS\": %d, \"NOTHING_TO_SIGN\": %d,\n",
-           CORE_ERR_FORMAT, CORE_ERR_NO_SEED, CORE_ERR_NOT_OURS, CORE_ERR_NOTHING_TO_SIGN);
-    printf("  \"SIGHASH\": %d, \"SCRIPT\": %d, \"PREVTX_MISSING\": %d, \"PREVTX_MISMATCH\": %d,\n",
-           CORE_ERR_SIGHASH, CORE_ERR_SCRIPT, CORE_ERR_PREVTX_MISSING, CORE_ERR_PREVTX_MISMATCH);
-    printf("  \"FEE\": %d, \"NOT_REVIEWED\": %d, \"CRYPTO\": %d\n },\n",
-           CORE_ERR_FEE, CORE_ERR_NOT_REVIEWED, CORE_ERR_CRYPTO);
+    printf("  \"FORMAT\": %d, \"NO_SEED\": %d, \"NOT_OURS\": %d, \"NOTHING_TO_SIGN\": %d,\n", CORE_ERR_FORMAT,
+           CORE_ERR_NO_SEED, CORE_ERR_NOT_OURS, CORE_ERR_NOTHING_TO_SIGN);
+    printf("  \"SIGHASH\": %d, \"SCRIPT\": %d, \"PREVTX_MISSING\": %d, \"PREVTX_MISMATCH\": %d,\n", CORE_ERR_SIGHASH,
+           CORE_ERR_SCRIPT, CORE_ERR_PREVTX_MISSING, CORE_ERR_PREVTX_MISMATCH);
+    printf("  \"FEE\": %d, \"NOT_REVIEWED\": %d, \"CRYPTO\": %d\n },\n", CORE_ERR_FEE, CORE_ERR_NOT_REVIEWED,
+           CORE_ERR_CRYPTO);
 
-    printf(" \"owner\": {\"EXTERNAL\": %d, \"CHANGE\": %d, \"SELF\": %d},\n",
-           CORE_OUT_EXTERNAL, CORE_OUT_CHANGE, CORE_OUT_SELF);
-    printf(" \"text_kind\": {\"ADDRESS\": %d, \"OP_RETURN\": %d, \"SCRIPT\": %d}\n",
-           CORE_TEXT_ADDRESS, CORE_TEXT_OP_RETURN, CORE_TEXT_SCRIPT);
+    printf(" \"owner\": {\"EXTERNAL\": %d, \"CHANGE\": %d, \"SELF\": %d},\n", CORE_OUT_EXTERNAL, CORE_OUT_CHANGE,
+           CORE_OUT_SELF);
+    printf(" \"text_kind\": {\"ADDRESS\": %d, \"OP_RETURN\": %d, \"SCRIPT\": %d}\n", CORE_TEXT_ADDRESS,
+           CORE_TEXT_OP_RETURN, CORE_TEXT_SCRIPT);
     printf("}\n");
     return 0;
 }

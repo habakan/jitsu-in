@@ -75,8 +75,7 @@ int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap) {
             unsigned v = 0;
             for (unsigned k = 0; k < 11; k++) {
                 unsigned b = i * 11 + k;
-                unsigned bit = b < ent_bits ? payload[b / 8] >> (7 - b % 8) & 1
-                                            : hash[0] >> (7 - (b - ent_bits)) & 1;
+                unsigned bit = b < ent_bits ? payload[b / 8] >> (7 - b % 8) & 1 : hash[0] >> (7 - (b - ent_bits)) & 1;
                 v = v << 1 | bit;
             }
             idx[i] = (uint16_t)v;

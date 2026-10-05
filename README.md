@@ -52,7 +52,11 @@ Why it is shaped this way is in [docs/rationale.md](docs/rationale.md); what is 
 make deps     # libsecp256k1 at its pinned commit
 make          # build/parser.wasm and build/signer.wasm
 make test     # the vectors, the host libraries, the layout, the shape of the output
+make check-c-format check-c-tidy
 ```
+
+`make format-c` applies the C formatting rules. Formatting and the parser's static analysis use the
+clang-format and clang-tidy shipped with the pinned wasi-sdk toolchain in CI.
 
 Needs clang with the wasm32 target, a wasi-libc sysroot, and Node. With Homebrew:
 `brew install llvm lld wasi-libc wasi-runtimes node`.

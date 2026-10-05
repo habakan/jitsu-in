@@ -13,23 +13,38 @@
 #define H 0x80000000u
 
 static int failures, checks;
-#define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; printf("FAIL %s:%d ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
+#define CHECK(cond, ...)                                                                                               \
+    do {                                                                                                               \
+        checks++;                                                                                                      \
+        if (!(cond)) {                                                                                                 \
+            failures++;                                                                                                \
+            printf("FAIL %s:%d ", __FILE__, __LINE__);                                                                 \
+            printf(__VA_ARGS__);                                                                                       \
+            printf("\n");                                                                                              \
+        }                                                                                                              \
+    } while (0)
 
 static void unhex(const char *s, uint8_t *out) {
     for (size_t i = 0; s[2 * i]; i++) sscanf(s + 2 * i, "%2hhx", &out[i]);
 }
 
-static int zero_rng(uint8_t *buf, size_t len) { memset(buf, 0, len); return 1; }
+static int zero_rng(uint8_t *buf, size_t len) {
+    memset(buf, 0, len);
+    return 1;
+}
 
 /* Build a plan from a raw transaction, taking scripts and amounts from the utxo side. Stands in for
  * parser.wasm so that core can be tested on its own */
-typedef struct { plan_t *p; } build_t;
+typedef struct {
+    plan_t *p;
+} build_t;
 static int b_in(void *c, uint32_t i, const uint8_t prevout[36], size_t script_sig_len, uint32_t seq) {
     (void)script_sig_len;
     plan_t *p = ((build_t *)c)->p;
     if (i >= PLAN_MAX_INPUTS) return 0;
     memcpy(p->inputs[i].prev_txid, prevout, 32);
-    p->inputs[i].prev_vout = prevout[32] | (uint32_t)prevout[33] << 8 | (uint32_t)prevout[34] << 16 | (uint32_t)prevout[35] << 24;
+    p->inputs[i].prev_vout =
+        prevout[32] | (uint32_t)prevout[33] << 8 | (uint32_t)prevout[34] << 16 | (uint32_t)prevout[35] << 24;
     p->inputs[i].sequence = seq;
     return 1;
 }
@@ -66,7 +81,10 @@ static void set_key(plan_keypath_t *k, uint32_t p0, uint32_t p1, uint32_t p2, ui
 }
 
 static void test_bip143(void) {
-    static const char *tx = "0100000002fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f0000000000eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac11000000";
+    static const char *tx =
+        "0100000002fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f0000000000eeffffffef51e1b804cc89d182"
+        "d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f"
+        "85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac11000000";
     uint8_t raw[256], spk[22], want[32], key[32], digest[32], der[80], want_sig[80];
     size_t n = strlen(tx) / 2, len = sizeof(der);
     secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
@@ -81,9 +99,11 @@ static void test_bip143(void) {
     unhex("c37af31116d1b27caf68aae9e3ac82f1477929014d5b917657d0eb49478cb670", want);
     CHECK(sighash_bip143_p2wpkh(&p, 1, digest) && !memcmp(digest, want, 32), "bip143 sighash");
     unhex("619c335025c7f4012e556c2a58b2506e30b8511b53ade95ea316fd8c3286feb9", key);
-    unhex("304402203609e17b84f6a7d30c80bfa610b5b4542f32a8a0d5447a12fb1366d7f01cc44a0220573a954c4518331561406f90300e8f3358f51928d43c212a8caed02de67eebee", want_sig);
-    CHECK(secp256k1_ecdsa_sign(ctx, &sig, digest, key, NULL, NULL)
-          && secp256k1_ecdsa_signature_serialize_der(ctx, der, &len, &sig) && len == 70 && !memcmp(der, want_sig, 70),
+    unhex("304402203609e17b84f6a7d30c80bfa610b5b4542f32a8a0d5447a12fb1366d7f01cc44a0220573a954c4518331561406f90300e8f33"
+          "58f51928d43c212a8caed02de67eebee",
+          want_sig);
+    CHECK(secp256k1_ecdsa_sign(ctx, &sig, digest, key, NULL, NULL) &&
+              secp256k1_ecdsa_signature_serialize_der(ctx, der, &len, &sig) && len == 70 && !memcmp(der, want_sig, 70),
           "bip143 signature (RFC6979)");
     secp256k1_context_destroy(ctx);
 }
@@ -103,8 +123,9 @@ static void test_bip341(void) {
         const typeof(TV341_SPENDS[0]) *v = &TV341_SPENDS[s];
         CHECK(sighash_bip341_keypath(ctx, &p, v->index, v->hash_type, digest) && !memcmp(digest, v->sighash, 32),
               "bip341 sighash input %u type 0x%02x", (unsigned)v->index, v->hash_type);
-        CHECK(secp256k1_keypair_create(ctx, &kp, v->tweaked) && secp256k1_schnorrsig_sign32(ctx, sig, digest, &kp, aux)
-              && !memcmp(sig, v->sig, 64) && (v->sig_len == 64 || v->sig[64] == v->hash_type),
+        CHECK(secp256k1_keypair_create(ctx, &kp, v->tweaked) &&
+                  secp256k1_schnorrsig_sign32(ctx, sig, digest, &kp, aux) && !memcmp(sig, v->sig, 64) &&
+                  (v->sig_len == 64 || v->sig[64] == v->hash_type),
               "bip341 signature input %u", (unsigned)v->index);
     }
     secp256k1_context_destroy(ctx);
@@ -171,9 +192,10 @@ static void test_review_and_sign(void) {
     {
         core_display_t d;
         char btc[21];
-        CHECK(core_display(&p, &r, &d) == CORE_OK && d.fee == 1000 && d.spend == 60000 && d.n_outputs == 2
-              && d.outputs[1].owner == CORE_OUT_CHANGE && d.outputs[1].text_kind == CORE_TEXT_ADDRESS
-              && d.outputs[0].text_kind == CORE_TEXT_ADDRESS && !strncmp(d.outputs[0].text, "bc1q", 4), "display");
+        CHECK(core_display(&p, &r, &d) == CORE_OK && d.fee == 1000 && d.spend == 60000 && d.n_outputs == 2 &&
+                  d.outputs[1].owner == CORE_OUT_CHANGE && d.outputs[1].text_kind == CORE_TEXT_ADDRESS &&
+                  d.outputs[0].text_kind == CORE_TEXT_ADDRESS && !strncmp(d.outputs[0].text, "bc1q", 4),
+              "display");
         core_format_btc(d.spend, btc);
         CHECK(!strcmp(btc, "0.00060000"), "format %s", btc);
     }
@@ -181,9 +203,9 @@ static void test_review_and_sign(void) {
     {
         secp256k1_pubkey pub;
         secp256k1_ecdsa_signature sig;
-        CHECK(sighash_bip143_p2wpkh(&p, 0, digest) && secp256k1_ec_pubkey_parse(ctx, &pub, sigs[0].pubkey, 33)
-              && secp256k1_ecdsa_signature_parse_der(ctx, &sig, sigs[0].sig, sigs[0].sig_len - 1u)
-              && secp256k1_ecdsa_verify(ctx, &sig, digest, &pub) && sigs[0].sig[sigs[0].sig_len - 1] == 1,
+        CHECK(sighash_bip143_p2wpkh(&p, 0, digest) && secp256k1_ec_pubkey_parse(ctx, &pub, sigs[0].pubkey, 33) &&
+                  secp256k1_ecdsa_signature_parse_der(ctx, &sig, sigs[0].sig, sigs[0].sig_len - 1u) &&
+                  secp256k1_ecdsa_verify(ctx, &sig, digest, &pub) && sigs[0].sig[sigs[0].sig_len - 1] == 1,
               "p2wpkh signature verifies");
     }
     CHECK(core_sign(&p, zero_rng, sigs, &n) == CORE_ERR_NOT_REVIEWED, "sign twice needs review");
@@ -205,8 +227,9 @@ static void test_review_and_sign(void) {
     set_key(&p.outputs[0].key, 84 | H, H, H, 0, 1);
     {
         core_display_t d;
-        CHECK(core_review(&p, NULL, &r) == CORE_OK && r.owner[0] == CORE_OUT_SELF && core_display(&p, &r, &d) == CORE_OK
-              && d.spend == 0 && !strcmp(d.outputs[0].text, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"),
+        CHECK(core_review(&p, NULL, &r) == CORE_OK && r.owner[0] == CORE_OUT_SELF &&
+                  core_display(&p, &r, &d) == CORE_OK && d.spend == 0 &&
+                  !strcmp(d.outputs[0].text, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"),
               "self transfer");
     }
 
@@ -223,9 +246,10 @@ static void test_review_and_sign(void) {
         set_spk(&p.outputs[0].spk, opret, 6);
         p.n_outputs = 3;
         set_spk(&p.outputs[2].spk, odd, 3);
-        CHECK(core_review(&p, NULL, &r) == CORE_OK && core_display(&p, &r, &d) == CORE_OK
-              && d.outputs[0].text_kind == CORE_TEXT_OP_RETURN && !strcmp(d.outputs[0].text, "04deadbeef")
-              && d.outputs[2].text_kind == CORE_TEXT_SCRIPT && !strcmp(d.outputs[2].text, "510102"), "opreturn/script");
+        CHECK(core_review(&p, NULL, &r) == CORE_OK && core_display(&p, &r, &d) == CORE_OK &&
+                  d.outputs[0].text_kind == CORE_TEXT_OP_RETURN && !strcmp(d.outputs[0].text, "04deadbeef") &&
+                  d.outputs[2].text_kind == CORE_TEXT_SCRIPT && !strcmp(d.outputs[2].text, "510102"),
+              "opreturn/script");
         p.outputs[0].amount = 0;
         CHECK(core_display(&p, &r, &d) == CORE_ERR_NOT_REVIEWED, "display needs same plan");
     }
@@ -306,11 +330,11 @@ static void test_review_and_sign(void) {
     CHECK(core_sign(&p, zero_rng, sigs, &n) == CORE_OK && n == 2, "p2tr sign");
     for (unsigned i = 0; i < n; i++) {
         secp256k1_xonly_pubkey xpub;
-        CHECK(sighash_bip341_keypath(ctx, &p, i, p.inputs[i].sighash_type, digest)
-              && !memcmp(sigs[i].pubkey + 1, p.inputs[i].spk.bytes + 2, 32)
-              && secp256k1_xonly_pubkey_parse(ctx, &xpub, sigs[i].pubkey + 1)
-              && secp256k1_schnorrsig_verify(ctx, sigs[i].sig, digest, 32, &xpub)
-              && sigs[i].sig_len == (i ? 65 : 64), "p2tr signature %u verifies", i);
+        CHECK(sighash_bip341_keypath(ctx, &p, i, p.inputs[i].sighash_type, digest) &&
+                  !memcmp(sigs[i].pubkey + 1, p.inputs[i].spk.bytes + 2, 32) &&
+                  secp256k1_xonly_pubkey_parse(ctx, &xpub, sigs[i].pubkey + 1) &&
+                  secp256k1_schnorrsig_verify(ctx, sigs[i].sig, digest, 32, &xpub) && sigs[i].sig_len == (i ? 65 : 64),
+              "p2tr signature %u verifies", i);
     }
     p.inputs[0].sighash_type = 0x81;
     CHECK(core_review(&p, NULL, &r) == CORE_ERR_SIGHASH, "p2tr anyonecanpay rejected");
@@ -321,28 +345,36 @@ static void test_review_and_sign(void) {
 }
 
 static void test_address(void) {
-    static const struct { const char *addr, *spk; } v350[] = {
+    static const struct {
+        const char *addr, *spk;
+    } v350[] = {
         {"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "0014751e76e8199196d454941c45d1b3a323f1433bd6"},
-        {"tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7", "00201863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262"},
-        {"bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7kt5nd6y", "5128751e76e8199196d454941c45d1b3a323f1433bd6751e76e8199196d454941c45d1b3a323f1433bd6"},
+        {"tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7",
+         "00201863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262"},
+        {"bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7kt5nd6y",
+         "5128751e76e8199196d454941c45d1b3a323f1433bd6751e76e8199196d454941c45d1b3a323f1433bd6"},
         {"bc1sw50qgdz25j", "6002751e"},
         {"bc1zw508d6qejxtdg4y5r3zarvaryvaxxpcs", "5210751e76e8199196d454941c45d1b3a323"},
-        {"tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy", "0020000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433"},
-        {"tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c", "5120000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433"},
-        {"bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", "512079be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"},
+        {"tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy",
+         "0020000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433"},
+        {"tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c",
+         "5120000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433"},
+        {"bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+         "512079be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"},
     };
     /* scripts matching BIP350's invalid examples: 1- and 41-byte programs, 16 bytes at v0, and a push
      * length that disagrees with the script */
-    static const char *bad[] = {"510175", "5129751e76e8199196d454941c45d1b3a323f1433bd6751e76e8199196d454941c45d1b3a323f1433bd6aa",
-                                "0010751e76e8199196d454941c45d1b3a323", "0015751e76e8199196d454941c45d1b3a323f1433bd6"};
+    static const char *bad[] = {
+        "510175", "5129751e76e8199196d454941c45d1b3a323f1433bd6751e76e8199196d454941c45d1b3a323f1433bd6aa",
+        "0010751e76e8199196d454941c45d1b3a323", "0015751e76e8199196d454941c45d1b3a323f1433bd6"};
     uint8_t spk[64];
     char out[ADDRESS_MAX];
 
     for (unsigned i = 0; i < sizeof(v350) / sizeof(v350[0]); i++) {
         size_t n = strlen(v350[i].spk) / 2;
         unhex(v350[i].spk, spk);
-        CHECK(address_encode(spk, n, v350[i].addr[0] == 't', out) && !strcmp(out, v350[i].addr),
-              "bip350 %u: %s", i, out);
+        CHECK(address_encode(spk, n, v350[i].addr[0] == 't', out) && !strcmp(out, v350[i].addr), "bip350 %u: %s", i,
+              out);
     }
     for (unsigned i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
         unhex(bad[i], spk);
@@ -353,8 +385,9 @@ static void test_address(void) {
               "base58 %u: %s != %s", i, out, TV_B58[i].addr);
     CHECK(address_encode(TV_SPK_P2WPKH_0_0, 22, 0, out) && !strcmp(out, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"),
           "bip84 address");
-    CHECK(address_encode(TV_SPK_P2TR_0_0, 34, 0, out)
-          && !strcmp(out, "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr"), "bip86 address");
+    CHECK(address_encode(TV_SPK_P2TR_0_0, 34, 0, out) &&
+              !strcmp(out, "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr"),
+          "bip86 address");
 }
 
 int main(void) {

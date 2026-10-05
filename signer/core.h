@@ -11,12 +11,12 @@
 
 enum {
     CORE_OK = 0,
-    CORE_ERR_FORMAT,       /* over a limit, an unused field is non-zero, or an amount is out of range */
+    CORE_ERR_FORMAT, /* over a limit, an unused field is non-zero, or an amount is out of range */
     CORE_ERR_NO_SEED,
-    CORE_ERR_NOT_OURS,     /* an input claims our fingerprint, but its key does not produce its script */
+    CORE_ERR_NOT_OURS, /* an input claims our fingerprint, but its key does not produce its script */
     CORE_ERR_NOTHING_TO_SIGN,
-    CORE_ERR_SIGHASH,      /* a sighash type we do not allow */
-    CORE_ERR_SCRIPT,       /* an input to be signed is neither P2WPKH nor P2TR */
+    CORE_ERR_SIGHASH,        /* a sighash type we do not allow */
+    CORE_ERR_SCRIPT,         /* an input to be signed is neither P2WPKH nor P2TR */
     CORE_ERR_PREVTX_MISSING, /* two or more inputs including SegWit v0, and no non_witness_utxo */
     CORE_ERR_PREVTX_MISMATCH,
     CORE_ERR_FEE,

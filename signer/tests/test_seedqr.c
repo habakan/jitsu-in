@@ -4,7 +4,16 @@
 #include "seedqr.h"
 
 static int checks, failures;
-#define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; printf("FAIL "); printf(__VA_ARGS__); printf("\n"); } } while (0)
+#define CHECK(cond, ...)                                                                                               \
+    do {                                                                                                               \
+        checks++;                                                                                                      \
+        if (!(cond)) {                                                                                                 \
+            failures++;                                                                                                \
+            printf("FAIL ");                                                                                           \
+            printf(__VA_ARGS__);                                                                                       \
+            printf("\n");                                                                                              \
+        }                                                                                                              \
+    } while (0)
 
 int main(void) {
     char out[256];
@@ -15,13 +24,17 @@ int main(void) {
     const char *d24 = "000000000000000000000000000000000000000000000000"
                       "000000000000000000000000000000000000000000000102";
     const uint8_t e24[32] = {0};
-    const char *want12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    const char *want24 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon "
-                         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+    const char *want12 =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const char *want24 =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon "
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
     char bad[49];
 
-    CHECK(seedqr_decode((const uint8_t *)d12, 48, out, sizeof(out)) > 0 && !strcmp(out, want12), "12 words from digits");
-    CHECK(seedqr_decode((const uint8_t *)d24, 96, out, sizeof(out)) > 0 && !strcmp(out, want24), "24 words from digits");
+    CHECK(seedqr_decode((const uint8_t *)d12, 48, out, sizeof(out)) > 0 && !strcmp(out, want12),
+          "12 words from digits");
+    CHECK(seedqr_decode((const uint8_t *)d24, 96, out, sizeof(out)) > 0 && !strcmp(out, want24),
+          "24 words from digits");
     CHECK(seedqr_decode(e12, 16, out, sizeof(out)) > 0 && !strcmp(out, want12), "12 words from entropy");
     CHECK(seedqr_decode(e24, 32, out, sizeof(out)) > 0 && !strcmp(out, want24), "24 words from entropy");
 

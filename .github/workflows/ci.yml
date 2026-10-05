@@ -46,6 +46,11 @@ jobs:
           unzip -q /tmp/kc.zip -d /tmp
           echo "/tmp/kotlinc/bin" >> $GITHUB_PATH
 
+      - name: C formatting and static analysis
+        run: |
+          SDK=/tmp/wasi-sdk-34.0-x86_64-linux
+          make check-c-format check-c-tidy LLVM=$SDK/bin WASI=$SDK/share/wasi-sysroot
+
       - name: Build both modules
         run: |
           SDK=/tmp/wasi-sdk-34.0-x86_64-linux

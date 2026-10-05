@@ -30,7 +30,9 @@ uint32_t ur_crc32(const uint8_t *p, size_t n) {
     return ~c;
 }
 
-static uint64_t rotl(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
+static uint64_t rotl(uint64_t x, int k) {
+    return (x << k) | (x >> (64 - k));
+}
 
 void ur_rng_seed(ur_rng_t *r, const uint8_t *seed, size_t n) {
     uint8_t h[32];
@@ -52,7 +54,9 @@ uint64_t ur_rng_next(ur_rng_t *r) {
     return result;
 }
 
-double ur_rng_next_double(ur_rng_t *r) { return (double)ur_rng_next(r) / 18446744073709551616.0; }
+double ur_rng_next_double(ur_rng_t *r) {
+    return (double)ur_rng_next(r) / 18446744073709551616.0;
+}
 
 uint64_t ur_rng_next_int(ur_rng_t *r, uint64_t low, uint64_t high) {
     return (uint64_t)(ur_rng_next_double(r) * (double)(high - low + 1)) + low;
@@ -76,8 +80,8 @@ int ur_bytewords_decode(const char *s, size_t n, uint8_t *out, size_t cap) {
         out[i] = (uint8_t)table[y * 26 + x];
     }
     len -= 4;
-    if (ur_crc32(out, len) != ((uint32_t)out[len] << 24 | (uint32_t)out[len + 1] << 16 |
-                               (uint32_t)out[len + 2] << 8 | out[len + 3]))
+    if (ur_crc32(out, len) !=
+        ((uint32_t)out[len] << 24 | (uint32_t)out[len + 1] << 16 | (uint32_t)out[len + 2] << 8 | out[len + 3]))
         return -1;
     return (int)len;
 }
@@ -94,20 +98,16 @@ void ur_sampler_init(const double *w, size_t n, double *probs, int16_t *aliases)
     for (size_t i = 0; i < n; i++) probs[i] = w[i] * (double)n / sum;
     /* reversed index order, as in the reference */
     for (int i = (int)n - 1; i >= 0; i--) {
-        if (probs[i] < 1)
-            stack[ns++] = (int16_t)i;
-        else
-            stack[n - 1 - nl++] = (int16_t)i;
+        if (probs[i] < 1) stack[ns++] = (int16_t)i;
+        else stack[n - 1 - nl++] = (int16_t)i;
     }
     for (size_t i = 0; i < n; i++) aliases[i] = 0;
     while (ns && nl) {
         int a = stack[--ns], g = stack[n - nl--];
         aliases[a] = (int16_t)g;
         probs[g] += probs[a] - 1;
-        if (probs[g] < 1)
-            stack[ns++] = (int16_t)g;
-        else
-            stack[n - 1 - nl++] = (int16_t)g;
+        if (probs[g] < 1) stack[ns++] = (int16_t)g;
+        else stack[n - 1 - nl++] = (int16_t)g;
     }
     while (nl) probs[stack[n - nl--]] = 1;
     while (ns) probs[stack[--ns]] = 1;
@@ -140,8 +140,9 @@ void ur_shuffle(uint16_t *items, size_t n, ur_rng_t *r) {
 
 size_t ur_choose_fragments(uint32_t seq_num, size_t seq_len, uint32_t checksum, uint8_t *bits) {
     static uint16_t idx[UR_MAX_SEQ_LEN];
-    uint8_t seed[8] = {(uint8_t)(seq_num >> 24), (uint8_t)(seq_num >> 16), (uint8_t)(seq_num >> 8), (uint8_t)seq_num,
-                       (uint8_t)(checksum >> 24), (uint8_t)(checksum >> 16), (uint8_t)(checksum >> 8), (uint8_t)checksum};
+    uint8_t seed[8] = {(uint8_t)(seq_num >> 24), (uint8_t)(seq_num >> 16),  (uint8_t)(seq_num >> 8),
+                       (uint8_t)seq_num,         (uint8_t)(checksum >> 24), (uint8_t)(checksum >> 16),
+                       (uint8_t)(checksum >> 8), (uint8_t)checksum};
     ur_rng_t r;
     size_t degree;
 
@@ -181,14 +182,20 @@ static struct {
     size_t sp;
 } d;
 
-static int bit(const uint8_t *b, size_t i) { return b[i / 8] >> (i % 8) & 1; }
+static int bit(const uint8_t *b, size_t i) {
+    return b[i / 8] >> (i % 8) & 1;
+}
 
 static void xor_into(uint8_t *dst, const uint8_t *src, size_t n) {
     while (n--) *dst++ ^= *src++;
 }
 
-static uint8_t *frag(size_t i) { return d.work + i * d.frag_len; }
-static uint8_t *slot_data(size_t s) { return d.pool + s * d.frag_len; }
+static uint8_t *frag(size_t i) {
+    return d.work + i * d.frag_len;
+}
+static uint8_t *slot_data(size_t s) {
+    return d.pool + s * d.frag_len;
+}
 
 static size_t only_index(const uint8_t *bits) {
     for (size_t i = 0; i < d.seq_len; i++)
@@ -284,8 +291,12 @@ void ur_decoder_reset(uint8_t *work, size_t work_cap) {
     d.work_cap = work_cap;
 }
 
-const char *ur_decoder_type(void) { return d.type; }
-const uint8_t *ur_decoder_message(void) { return d.work; }
+const char *ur_decoder_type(void) {
+    return d.type;
+}
+const uint8_t *ur_decoder_message(void) {
+    return d.work;
+}
 
 void ur_decoder_progress(unsigned *expected, unsigned *received) {
     *expected = d.multipart ? d.seq_len : 0;
@@ -395,10 +406,8 @@ long ur_decoder_receive(char *s, size_t n) {
         memmove(body, data, frag_len);
         memset(bits, 0, sizeof(bits)); /* set comparisons look at all BITS_BYTES */
         size_t count = ur_choose_fragments(seq_num, seq_len, checksum, bits);
-        if (count == 1)
-            add_simple(only_index(bits), body);
-        else
-            add_mixed(bits, count, body);
+        if (count == 1) add_simple(only_index(bits), body);
+        else add_mixed(bits, count, body);
         drain();
         if (d.received < d.seq_len) return 0;
         if (ur_crc32(d.work, d.message_len) != d.checksum) {
@@ -471,7 +480,8 @@ static size_t put_str(char *out, const char *s) {
 static size_t put_uint(char *out, uint32_t v) {
     char t[10];
     size_t n = 0, o = 0;
-    do t[n++] = (char)('0' + v % 10); while (v /= 10);
+    do t[n++] = (char)('0' + v % 10);
+    while (v /= 10);
     while (n) out[o++] = t[--n];
     return o;
 }

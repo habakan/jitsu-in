@@ -64,7 +64,8 @@ int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, uint8_t out[32]) {
 
 int sighash_bip341_keypath(const secp256k1_context *ctx, const plan_t *p, unsigned index, uint8_t hash_type,
                            uint8_t out[32]) {
-    /* epoch(1) + hash_type(1) + version/locktime(8) + sha_*(5x32) + spend_type(1) + input(at most 36+8+84+4) + single(32) */
+    /* epoch(1) + hash_type(1) + version/locktime(8) + sha_*(5x32) + spend_type(1) + input(at most 36+8+84+4) +
+     * single(32) */
     uint8_t msg[1 + 1 + 8 + 160 + 1 + 132 + 32], d[32];
     size_t n = 0;
     int acp = hash_type & 0x80, out_type = hash_type & 3;

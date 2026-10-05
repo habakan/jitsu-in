@@ -19,7 +19,9 @@ static secp256k1_context *ctx;
 /* The handover area: seckey[32] msg[32] aux[32] out[64] */
 static unsigned char io[160];
 
-unsigned char *EXPORT(prim_io)(void) { return io; }
+unsigned char *EXPORT(prim_io)(void) {
+    return io;
+}
 
 int EXPORT(prim_init)(void) {
     if (secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE) > sizeof(ctx_mem)) return 0;
@@ -29,16 +31,15 @@ int EXPORT(prim_init)(void) {
 
 int EXPORT(prim_sign_ecdsa)(void) {
     secp256k1_ecdsa_signature sig;
-    int ok = secp256k1_ecdsa_sign(ctx, &sig, io + 32, io, NULL, NULL)
-          && secp256k1_ecdsa_signature_serialize_compact(ctx, io + 96, &sig);
+    int ok = secp256k1_ecdsa_sign(ctx, &sig, io + 32, io, NULL, NULL) &&
+             secp256k1_ecdsa_signature_serialize_compact(ctx, io + 96, &sig);
     memset(&sig, 0, sizeof(sig));
     return ok;
 }
 
 int EXPORT(prim_sign_schnorr)(void) {
     secp256k1_keypair kp;
-    int ok = secp256k1_keypair_create(ctx, &kp, io)
-          && secp256k1_schnorrsig_sign32(ctx, io + 96, io + 32, &kp, io + 64);
+    int ok = secp256k1_keypair_create(ctx, &kp, io) && secp256k1_schnorrsig_sign32(ctx, io + 96, io + 32, &kp, io + 64);
     memset(&kp, 0, sizeof(kp));
     return ok;
 }
@@ -52,7 +53,9 @@ void EXPORT(prim_zeroize)(void) {
 static unsigned char in[512];
 static unsigned char seed[64];
 
-unsigned char *EXPORT(prim_input)(void) { return in; }
+unsigned char *EXPORT(prim_input)(void) {
+    return in;
+}
 
 int EXPORT(prim_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
     unsigned char salt[8 + sizeof(in)];
@@ -72,8 +75,8 @@ int EXPORT(prim_bip32_derive)(unsigned depth) {
     int ok;
     if (depth > 16) return 0;
     memcpy(path, in, 4 * depth);
-    ok = bip32_master(seed, &master) && bip32_derive(ctx, &master, path, depth, &node)
-      && bip32_pubkey(ctx, node.key, io + 96);
+    ok = bip32_master(seed, &master) && bip32_derive(ctx, &master, path, depth, &node) &&
+         bip32_pubkey(ctx, node.key, io + 96);
     wipe(&master, sizeof(master));
     wipe(&node, sizeof(node));
     return ok;

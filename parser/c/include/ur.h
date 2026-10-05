@@ -7,18 +7,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define UR_MAX_SEQ_LEN 1024        /* parts a message may be split into */
-#define UR_MAX_MIXED 64            /* mixed parts kept while waiting for reduction */
-#define UR_MIXED_POOL 16384        /* bytes shared by the kept mixed parts */
+#define UR_MAX_SEQ_LEN 1024 /* parts a message may be split into */
+#define UR_MAX_MIXED 64     /* mixed parts kept while waiting for reduction */
+#define UR_MIXED_POOL 16384 /* bytes shared by the kept mixed parts */
 
 enum {
-    UR_ERR_SCHEME = -1,     /* not "ur:<type>/..." */
-    UR_ERR_BYTEWORDS = -2,  /* invalid characters or CRC32 */
-    UR_ERR_PART = -3,       /* malformed part CBOR or sequence component */
-    UR_ERR_MISMATCH = -4,   /* part disagrees with earlier parts (type, lengths, checksum) */
-    UR_ERR_LIMIT = -5,      /* beyond the limits above or the caller's buffer */
-    UR_ERR_MESSAGE = -6,    /* reassembled message fails its CRC32 */
-    UR_ERR_TYPE = -7,       /* complete, but not a PSBT (crypto-psbt / psbt) holding a CBOR byte string */
+    UR_ERR_SCHEME = -1,    /* not "ur:<type>/..." */
+    UR_ERR_BYTEWORDS = -2, /* invalid characters or CRC32 */
+    UR_ERR_PART = -3,      /* malformed part CBOR or sequence component */
+    UR_ERR_MISMATCH = -4,  /* part disagrees with earlier parts (type, lengths, checksum) */
+    UR_ERR_LIMIT = -5,     /* beyond the limits above or the caller's buffer */
+    UR_ERR_MESSAGE = -6,   /* reassembled message fails its CRC32 */
+    UR_ERR_TYPE = -7,      /* complete, but not a PSBT (crypto-psbt / psbt) holding a CBOR byte string */
 };
 
 typedef struct {

@@ -5,9 +5,20 @@
 #include "ur_ref_vectors.h"
 
 static int checks, failures;
-#define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; printf("FAIL %s:%d ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
+#define CHECK(cond, ...)                                                                                               \
+    do {                                                                                                               \
+        checks++;                                                                                                      \
+        if (!(cond)) {                                                                                                 \
+            failures++;                                                                                                \
+            printf("FAIL %s:%d ", __FILE__, __LINE__);                                                                 \
+            printf(__VA_ARGS__);                                                                                       \
+            printf("\n");                                                                                              \
+        }                                                                                                              \
+    } while (0)
 
-static void seed_str(ur_rng_t *r, const char *s) { ur_rng_seed(r, (const uint8_t *)s, strlen(s)); }
+static void seed_str(ur_rng_t *r, const char *s) {
+    ur_rng_seed(r, (const uint8_t *)s, strlen(s));
+}
 
 /* make_message() of the reference tests: bytes from Xoshiro256 seeded with a string */
 static void make_message(uint8_t *out, size_t n, const char *seed) {
@@ -46,8 +57,9 @@ int main(void) {
         CHECK(ur_bytewords_decode(s, strlen(s), out, sizeof(out)) == 5 && !memcmp(out, want, 5), "bytewords 1");
         strcpy(s, "aeadaolazojendeowf");
         CHECK(ur_bytewords_decode(s, strlen(s), out, sizeof(out)) < 0, "bytewords bad checksum");
-        CHECK(ur_bytewords_decode(REF_BYTEWORDS_2_MINIMAL, strlen(REF_BYTEWORDS_2_MINIMAL), out, sizeof(out)) == 100
-              && !memcmp(out, REF_BYTEWORDS_2_INPUT, 100), "bytewords 2");
+        CHECK(ur_bytewords_decode(REF_BYTEWORDS_2_MINIMAL, strlen(REF_BYTEWORDS_2_MINIMAL), out, sizeof(out)) == 100 &&
+                  !memcmp(out, REF_BYTEWORDS_2_INPUT, 100),
+              "bytewords 2");
     }
 
     seed_str(&r, "Wolf");
@@ -67,7 +79,8 @@ int main(void) {
         int16_t aliases[4];
         ur_sampler_init(w, 4, probs, aliases);
         seed_str(&r, "Wolf");
-        for (int i = 0; i < 500; i++) CHECK(ur_sampler_next(probs, aliases, 4, &r) == REF_SAMPLER[i], "sampler [%d]", i);
+        for (int i = 0; i < 500; i++)
+            CHECK(ur_sampler_next(probs, aliases, 4, &r) == REF_SAMPLER[i], "sampler [%d]", i);
     }
 
     seed_str(&r, "Wolf");
@@ -106,8 +119,9 @@ int main(void) {
     ur_decoder_reset(work, sizeof(work));
     {
         size_t n = make_message_cbor(expect, 50);
-        CHECK(feed(REF_SINGLE_PART) == (long)n && !memcmp(ur_decoder_message(), expect, n)
-              && !strcmp(ur_decoder_type(), "bytes"), "single part");
+        CHECK(feed(REF_SINGLE_PART) == (long)n && !memcmp(ur_decoder_message(), expect, n) &&
+                  !strcmp(ur_decoder_type(), "bytes"),
+              "single part");
     }
 
     /* multipart UR of make_message(256): the 9 pure parts, then only the mixed parts 10..20 */
@@ -156,11 +170,15 @@ int main(void) {
         strcpy(bad, REF_PARTS[1]);
         bad[strlen(bad) - 1] ^= 1;
         CHECK(feed(bad) == UR_ERR_BYTEWORDS, "corrupted part");
-        CHECK(feed("ur:psbt/1-9/lpadascfadaxcywenbpljkhdcahkadaemejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtdkgslpgh")
-              == UR_ERR_MISMATCH, "type change");
+        CHECK(feed("ur:psbt/1-9/"
+                   "lpadascfadaxcywenbpljkhdcahkadaemejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtdkgslpgh") ==
+                  UR_ERR_MISMATCH,
+              "type change");
         CHECK(feed("xr:bytes/1-9/aeadaolazmjendeoti") == UR_ERR_SCHEME, "scheme");
-        CHECK(feed("ur:bytes/2-8/lpaoascfadaxcywenbpljkhdcagwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsgmghhkhstlrdcxaefz")
-              == UR_ERR_PART, "sequence component disagrees with the part");
+        CHECK(feed("ur:bytes/2-8/"
+                   "lpaoascfadaxcywenbpljkhdcagwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsgmghhkhstlrdcxaefz") ==
+                  UR_ERR_PART,
+              "sequence component disagrees with the part");
         unsigned expected, received;
         ur_decoder_progress(&expected, &received);
         CHECK(expected == 9 && received == 1, "progress kept after rejections (%u/%u)", received, expected);

@@ -26,9 +26,23 @@ static void compress(uint32_t *s, const uint8_t *b) {
     for (int i = 0; i < 64; i++) {
         uint32_t t1 = h + (ROR(e, 6) ^ ROR(e, 11) ^ ROR(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i];
         uint32_t t2 = (ROR(a, 2) ^ ROR(a, 13) ^ ROR(a, 22)) + ((a & bb) ^ (a & c) ^ (bb & c));
-        h = g; g = f; f = e; e = d + t1; d = c; c = bb; bb = a; a = t1 + t2;
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1;
+        d = c;
+        c = bb;
+        bb = a;
+        a = t1 + t2;
     }
-    s[0] += a; s[1] += bb; s[2] += c; s[3] += d; s[4] += e; s[5] += f; s[6] += g; s[7] += h;
+    s[0] += a;
+    s[1] += bb;
+    s[2] += c;
+    s[3] += d;
+    s[4] += e;
+    s[5] += f;
+    s[6] += g;
+    s[7] += h;
 }
 
 void sha256_init(sha256_ctx *c) {
@@ -60,7 +74,7 @@ void sha256_final(sha256_ctx *c, uint8_t out[32]) {
     sha256_update(c, pad, padlen + 8);
     for (int i = 0; i < 8; i++)
         out[4 * i] = (uint8_t)(c->s[i] >> 24), out[4 * i + 1] = (uint8_t)(c->s[i] >> 16),
-        out[4 * i + 2] = (uint8_t)(c->s[i] >> 8), out[4 * i + 3] = (uint8_t)c->s[i];
+                out[4 * i + 2] = (uint8_t)(c->s[i] >> 8), out[4 * i + 3] = (uint8_t)c->s[i];
 }
 
 void sha256(const uint8_t *p, size_t n, uint8_t out[32]) {

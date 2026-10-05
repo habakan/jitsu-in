@@ -20,7 +20,7 @@ void sha512_update(sha512_ctx *c, const unsigned char *p, size_t n);
 void sha512_final(sha512_ctx *c, unsigned char out[64]);
 void hmac_sha512_init(hmac_sha512_ctx *h, const unsigned char *key, size_t keylen);
 void hmac_sha512_final(hmac_sha512_ctx *h, unsigned char out[64]);
-void pbkdf2_hmac_sha512(const unsigned char *pw, size_t pwlen, const unsigned char *salt, size_t saltlen,
-                        unsigned iter, unsigned char out[64]);
+void pbkdf2_hmac_sha512(const unsigned char *pw, size_t pwlen, const unsigned char *salt, size_t saltlen, unsigned iter,
+                        unsigned char out[64]);
 
 #endif

@@ -5,7 +5,16 @@
 #include "sha512.h"
 
 static int checks, failures;
-#define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; printf("FAIL "); printf(__VA_ARGS__); printf("\n"); } } while (0)
+#define CHECK(cond, ...)                                                                                               \
+    do {                                                                                                               \
+        checks++;                                                                                                      \
+        if (!(cond)) {                                                                                                 \
+            failures++;                                                                                                \
+            printf("FAIL ");                                                                                           \
+            printf(__VA_ARGS__);                                                                                       \
+            printf("\n");                                                                                              \
+        }                                                                                                              \
+    } while (0)
 
 #define MN "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
@@ -19,7 +28,9 @@ int main(void) {
     CHECK(core_account_xpub(xpub, desc), "mainnet xpub");
     printf("  mainnet %s\n  %s\n", xpub, desc);
     /* BIP84's own test vector (m/84'/0'/0') */
-    CHECK(!strcmp(xpub, "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V"), "BIP84 test vector");
+    CHECK(!strcmp(xpub, "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXY"
+                        "VUhLv1VMrjPC7PW6V"),
+          "BIP84 test vector");
 
     CHECK(core_init(CORE_TESTNET) && core_load_seed(seed), "load testnet");
     CHECK(core_account_xpub(xpub, desc), "testnet xpub");

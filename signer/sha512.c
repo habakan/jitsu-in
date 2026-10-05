@@ -36,8 +36,8 @@ static void store_be(unsigned char *p, uint64_t v) {
 #ifdef SHA512_HOST_COMPRESS
 /* 64-bit arithmetic runs about 25x slower in the rv32 WASM interpreter, so only the compression
  * function is handed to the host */
-__attribute__((import_module("env"), import_name("host_sha512_compress")))
-void host_sha512_compress(uint64_t *s, const unsigned char *block);
+__attribute__((import_module("env"), import_name("host_sha512_compress"))) void
+host_sha512_compress(uint64_t *s, const unsigned char *block);
 #define compress host_sha512_compress
 #else
 #define compress sha512_compress
@@ -54,9 +54,23 @@ void sha512_compress(uint64_t s[8], const unsigned char block[128]) {
     for (int i = 0; i < 80; i++) {
         uint64_t t1 = h + (ROR(e, 14) ^ ROR(e, 18) ^ ROR(e, 41)) + ((e & f) ^ (~e & g)) + K[i] + w[i];
         uint64_t t2 = (ROR(a, 28) ^ ROR(a, 34) ^ ROR(a, 39)) + ((a & b) ^ (a & c) ^ (b & c));
-        h = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2;
     }
-    s[0] += a; s[1] += b; s[2] += c; s[3] += d; s[4] += e; s[5] += f; s[6] += g; s[7] += h;
+    s[0] += a;
+    s[1] += b;
+    s[2] += c;
+    s[3] += d;
+    s[4] += e;
+    s[5] += f;
+    s[6] += g;
+    s[7] += h;
 }
 
 void sha512_init(sha512_ctx *c) {
@@ -91,7 +105,7 @@ void sha512_final(sha512_ctx *c, unsigned char out[64]) {
 
 void hmac_sha512_init(hmac_sha512_ctx *h, const unsigned char *key, size_t keylen) {
     unsigned char k[128] = {0};
-    if (keylen > 128) {  /* a 24-word mnemonic can be longer than 128 bytes */
+    if (keylen > 128) { /* a 24-word mnemonic can be longer than 128 bytes */
         sha512_init(&h->inner);
         sha512_update(&h->inner, key, keylen);
         sha512_final(&h->inner, k);
@@ -117,8 +131,8 @@ void hmac_sha512_final(hmac_sha512_ctx *h, unsigned char out[64]) {
 
 /* dklen fixed at 64 (one block) for BIP39. Reusing the state after the inner and outer pads halves
  * the number of compressions */
-void pbkdf2_hmac_sha512(const unsigned char *pw, size_t pwlen, const unsigned char *salt, size_t saltlen,
-                        unsigned iter, unsigned char out[64]) {
+void pbkdf2_hmac_sha512(const unsigned char *pw, size_t pwlen, const unsigned char *salt, size_t saltlen, unsigned iter,
+                        unsigned char out[64]) {
     hmac_sha512_ctx base, h;
     unsigned char u[64];
     static const unsigned char one[4] = {0, 0, 0, 1};

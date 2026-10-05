@@ -27,19 +27,37 @@ static core_prevtx_t prevtx[PLAN_MAX_INPUTS];
 static core_review_t review;
 static core_display_t display;
 static core_sig_t sigs[PLAN_MAX_INPUTS];
-static uint8_t in[512];   /* mnemonic || passphrase, or a 64-byte seed */
+static uint8_t in[512]; /* mnemonic || passphrase, or a 64-byte seed */
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 
-unsigned char *EXPORT(signer_input)(void) { return in; }
+unsigned char *EXPORT(signer_input)(void) {
+    return in;
+}
 /* So a host can bounds-check before writing, as parser.wasm's parser_input_cap lets it */
-unsigned int EXPORT(signer_input_cap)(void) { return (unsigned int)sizeof(in); }
-plan_t *EXPORT(signer_plan)(void) { return &plan; }
-unsigned char *EXPORT(signer_prevtx)(void) { return prevtx_buf; }
-core_review_t *EXPORT(signer_review_output)(void) { return &review; }
-core_display_t *EXPORT(signer_display_output)(void) { return &display; }
-core_sig_t *EXPORT(signer_sigs)(void) { return sigs; }
-char *EXPORT(signer_xpub_output)(void) { return xpub; }
-char *EXPORT(signer_desc_output)(void) { return desc; }
+unsigned int EXPORT(signer_input_cap)(void) {
+    return (unsigned int)sizeof(in);
+}
+plan_t *EXPORT(signer_plan)(void) {
+    return &plan;
+}
+unsigned char *EXPORT(signer_prevtx)(void) {
+    return prevtx_buf;
+}
+core_review_t *EXPORT(signer_review_output)(void) {
+    return &review;
+}
+core_display_t *EXPORT(signer_display_output)(void) {
+    return &display;
+}
+core_sig_t *EXPORT(signer_sigs)(void) {
+    return sigs;
+}
+char *EXPORT(signer_xpub_output)(void) {
+    return xpub;
+}
+char *EXPORT(signer_desc_output)(void) {
+    return desc;
+}
 
 int EXPORT(signer_init)(int testnet) {
     memset(prevtx, 0, sizeof(prevtx));
@@ -78,7 +96,9 @@ void EXPORT(signer_unload)(void) {
     wipe(&display, sizeof(display));
 }
 
-unsigned EXPORT(signer_fingerprint)(void) { return core_fingerprint(); }
+unsigned EXPORT(signer_fingerprint)(void) {
+    return core_fingerprint();
+}
 
 /* Where input i's non_witness_utxo sits inside prevtx_buf. A len of 0 means it has none */
 int EXPORT(signer_set_prevtx)(unsigned i, unsigned off, unsigned len) {
@@ -88,8 +108,12 @@ int EXPORT(signer_set_prevtx)(unsigned i, unsigned off, unsigned len) {
     return 1;
 }
 
-int EXPORT(signer_review)(void) { return core_review(&plan, prevtx, &review); }
-int EXPORT(signer_display)(void) { return core_display(&plan, &review, &display); }
+int EXPORT(signer_review)(void) {
+    return core_review(&plan, prevtx, &review);
+}
+int EXPORT(signer_display)(void) {
+    return core_display(&plan, &review, &display);
+}
 
 /* Sign and return how many. A negative result is -CORE_ERR_*. No rng is passed — that would mean an
  * import — so the secp256k1 context is not blinded here. Power analysis is a concern on the device,

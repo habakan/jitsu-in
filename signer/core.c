@@ -35,13 +35,11 @@ static int spk_type(const plan_script_t *s) {
 static int taproot_tweak(uint8_t seckey[32], uint8_t xonly_out[32], secp256k1_keypair *kp) {
     secp256k1_xonly_pubkey internal, output;
     uint8_t internal_ser[32], tweak[32];
-    int ok = secp256k1_keypair_create(ctx, kp, seckey)
-          && secp256k1_keypair_xonly_pub(ctx, &internal, NULL, kp)
-          && secp256k1_xonly_pubkey_serialize(ctx, internal_ser, &internal)
-          && secp256k1_tagged_sha256(ctx, tweak, (const uint8_t *)"TapTweak", 8, internal_ser, 32)
-          && secp256k1_keypair_xonly_tweak_add(ctx, kp, tweak)
-          && secp256k1_keypair_xonly_pub(ctx, &output, NULL, kp)
-          && secp256k1_xonly_pubkey_serialize(ctx, xonly_out, &output);
+    int ok = secp256k1_keypair_create(ctx, kp, seckey) && secp256k1_keypair_xonly_pub(ctx, &internal, NULL, kp) &&
+             secp256k1_xonly_pubkey_serialize(ctx, internal_ser, &internal) &&
+             secp256k1_tagged_sha256(ctx, tweak, (const uint8_t *)"TapTweak", 8, internal_ser, 32) &&
+             secp256k1_keypair_xonly_tweak_add(ctx, kp, tweak) && secp256k1_keypair_xonly_pub(ctx, &output, NULL, kp) &&
+             secp256k1_xonly_pubkey_serialize(ctx, xonly_out, &output);
     wipe(tweak, sizeof(tweak));
     return ok;
 }
@@ -133,8 +131,8 @@ static int output_owner(const plan_t *p, const core_review_t *r, const plan_outp
     bip32_node_t node;
     uint32_t purpose = type == SPK_P2WPKH ? (84 | H) : type == SPK_P2TR ? (86 | H) : 0;
 
-    if (!purpose || k->depth != 5 || k->path[0] != purpose || k->path[1] != ((uint32_t)network | H)
-        || !(k->path[2] & H) || k->path[3] > 1 || k->path[4] >= MAX_ADDRESS_INDEX)
+    if (!purpose || k->depth != 5 || k->path[0] != purpose || k->path[1] != ((uint32_t)network | H) ||
+        !(k->path[2] & H) || k->path[3] > 1 || k->path[4] >= MAX_ADDRESS_INDEX)
         return CORE_OUT_EXTERNAL;
     for (unsigned i = 0; i < p->n_inputs; i++) {
         const plan_keypath_t *ik = &p->inputs[i].key;
@@ -174,7 +172,9 @@ void core_unload(void) {
     reviewed = 0;
 }
 
-uint32_t core_fingerprint(void) { return master_fp; }
+uint32_t core_fingerprint(void) {
+    return master_fp;
+}
 
 int core_review(const plan_t *p, const core_prevtx_t prev[PLAN_MAX_INPUTS], core_review_t *r) {
     bip32_node_t node;
@@ -286,16 +286,14 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
         uint32_t counter = 0;
         ok = sighash_bip143_p2wpkh(p, i, digest);
         do {
-            ok = ok && secp256k1_ecdsa_sign(ctx, &sig, digest, node.key, NULL, counter ? extra : NULL)
-                    && secp256k1_ecdsa_signature_serialize_compact(ctx, compact, &sig);
+            ok = ok && secp256k1_ecdsa_sign(ctx, &sig, digest, node.key, NULL, counter ? extra : NULL) &&
+                 secp256k1_ecdsa_signature_serialize_compact(ctx, compact, &sig);
             counter++;
             for (int k = 0; k < 4; k++) extra[k] = (uint8_t)(counter >> (8 * k));
         } while (ok && compact[0] >= 0x80);
         /* Verify before letting it out: collecting a glitched signature next to a good one can recover the key */
-        ok = ok && secp256k1_ec_pubkey_create(ctx, &pub, node.key)
-          && secp256k1_ecdsa_verify(ctx, &sig, digest, &pub)
-          && secp256k1_ecdsa_signature_serialize_der(ctx, s->sig, &len, &sig)
-          && bip32_pubkey(ctx, node.key, s->pubkey);
+        ok = ok && secp256k1_ec_pubkey_create(ctx, &pub, node.key) && secp256k1_ecdsa_verify(ctx, &sig, digest, &pub) &&
+             secp256k1_ecdsa_signature_serialize_der(ctx, s->sig, &len, &sig) && bip32_pubkey(ctx, node.key, s->pubkey);
         s->sig[len] = 0x01;
         s->sig_len = (uint8_t)(len + 1);
     } else if (ok) {
@@ -303,11 +301,10 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
          * the same PSBT always yields the same signature, which another implementation can reproduce.
          * Core, Trezor, Jade and BDK all do this. **Revisit before adding multisig**: BIP340 says
          * deterministic nonces are unsafe there */
-        ok = taproot_tweak(node.key, xonly, &kp)
-          && sighash_bip341_keypath(ctx, p, i, in->sighash_type, digest)
-          && secp256k1_schnorrsig_sign32(ctx, s->sig, digest, &kp, NULL)
-          && secp256k1_xonly_pubkey_parse(ctx, &xpub, xonly)
-          && secp256k1_schnorrsig_verify(ctx, s->sig, digest, 32, &xpub);
+        ok = taproot_tweak(node.key, xonly, &kp) && sighash_bip341_keypath(ctx, p, i, in->sighash_type, digest) &&
+             secp256k1_schnorrsig_sign32(ctx, s->sig, digest, &kp, NULL) &&
+             secp256k1_xonly_pubkey_parse(ctx, &xpub, xonly) &&
+             secp256k1_schnorrsig_verify(ctx, s->sig, digest, 32, &xpub);
         s->pubkey[0] = 0;
         memcpy(s->pubkey + 1, xonly, 32);
         s->sig_len = 64;

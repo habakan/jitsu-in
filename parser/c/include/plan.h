@@ -7,12 +7,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PLAN_MAGIC       0x4e4c5042u /* "BPLN" */
-#define PLAN_VERSION     1
-#define PLAN_MAX_INPUTS  16
+#define PLAN_MAGIC 0x4e4c5042u /* "BPLN" */
+#define PLAN_VERSION 1
+#define PLAN_MAX_INPUTS 16
 #define PLAN_MAX_OUTPUTS 16
-#define PLAN_MAX_SPK     83 /* standard OP_RETURN limit; P2TR / P2WSH are 34 */
-#define PLAN_MAX_DEPTH   8
+#define PLAN_MAX_SPK 83 /* standard OP_RETURN limit; P2TR / P2WSH are 34 */
+#define PLAN_MAX_DEPTH 8
 
 typedef struct {
     uint8_t len;
@@ -55,7 +55,7 @@ typedef struct {
     uint8_t input;
     uint8_t pubkey[33]; /* compressed pubkey for P2WPKH; 0x00 + x-only output key for P2TR */
     uint8_t sig_len;
-    uint8_t sig[73];    /* DER + sighash byte for ECDSA; 64 or 65 bytes for Schnorr */
+    uint8_t sig[73]; /* DER + sighash byte for ECDSA; 64 or 65 bytes for Schnorr */
 } plan_sig_t;
 
 _Static_assert(sizeof(plan_sig_t) == 108, "plan_sig_t layout");

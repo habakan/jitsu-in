@@ -45,8 +45,8 @@ static int keypath(const uint8_t *v, size_t n, uint32_t fp, cand_t *c) {
     if (n < 4 || (n - 4) % 4) return 0;
     depth = (n - 4) / 4;
     /* The fingerprint bytes (display order) are compared as a big-endian integer; path elements are little-endian */
-    if (c->found || ((uint32_t)v[0] << 24 | (uint32_t)v[1] << 16 | (uint32_t)v[2] << 8 | v[3]) != fp
-        || depth > PLAN_MAX_DEPTH)
+    if (c->found || ((uint32_t)v[0] << 24 | (uint32_t)v[1] << 16 | (uint32_t)v[2] << 8 | v[3]) != fp ||
+        depth > PLAN_MAX_DEPTH)
         return 1;
     c->found = 1;
     c->depth = (uint8_t)depth;
@@ -95,8 +95,12 @@ static int set_script(plan_script_t *s, const uint8_t *b, size_t n) {
     return 1;
 }
 
-static int is_p2wpkh(const plan_script_t *s) { return s->len == 22 && s->bytes[0] == 0 && s->bytes[1] == 20; }
-static int is_p2tr(const plan_script_t *s) { return s->len == 34 && s->bytes[0] == 0x51 && s->bytes[1] == 32; }
+static int is_p2wpkh(const plan_script_t *s) {
+    return s->len == 22 && s->bytes[0] == 0 && s->bytes[1] == 20;
+}
+static int is_p2tr(const plan_script_t *s) {
+    return s->len == 34 && s->bytes[0] == 0x51 && s->bytes[1] == 32;
+}
 
 typedef struct {
     int bad_script_sig, too_many, bad_spk;
@@ -184,14 +188,25 @@ static int parse_input(rd_t *r, unsigned idx, uint32_t fp) {
     for (size_t i = 0; i < n; i++) {
         const kv_t *e = &kv[i];
         switch (e->key[0]) {
-        case 0x00: if (e->klen != 1) return P_ERR_FORMAT; nwu = e; break;
-        case 0x01: if (e->klen != 1) return P_ERR_FORMAT; wu = e; break;
-        case 0x02: if (e->klen != 34 && e->klen != 66) return P_ERR_FORMAT; break;
+        case 0x00:
+            if (e->klen != 1) return P_ERR_FORMAT;
+            nwu = e;
+            break;
+        case 0x01:
+            if (e->klen != 1) return P_ERR_FORMAT;
+            wu = e;
+            break;
+        case 0x02:
+            if (e->klen != 34 && e->klen != 66) return P_ERR_FORMAT;
+            break;
         case 0x03:
             if (e->klen != 1 || e->vlen != 4) return P_ERR_FORMAT;
             sighash = le32(e->val);
             break;
-        case 0x04: case 0x05: if (e->klen != 1) return P_ERR_FORMAT; break;
+        case 0x04:
+        case 0x05:
+            if (e->klen != 1) return P_ERR_FORMAT;
+            break;
         case 0x06: {
             cand_t ignore = {0}; /* uncompressed keys cannot be used for P2WPKH; only validate the format */
             if ((e->klen != 34 && e->klen != 66) || !keypath(e->val, e->vlen, fp, e->klen == 34 ? &bip32 : &ignore))
@@ -199,20 +214,39 @@ static int parse_input(rd_t *r, unsigned idx, uint32_t fp) {
             if (bip32.found && !bip32.pubkey) bip32.pubkey = e->key + 1;
             break;
         }
-        case 0x07: case 0x08: if (e->klen != 1) return P_ERR_FORMAT; finalized = 1; break;
-        case 0x0e: case 0x0f: case 0x10: case 0x11: case 0x12: return P_ERR_FORMAT; /* PSBT v2 only */
+        case 0x07:
+        case 0x08:
+            if (e->klen != 1) return P_ERR_FORMAT;
+            finalized = 1;
+            break;
+        case 0x0e:
+        case 0x0f:
+        case 0x10:
+        case 0x11:
+        case 0x12:
+            return P_ERR_FORMAT; /* PSBT v2 only */
         case 0x13:
             if (e->klen != 1 || (e->vlen != 64 && e->vlen != 65)) return P_ERR_FORMAT;
             has_tapsig = 1;
             break;
-        case 0x14: if (e->klen != 65 || (e->vlen != 64 && e->vlen != 65)) return P_ERR_FORMAT; break;
-        case 0x15: if (e->klen < 34 || (e->klen - 34) % 32) return P_ERR_FORMAT; break; /* control block is 33 + 32m */
+        case 0x14:
+            if (e->klen != 65 || (e->vlen != 64 && e->vlen != 65)) return P_ERR_FORMAT;
+            break;
+        case 0x15:
+            if (e->klen < 34 || (e->klen - 34) % 32) return P_ERR_FORMAT;
+            break; /* control block is 33 + 32m */
         case 0x16:
             if (e->klen != 33 || !tap_keypath(e->val, e->vlen, fp, &tap)) return P_ERR_FORMAT;
             break;
-        case 0x17: if (e->klen != 1 || e->vlen != 32) return P_ERR_FORMAT; break;
-        case 0x18: if (e->klen != 1 || e->vlen != 32) return P_ERR_FORMAT; has_merkle = 1; break;
-        default: break;
+        case 0x17:
+            if (e->klen != 1 || e->vlen != 32) return P_ERR_FORMAT;
+            break;
+        case 0x18:
+            if (e->klen != 1 || e->vlen != 32) return P_ERR_FORMAT;
+            has_merkle = 1;
+            break;
+        default:
+            break;
         }
     }
     for (size_t i = 0; bip32.pubkey && i < n; i++)
@@ -274,24 +308,36 @@ static int parse_output(rd_t *r, unsigned idx, uint32_t fp) {
     for (size_t i = 0; i < n; i++) {
         const kv_t *e = &kv[i];
         switch (e->key[0]) {
-        case 0x00: case 0x01: if (e->klen != 1) return P_ERR_FORMAT; break;
+        case 0x00:
+        case 0x01:
+            if (e->klen != 1) return P_ERR_FORMAT;
+            break;
         case 0x02: {
             cand_t ignore = {0};
             if ((e->klen != 34 && e->klen != 66) || !keypath(e->val, e->vlen, fp, e->klen == 34 ? &bip32 : &ignore))
                 return P_ERR_FORMAT;
             break;
         }
-        case 0x03: case 0x04: return P_ERR_FORMAT; /* PSBT v2 only */
-        case 0x05: if (e->klen != 1 || e->vlen != 32) return P_ERR_FORMAT; break;
-        case 0x06: if (e->klen != 1 || e->vlen == 0) return P_ERR_FORMAT; has_tree = 1; break;
+        case 0x03:
+        case 0x04:
+            return P_ERR_FORMAT; /* PSBT v2 only */
+        case 0x05:
+            if (e->klen != 1 || e->vlen != 32) return P_ERR_FORMAT;
+            break;
+        case 0x06:
+            if (e->klen != 1 || e->vlen == 0) return P_ERR_FORMAT;
+            has_tree = 1;
+            break;
         case 0x07:
             if (e->klen != 33 || !tap_keypath(e->val, e->vlen, fp, &tap)) return P_ERR_FORMAT;
             break;
-        default: break;
+        default:
+            break;
         }
     }
-    const cand_t *c = is_p2wpkh(&o->spk) && bip32.found ? &bip32
-                    : is_p2tr(&o->spk) && tap.found && !has_tree ? &tap : NULL;
+    const cand_t *c = is_p2wpkh(&o->spk) && bip32.found            ? &bip32
+                      : is_p2tr(&o->spk) && tap.found && !has_tree ? &tap
+                                                                   : NULL;
     if (c) {
         o->key.depth = c->depth;
         o->key.fingerprint = fp;
@@ -300,13 +346,27 @@ static int parse_output(rd_t *r, unsigned idx, uint32_t fp) {
     return P_OK;
 }
 
-unsigned char *EXPORT(parser_input)(void) { return in_buf; }
-unsigned EXPORT(parser_input_cap)(void) { return PSBT_MAX; }
-plan_t *EXPORT(parser_plan)(void) { return &plan; }
-plan_sig_t *EXPORT(parser_sigs)(void) { return sigs; }
-unsigned char *EXPORT(parser_output)(void) { return out_buf; }
-unsigned EXPORT(parser_prevtx_off)(unsigned i) { return i < PLAN_MAX_INPUTS ? prevtx_off[i] : 0; }
-unsigned EXPORT(parser_prevtx_len)(unsigned i) { return i < PLAN_MAX_INPUTS ? prevtx_len[i] : 0; }
+unsigned char *EXPORT(parser_input)(void) {
+    return in_buf;
+}
+unsigned EXPORT(parser_input_cap)(void) {
+    return PSBT_MAX;
+}
+plan_t *EXPORT(parser_plan)(void) {
+    return &plan;
+}
+plan_sig_t *EXPORT(parser_sigs)(void) {
+    return sigs;
+}
+unsigned char *EXPORT(parser_output)(void) {
+    return out_buf;
+}
+unsigned EXPORT(parser_prevtx_off)(unsigned i) {
+    return i < PLAN_MAX_INPUTS ? prevtx_off[i] : 0;
+}
+unsigned EXPORT(parser_prevtx_len)(unsigned i) {
+    return i < PLAN_MAX_INPUTS ? prevtx_len[i] : 0;
+}
 
 /* Called after the host writes len bytes to parser_input(). fp is the signer's master fingerprint (not a secret) */
 int EXPORT(parser_parse)(unsigned len, unsigned fp) {

@@ -6,8 +6,8 @@
 int bip32_pubkey(const secp256k1_context *ctx, const uint8_t key[32], uint8_t out[33]) {
     secp256k1_pubkey pub;
     size_t len = 33;
-    return secp256k1_ec_pubkey_create(ctx, &pub, key)
-        && secp256k1_ec_pubkey_serialize(ctx, out, &len, &pub, SECP256K1_EC_COMPRESSED);
+    return secp256k1_ec_pubkey_create(ctx, &pub, key) &&
+           secp256k1_ec_pubkey_serialize(ctx, out, &len, &pub, SECP256K1_EC_COMPRESSED);
 }
 
 int bip32_master(const uint8_t seed[64], bip32_node_t *out) {
