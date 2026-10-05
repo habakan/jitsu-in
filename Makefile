@@ -52,7 +52,7 @@ build/signer.wasm: $(SIGNER_SRC) signer/*.h parser/include/*.h | check-deps
 	mkdir -p build
 	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs \
 	  -Oz -Wall -Wno-unused-function -DNDEBUG $(LIME_FLAGS) -Isigner -Iparser/include \
-	  -I$(SECP)/include $(SECP_DEFS) \
+	  -I$(SECP)/include -I$(SECP)/src $(SECP_DEFS) \
 	  -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
 	  -Wl,--export=__heap_base -Wl,--export=__data_end \
 	  -Wl,--initial-memory=196608 -Wl,--no-growable-memory \
