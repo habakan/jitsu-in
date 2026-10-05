@@ -1,7 +1,7 @@
 // Draws the "same bytes, everywhere" figure. Mermaid grows downwards and loses the centre, so the
-// radial layout is assembled by hand. The WebAssembly logo is CC0 (Carlos Baraza) — see NOTICE.
+// radial layout is assembled by hand.
 // Usage: node tools/draw_everywhere.mjs docs/everywhere.svg
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const W = 940, H = 640;
 const CX = W / 2, CY = H / 2 + 14;
@@ -15,7 +15,7 @@ const PLATFORMS = [
   ["Bare metal MCU", "WAMR · RP2350 · no OS", "parser.wasm · signer native", true, -90, "chip"],
   ["Android", "Chicory · a plain JAR, no NDK", "parser.wasm · signer.wasm", true, -30, "phone"],
   ["iOS", "WasmKit · pure Swift", "parser.wasm · signer.wasm", true, 30, "phone"],
-  ["Node / CI", "V8 · vectors, fuzzing, Core", "parser.wasm · signer.wasm", true, 90, "terminal"],
+  ["Node / CI", "V8 + WAMR · parser vectors", "both (V8) · parser (WAMR)", true, 90, "terminal"],
   ["Linux / macOS", "WAMR · the same interpreter", "parser.wasm · signer.wasm", true, 150, "laptop"],
   ["Web viewer", "the browser's own engine", "parser.wasm · read-only", false, 210, "globe"],
 ];
@@ -45,17 +45,12 @@ function icon(kind, x, y, size, color) {
          `stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d.join("")}</g>`;
 }
 
-// The official icon, viewBox 0 0 107.62 107.62. The letters are knocked out of the square, so on a
-// white page they read white without being drawn.
-const WASM_PATH = "M66.12,0c0,.19,0,.38,0,.58a12.34,12.34,0,1,1-24.68,0c0-.2,0-.39,0-.58H0V107.62H10" +
-  "7.62V0ZM51.38,96.1,46.14,70.17H46L40.39,96.1H33.18L25,58h7.13L37,83.93h.09L42.94,58h6.67L54.9,8" +
-  "4.25H55L60.55,58h7L58.46,96.1Zm39.26,0-2.43-8.48H75.4L73.53,96.1H66.36L75.59,58H86.83L98,96.1Z";
-const WASM_NOTCH = "79.87 67.39 76.76 81.37 86.44 81.37 82.87 67.39 79.87 67.39";
+const BITCOIN_MARK = readFileSync(new URL("../docs/bitcoin.svg", import.meta.url), "utf8")
+  .match(/<g[^>]*>([\s\S]*?)<\/g>/)[1];
 
-function wasmLogo(cx, cy, size) {
-  const k = size / 107.62;
-  return `<g transform="translate(${cx - size / 2},${cy - size / 2}) scale(${k})" fill="#654FF0">` +
-         `<path d="${WASM_PATH}"/><polygon points="${WASM_NOTCH}"/></g>`;
+function bitcoinLogo(cx, cy, size) {
+  const k = size / 64;
+  return `<g transform="translate(${cx - size / 2},${cy - size / 2}) scale(${k})">${BITCOIN_MARK}</g>`;
 }
 
 const FONT = "Hiragino Sans, Noto Sans JP, sans-serif";
@@ -86,7 +81,7 @@ const hw = 258, hh = 196;
 const top = CY - hh / 2;
 s.push(`<rect x="${CX - hw / 2}" y="${top}" width="${hw}" height="${hh}" rx="12" ` +
        `fill="${HUB_FILL}" stroke="${HUB_LINE}" stroke-width="1.8"/>`);
-s.push(wasmLogo(CX, top + 44, 52));
+s.push(bitcoinLogo(CX, top + 44, 52));
 s.push(`<text x="${CX}" y="${top + 94}" fill="${HUB_LINE}" font-size="20" text-anchor="middle" ` +
        `letter-spacing="0.5">${NAME}</text>`);
 s.push(`<line x1="${CX - hw / 2 + 22}" y1="${top + 108}" x2="${CX + hw / 2 - 22}" y2="${top + 108}" ` +

@@ -93,8 +93,9 @@ Limits: PSBT up to 32 KB, 16 inputs, 16 outputs, scriptPubKey up to 83 bytes, de
 
 ## Build and test
 
-Requires clang with the wasm32 target, wasi-libc and compiler-rt builtins for wasm32, and [uv](https://docs.astral.sh/uv/)
-for the tests. With Homebrew: `brew install llvm lld wasi-libc wasi-runtimes uv`.
+Requires clang with the wasm32 target, wasi-libc, compiler-rt builtins for wasm32, Node and Python 3.
+For the WAMR interpreter check, run `make wamr-deps && make check-wamr` from the repository root.
+With Homebrew: `brew install llvm lld wasi-libc wasi-runtimes node cmake`.
 
 ```
 make          # build/parser.wasm and its SHA-256
@@ -110,7 +111,7 @@ The UR building blocks are first checked natively (with ASan / UBSan) against th
 200 degree choices, fragment choices, and the single-part and 20-part example URs. On a sequence with a dropped
 part in reverse order, the decoder needs the same number of parts (16) as the reference decoder.
 
-The tests then run `build/parser.wasm` itself under wasmtime:
+The same JavaScript vector suite runs `build/parser.wasm` under Node/V8 and WAMR's classic interpreter.
 
 - the module has no imports;
 - Bitcoin Core's `test/functional/data/rpc_psbt.json`: no traps; every invalid vector is rejected except 15 whose

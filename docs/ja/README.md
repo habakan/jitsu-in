@@ -1,4 +1,4 @@
-<h1><img src="../bitcoin.svg" width="26" align="top" alt=""> jitsu-in</h1>
+<h1>jitsu-in</h1>
 
 jitsu-in は Bitcoin の署名に使う処理を2つの WebAssembly モジュールとして提供します。
 `parser.wasm` は未信頼の PSBT を読み、固定レイアウトの plan を作ります。`signer.wasm` は plan を検証し、
@@ -49,9 +49,8 @@ make check-c-format check-c-tidy
 wasm32 ターゲットの clang、wasi-libc の sysroot、Node が必要です。
 Homebrew では `brew install llvm lld wasi-libc wasi-runtimes node` でインストールできます。
 
-`parser.wasm` を [wasmtime](https://wasmtime.dev/) で動かすテストが1つあるため、
-[uv](https://docs.astral.sh/uv/) も必要です。それ以外のテストでは Python を使わず、
-別の Bitcoin ライブラリも必要ありません。独立した照合には**Bitcoin Core 自身**を使います
+`make wamr-deps && make check-wamr` で parser のベクタテストを WAMR 2.4.5 でも実行します。
+Node/V8 と同じ JavaScript テストを使います。独立した照合には**Bitcoin Core 自身**を使います
 （`make check-core-diff`。実行には `bitcoind` が必要です）。
 
 通常のビルドでは手元の clang を使います。開発には使えますが、**リリースをバイト単位で再現するものではありません**。

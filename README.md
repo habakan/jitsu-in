@@ -1,4 +1,4 @@
-<h1><img src="docs/bitcoin.svg" width="26" align="top" alt=""> jitsu-in</h1>
+<h1>jitsu-in</h1>
 
 <sup>[日本語](docs/ja/README.md)</sup>
 
@@ -55,16 +55,17 @@ make test     # the vectors, the host libraries, the layout, the shape of the ou
 make check-c-format check-c-tidy
 ```
 
+`make wamr-deps && make check-wamr` runs the parser vectors in WAMR too. It uses the same JavaScript
+test suite as Node/V8. WAMR 2.4.5 is pinned for this check.
+
 `make format-c` applies the C formatting rules. Formatting and the parser's static analysis use the
 clang-format and clang-tidy shipped with the pinned wasi-sdk toolchain in CI.
 
 Needs clang with the wasm32 target, a wasi-libc sysroot, and Node. With Homebrew:
-`brew install llvm lld wasi-libc wasi-runtimes node`.
+`brew install llvm lld wasi-libc wasi-runtimes node cmake`.
 
-One test runs `parser.wasm` under [wasmtime](https://wasmtime.dev/) and so wants
-[uv](https://docs.astral.sh/uv/) as well; nothing else here needs Python, and nothing needs a second
-Bitcoin library. Where an independent opinion is required, it comes from **Bitcoin Core itself**
-(`make check-core-diff`, which needs `bitcoind`).
+The parser vectors run under Node/V8 and WAMR's classic interpreter. Where an independent opinion is
+required, it comes from **Bitcoin Core itself** (`make check-core-diff`, which needs `bitcoind`).
 
 That uses whatever clang you have, which is fine for development but will not reproduce a release
 byte for byte. For that, use the pinned toolchain — see

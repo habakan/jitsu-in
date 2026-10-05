@@ -22,12 +22,24 @@ SECP_REV  := 46db787112beabdb5e17e0dc35680716f1057e7b
 COMB      ?= -DCOMB_BLOCKS=2 -DCOMB_TEETH=5
 SECP_DEFS := -DENABLE_MODULE_EXTRAKEYS=1 -DENABLE_MODULE_SCHNORRSIG=1 -DECMULT_WINDOW_SIZE=2 \
              -DUSE_EXTERNAL_DEFAULT_CALLBACKS=1 $(COMB)
+WAMR_REV := 25bd7eb63e828e4bd242cc9b38d260b4b31c6605
+WAMR_ROOT ?= third_party/wasm-micro-runtime
+WAMR_BUILD := build/wamr
+WAMR_SYSTEM := $(shell uname -s)
+WAMR_PLATFORM := $(shell echo $(WAMR_SYSTEM) | tr 'A-Z' 'a-z')
+WAMR_LIB_EXT := $(if $(filter Darwin,$(WAMR_SYSTEM)),dylib,so)
+NODE_INCLUDE ?= $(shell node -p 'process.execPath.replace(/bin\/node$$/, "include/node")')
+ifeq ($(WAMR_SYSTEM),Darwin)
+WAMR_NODE_LINK := -bundle -undefined dynamic_lookup
+else
+WAMR_NODE_LINK := -shared -fPIC
+endif
 
 SIGNER_SRC := signer/wasm_main.c signer/core.c signer/address.c signer/bip32.c signer/sighash.c \
   signer/ripemd160.c signer/sha512.c signer/secp_callbacks.c signer/secp256k1_unity.c \
   parser/c/src/tx.c parser/c/src/sha256.c
 PARSER_C_SRC := $(wildcard parser/c/src/*.c)
-C_FORMAT_FILES := $(PARSER_C_SRC) $(wildcard parser/c/include/*.h parser/tests/*.c signer/*.c signer/*.h signer/tests/*.c)
+C_FORMAT_FILES := $(PARSER_C_SRC) parser/tools/wamr_node.c $(wildcard parser/c/include/*.h parser/tests/*.c signer/*.c signer/*.h signer/tests/*.c)
 
 all: build/parser.wasm build/signer.wasm
 .PHONY: all
@@ -37,6 +49,30 @@ deps:
 	git clone --filter=blob:none https://github.com/bitcoin-core/secp256k1.git $(SECP)
 	cd $(SECP) && git checkout --detach $(SECP_REV)
 .PHONY: deps
+
+wamr-deps:
+	mkdir -p $(dir $(WAMR_ROOT))
+	git clone --depth 1 --branch WAMR-2.4.5 https://github.com/wasm-micro-runtime/wasm-micro-runtime.git $(WAMR_ROOT)
+	cd $(WAMR_ROOT) && test "$$(git rev-parse HEAD)" = "$(WAMR_REV)"
+.PHONY: wamr-deps
+
+$(WAMR_BUILD)/libiwasm.$(WAMR_LIB_EXT):
+	cmake -S $(WAMR_ROOT)/product-mini/platforms/$(WAMR_PLATFORM) -B $(WAMR_BUILD) \
+	  -DWAMR_BUILD_INTERP=1 -DWAMR_BUILD_FAST_INTERP=0 -DWAMR_BUILD_DEBUG_INTERP=0 \
+	  -DWAMR_BUILD_AOT=0 -DWAMR_BUILD_SIMD=0 -DWAMR_BUILD_LIBC_BUILTIN=0 \
+	  -DWAMR_BUILD_LIBC_WASI=0 -DBUILD_SHARED_LIBS=ON
+	cmake --build $(WAMR_BUILD) --parallel
+
+build/wamr.node: parser/tools/wamr_node.c $(WAMR_BUILD)/libiwasm.$(WAMR_LIB_EXT)
+	$(CC) $(WAMR_NODE_LINK) -DNODE_GYP_MODULE_NAME=wamr_node -I$(NODE_INCLUDE) \
+	  -I$(WAMR_ROOT)/core/iwasm/include $< -L$(WAMR_BUILD) -liwasm \
+	  -Wl,-rpath,$(abspath $(WAMR_BUILD)) -o $@
+
+check-wamr: build/parser.wasm build/wamr.node
+	$(MAKE) -C parser build/vectors/own_p2wpkh_1in.psbt
+	PARSER_RUNTIME=wamr node parser/tools/run_tests.mjs build/parser.wasm parser/build/vectors \
+	  parser/tests/rpc_psbt.json parser/tests/ur_vectors.json
+.PHONY: check-wamr
 
 check-deps:
 	@test -d $(SECP) || { echo "run make deps first"; exit 1; }

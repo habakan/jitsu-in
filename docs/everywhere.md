@@ -31,7 +31,7 @@ platforms — not that the path looks like it should work.
 | Bare metal MCU (RP2350) | WAMR classic interpreter, no OS | `parser.wasm`. **The signer is native C** — the device links it rather than interpreting it |
 | Android | Chicory, a plain JAR: no JNI, no NDK, no `.so` per ABI | both |
 | iOS | WasmKit, pure Swift | both |
-| Node | V8 — the vectors, the fuzzing and the Bitcoin Core comparison run here | both |
+| Node | V8 — both modules, fuzzing and Bitcoin Core comparison; WAMR classic — parser vectors | both in V8; parser in WAMR |
 | Linux / macOS | WAMR, the same interpreter the device uses | both |
 | Web viewer | whatever engine the browser has | `parser.wasm`. **No keys in the browser**, so nothing signs |
 

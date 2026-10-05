@@ -20,7 +20,7 @@ jobs:
       - name: Dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq clang lld
+          sudo apt-get install -y -qq clang lld cmake
           make deps
 
       - name: The pinned toolchain, so this is the build a release reproduces
@@ -84,6 +84,11 @@ jobs:
             LLVM=$SDK/bin WASI=$SDK/share/wasi-sysroot \
             RTLIB=$SDK/lib/clang/23/lib/wasm32-unknown-wasi \
             WASM_OPT=/tmp/binaryen-version_132/bin/wasm-opt
+
+      - name: The same parser vectors under WAMR's classic interpreter
+        run: |
+          make wamr-deps
+          make check-wamr
 
       - name: signer.wasm from JavaScript (24 checks)
         run: make check-signer-js

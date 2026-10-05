@@ -10,6 +10,7 @@
 //
 //   node tools/run_tests.mjs build/parser.wasm build/vectors tests/rpc_psbt.json tests/ur_vectors.json
 import { readFileSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, join } from "node:path";
 
 const [WASM, VEC, RPC, URV] = process.argv.slice(2);
@@ -26,7 +27,36 @@ const MUSIG2_BY_FIELD = new Set([15]);
 const PLAN_SIZE = 5016;
 
 const moduleBytes = readFileSync(WASM);
-const compiled = await WebAssembly.compile(moduleBytes);
+const runtime = process.env.PARSER_RUNTIME ?? "v8";
+let createInstance, compiled, importCount;
+if (runtime === "wamr") {
+  const wamr = createRequire(import.meta.url)("../../build/wamr.node");
+  const module = wamr.loadModule(moduleBytes);
+  createInstance = () => new WamrExports(wamr, wamr.instantiate(module));
+  importCount = wamr.importCount;
+} else if (runtime === "v8") {
+  compiled = await WebAssembly.compile(moduleBytes);
+  createInstance = () => new V8Exports(new WebAssembly.Instance(compiled, {}).exports);
+  importCount = () => WebAssembly.Module.imports(compiled).length;
+} else {
+  throw new Error(`unknown PARSER_RUNTIME: ${runtime}`);
+}
+
+class V8Exports {
+  constructor(exports) { this.exports = exports; }
+  call(name, ...args) { return this.exports[name](...args); }
+  has(name) { return typeof this.exports[name] === "function"; }
+  read(offset, length) { return Buffer.from(new Uint8Array(this.exports.memory.buffer, offset, length)); }
+  write(offset, bytes) { new Uint8Array(this.exports.memory.buffer).set(bytes, offset); }
+}
+
+class WamrExports {
+  constructor(api, instance) { this.api = api; this.instance = instance; }
+  call(name, ...args) { return this.api.call(this.instance, name, args); }
+  has(name) { return this.api.hasExport(this.instance, name); }
+  read(offset, length) { return this.api.read(this.instance, offset, length); }
+  write(offset, bytes) { this.api.write(this.instance, offset, bytes); }
+}
 
 let checks = 0;
 const failures = [];
@@ -39,26 +69,23 @@ const hex = (b) => Buffer.from(b).toString("hex");
 /** A fresh instance per case, so nothing carries over between vectors. */
 class Parser {
   constructor() {
-    this.e = new WebAssembly.Instance(compiled, {}).exports;
-  }
-  get mem() {
-    return new Uint8Array(this.e.memory.buffer);
+    this.e = createInstance();
   }
   call(name, ...args) {
-    return this.e[name](...args);
+    return this.e.call(name, ...args);
   }
   write(bytes, at) {
-    this.mem.set(bytes, at);
+    this.e.write(at, bytes);
   }
   read(at, n) {
-    return this.mem.slice(at, at + n);
+    return this.e.read(at, n);
   }
   parse(raw, fp) {
-    this.write(raw, this.e.parser_input());
-    return this.e.parser_parse(raw.length, fp);
+    this.write(raw, this.call("parser_input"));
+    return this.call("parser_parse", raw.length, fp);
   }
   plan() {
-    const b = this.read(this.e.parser_plan(), PLAN_SIZE);
+    const b = this.read(this.call("parser_plan"), PLAN_SIZE);
     const v = new DataView(b.buffer, b.byteOffset, b.length);
     const keypath = (o) => {
       const depth = b[o];
@@ -96,13 +123,13 @@ class Parser {
   }
   /** The offset is relative to parser_input(), so the base is added here. */
   prevtx(i) {
-    const n = this.e.parser_prevtx_len(i);
-    return n ? this.read(this.e.parser_input() + this.e.parser_prevtx_off(i), n) : new Uint8Array(0);
+    const n = this.call("parser_prevtx_len", i);
+    return n ? this.read(this.call("parser_input") + this.call("parser_prevtx_off", i), n) : new Uint8Array(0);
   }
   ur(part) {
     const raw = Buffer.from(part, "utf8");
-    this.write(raw, this.e.parser_input());
-    return this.e.parser_ur_receive(raw.length);
+    this.write(raw, this.call("parser_input"));
+    return this.call("parser_ur_receive", raw.length);
   }
   finalize(sigs) {
     if (sigs.length) {
@@ -114,10 +141,10 @@ class Parser {
         buf[o + 34] = sig.length;
         buf.set(sig, o + 35);
       });
-      this.write(buf, this.e.parser_sigs());
+      this.write(buf, this.call("parser_sigs"));
     }
-    const n = this.e.parser_finalize(sigs.length);
-    return [n, n > 0 ? this.read(this.e.parser_output(), n) : new Uint8Array(0)];
+    const n = this.call("parser_finalize", sigs.length);
+    return [n, n > 0 ? this.read(this.call("parser_output"), n) : new Uint8Array(0)];
   }
 }
 
@@ -127,8 +154,8 @@ const vectorFiles = (pattern) =>
 
 // --- 1) no imports
 {
-  const imports = WebAssembly.Module.imports(compiled);
-  check(imports.length === 0, `imports: ${imports.map((i) => `${i.module}.${i.name}`).join(", ")}`);
+  const count = importCount();
+  check(count === 0, `imports: ${count}`);
 }
 
 // --- 2) Bitcoin Core's rpc_psbt.json
@@ -247,7 +274,7 @@ check(new Parser().finalize([])[0] < 0, "finalize before parse");
 
 // The UR sections need parser_ur_*. While the Rust port is in progress that module has only the
 // PSBT half, so this runs what it has rather than failing on a function that is not there yet.
-const hasUr = typeof new Parser().e.parser_ur_reset === "function";
+const hasUr = new Parser().e.has("parser_ur_reset");
 if (!hasUr) {
   console.log("rpc_psbt.json:", JSON.stringify(Object.fromEntries(Object.keys(counts).sort().map((k) => [k, counts[k]]))));
   for (const f of failures) console.log("FAIL", f);
