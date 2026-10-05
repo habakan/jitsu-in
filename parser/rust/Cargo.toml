@@ -1,0 +1,23 @@
+[package]
+name = "wasm-psbt-parser"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "PSBT v0 and UR parsing as a WebAssembly module with no imports"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+# No dependencies, on purpose. Cargo.lock holds this crate and nothing else, which is the point:
+# fewer dependencies is fewer things to audit before you can say what you are running.
+
+[profile.release]
+opt-level = "z"     # the same intent as the C's -Oz
+lto = true
+panic = "abort"     # no unwinding, as the C has none
+codegen-units = 1
+strip = true
+overflow-checks = true   # kept on: this reads attacker-controlled input, and a wrong length here
+                         # is the kind of bug the move to Rust is for

@@ -133,6 +133,41 @@ check-core-diff: build/parser.wasm build/signer.wasm parser/build/vectors/own_p2
 	exit $$rc
 .PHONY: check-core-diff
 
+# --- the port from C to Rust, in progress ---
+#
+# Both are built and required to agree on every vector and on fuzzed input. The C is the reference
+# until the port is complete: a port checked only against its own tests is a port whose bugs become
+# its tests. See parser/rust/README.md for what has moved across so far.
+RUST_TOOLCHAIN := 1.95.0
+RUST_WASM := parser/rust/target/wasm32-unknown-unknown/release/wasm_psbt_parser.wasm
+
+$(RUST_WASM): $(wildcard parser/rust/src/*.rs) parser/rust/Cargo.toml
+	cd parser/rust && rustup run $(RUST_TOOLCHAIN) cargo build --release --target wasm32-unknown-unknown
+
+build/probe-c.wasm: parser/tests/probe.c parser/src/tx.c parser/src/sha256.c parser/include/*.h
+	mkdir -p build
+	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs -Oz -Wall \
+	  $(LIME_FLAGS) -Iparser/include -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all \
+	  -Wl,-z,stack-size=16384 -Wl,--initial-memory=1114112 -Wl,--no-growable-memory \
+	  --no-wasm-opt -Wl,--keep-section=target_features \
+	  -o $@ parser/tests/probe.c parser/src/tx.c parser/src/sha256.c -lc $(RTLIB)/libclang_rt.builtins.a
+
+check-rust-agrees: build/probe-c.wasm $(RUST_WASM)
+	@set -e; \
+	command -v rustup >/dev/null || { echo "rustup not found; skipping the Rust port check"; exit 0; }; \
+	cp $(RUST_WASM) build/probe-rs.wasm; \
+	node parser/tools/check_rust_agrees.mjs build/probe-c.wasm build/probe-rs.wasm parser/build/vectors
+.PHONY: check-rust-agrees
+
+# The Rust module has to meet the same bar as the C: nothing to call, and no feature creep
+check-rust-shape: $(RUST_WASM)
+	@n=$$(wasm-tools print $(RUST_WASM) | grep -c '(import ' || true); \
+	test "$$n" = "0" || { echo "the Rust module has $$n import(s)"; exit 1; }
+	wasm-tools validate --features=-all,floats,saturating-float-to-int,bulk-memory-opt,-mutable-global,sign-extension \
+	  $(RUST_WASM)
+	@echo "the Rust module has no imports and stays inside Lime1"
+.PHONY: check-rust-shape
+
 # The host libraries ship as plain .mjs that anyone can read and import with no build step. This
 # type-checks them in place and regenerates the .d.mts beside them, failing if the committed ones are
 # stale — so a TypeScript consumer gets types without this repository shipping a build artifact as

@@ -1,0 +1,6 @@
+# Pinned, like every other tool here. A floating toolchain would make the build unreproducible for
+# the same reason an unpinned dependency does.
+[toolchain]
+channel = "1.95.0"
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"
