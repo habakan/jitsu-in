@@ -269,6 +269,35 @@ check-repro: | build
 	echo "both modules match checksums.txt"
 .PHONY: check-repro
 
+VIEWER := examples/viewer
+VIEWER_QUIRC := $(VIEWER)/vendor/quirc/lib
+VIEWER_QUIRC_DEFS := -DQUIRC_FIXED_POINT_FITNESS -DQUIRC_FLOAT_TYPE=float -DQUIRC_USE_TGMATH
+
+$(VIEWER)/build/address.wasm: signer/address.c signer/ripemd160.c parser/c/src/sha256.c $(VIEWER)/addr_wasm.c
+	mkdir -p $(VIEWER)/build
+	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs \
+	  -Oz -Wall -Wextra $(LIME_FLAGS) -Isigner -Iparser/c/include \
+	  -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all \
+	  --no-wasm-opt -Wl,--keep-section=target_features \
+	  -Wl,--initial-memory=131072 -Wl,--no-growable-memory \
+	  -o $@ $(VIEWER)/addr_wasm.c signer/address.c signer/ripemd160.c parser/c/src/sha256.c -lc $(RTLIB)/libclang_rt.builtins.a
+	$(WASM_OPT) $@ -Oz -o $@
+
+$(VIEWER)/build/qr.wasm: $(VIEWER)/qr_wasm.c $(VIEWER_QUIRC)/decode.c $(VIEWER_QUIRC)/identify.c $(VIEWER_QUIRC)/quirc.c $(VIEWER_QUIRC)/version_db.c
+	mkdir -p $(VIEWER)/build
+	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs \
+	  -Oz -Wall -DNDEBUG $(LIME_FLAGS) $(VIEWER_QUIRC_DEFS) -I$(VIEWER_QUIRC) \
+	  -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all \
+	  --no-wasm-opt -Wl,--keep-section=target_features \
+	  -Wl,--initial-memory=4194304 -Wl,--no-growable-memory \
+	  -o $@ $(VIEWER)/qr_wasm.c $(VIEWER_QUIRC)/decode.c $(VIEWER_QUIRC)/identify.c \
+	  $(VIEWER_QUIRC)/quirc.c $(VIEWER_QUIRC)/version_db.c -lc $(RTLIB)/libclang_rt.builtins.a
+	$(WASM_OPT) $@ -Oz -o $@
+
+viewer: build/parser.wasm $(VIEWER)/build/address.wasm $(VIEWER)/build/qr.wasm
+	uv run -q $(VIEWER)/build_viewer.py build/viewer.html
+.PHONY: viewer
+
 test: check-types check-layout check-parser check-signer-js check-hosts-agree
 	@echo
 	@echo "both modules, the vectors, and the JavaScript hosts passed."

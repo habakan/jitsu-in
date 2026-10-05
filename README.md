@@ -27,6 +27,9 @@ The tested runtimes and the limits of those tests are in [docs/everywhere.md](do
 
 No native build in any of them: no JNI, no NDK, no `.so` or XCFramework per architecture.
 
+The [browser viewer](examples/viewer) combines the parser host with a single-file PSBT and UR review
+page. It holds no keys and is not a signing device.
+
 | | runtime | |
 |---|---|---|
 | JavaScript / browser / Node | the engine you already have | [parser](parser/hosts/js) · [signer](signer/hosts/js) |

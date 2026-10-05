@@ -28,3 +28,7 @@ docs/bitcoin.svg is the Bitcoin logo from Wikimedia Commons
 (https://commons.wikimedia.org/wiki/File:Bitcoin.svg), stripped of its editor metadata.
 
 Public domain.
+
+examples/viewer/vendor/jsQR.min.js is jsQR (Apache License 2.0; license in the same directory).
+
+examples/viewer/vendor/quirc is a submodule fork of quirc (ISC License).

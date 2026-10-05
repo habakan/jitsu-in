@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<!-- A PSBT viewer. Parses with the same parser.wasm the device runs and shows the same thing.
+     It holds no keys. tools/build_viewer.py bakes the wasm in to make a single file -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSBT viewer</title>
+<style>
+  :root { color-scheme: dark; --bg:#13151a; --fg:#e8e8e8; --dim:#8b93a1; --line:#2a2e37;
+          --send:#ff6e50; --ours:#5adc78; --title:#ffaa00; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size:16px; color:var(--title); margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:12px; margin-bottom:20px; }
+  .drop { border:1px dashed var(--line); border-radius:8px; padding:24px 16px; text-align:center; color:var(--dim); }
+  .drop.over { border-color:var(--title); color:var(--fg); }
+  textarea { width:100%; height:80px; margin-top:12px; background:#0d0f13; color:var(--fg);
+             border:1px solid var(--line); border-radius:6px; padding:8px; font:inherit; }
+  button { background:#242833; color:var(--fg); border:1px solid var(--line); border-radius:6px;
+           padding:8px 14px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--title); }
+  .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:12px 0; }
+  .row { display:flex; justify-content:space-between; gap:12px; }
+  .amount { color:var(--send); font-weight:600; }
+  .mine .amount { color:var(--ours); }
+  .addr { word-break:break-all; color:var(--fg); font-size:13px; }
+  .k { color:var(--dim); }
+  .err { color:var(--send); }
+  footer { margin-top:28px; padding-top:12px; border-top:1px solid var(--line);
+           color:var(--dim); font-size:11px; word-break:break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>PSBT viewer</h1>
+  <div class="sub">Parsed by the same parser.wasm the signer runs. No keys. Works offline.</div>
+
+  <div class="drop" id="drop">
+    Drop a .psbt file, or <button id="pick">choose one</button>
+    <input type="file" id="file" hidden accept=".psbt,.bin">
+    <textarea id="text" placeholder="or paste a PSBT, base64 or hex"></textarea>
+    <div class="row" style="margin-top:8px">
+      <label class="k"><input type="checkbox" id="testnet"> show as testnet / signet</label>
+      <button id="parse">Parse</button>
+    </div>
+  </div>
+
+  <div class="card" id="cam">
+    <div class="row">
+      <span class="k">Read an animated QR (UR) with the camera</span>
+      <span><select id="camsel" style="display:none;background:#242833;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px"></select>
+      <button id="camstart">Start</button>
+      <button id="camsave" style="display:none">Save a frame</button></span>
+    </div>
+    <div style="position:relative;margin-top:8px">
+      <video id="video" playsinline muted style="width:100%;display:none;border-radius:6px"></video>
+      <div id="cambox" style="display:none;position:absolute;left:25%;top:25%;width:50%;height:50%;border:2px dashed #ffaa00;border-radius:6px;pointer-events:none"></div>
+    </div>
+    <div class="k" id="camstat"></div>
+  </div>
+
+  <div id="out"></div>
+
+  <footer>
+    parser.wasm __PARSER_SHA256__<br>
+    address.wasm __ADDRESS_SHA256__<br>
+    qr.wasm __QR_SHA256__
+  </footer>
+</main>
+
+<script>__JSQR_JS__</script>
+<script>__PARSER_HOST_JS__</script>
+<script>
+const PARSER_WASM = "__PARSER_WASM__", ADDRESS_WASM = "__ADDRESS_WASM__", QR_WASM = "__QR_WASM__";
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+/* instantiateStreaming insists on a MIME type, so this goes through the bytes and works on file:// */
+const load = async s => (await WebAssembly.instantiate(b64(s), {})).instance.exports;
+/* The parser is driven through the host in parser/hosts/js, which owns the offsets and
+ * the bounds checks */
+const loadParser = async () => Parser.load(b64(PARSER_WASM));
+
+let parser, address, qr;
+const btc = sats => (Number(sats) / 1e8).toFixed(8);
+const hex = u8 => [...u8].map(b => b.toString(16).padStart(2, "0")).join("");
+
+function toAddress(spk, testnet) {
+  const mem = new Uint8Array(address.memory.buffer);
+  mem.set(spk, address.addr_input());
+  if (!address.addr_encode(spk.length, testnet ? 1 : 0)) return null;
+  let s = "", p = address.addr_output();
+  while (mem[p]) s += String.fromCharCode(mem[p++]);
+  return s;
+}
+
+function render(plan, testnet) {
+  const parts = plan.outputs.map((o, i) => {
+    const addr = toAddress(o.spk, testnet);
+    return `<div class="card ${o.key ? "mine" : ""}">
+      <div class="row"><span class="k">output ${i + 1}/${plan.outputs.length}${o.key ? " (our key)" : ""}</span>
+        <span class="amount">${btc(o.amount)} BTC</span></div>
+      <div class="addr">${addr || hex(o.spk)}</div>
+      ${o.key ? `<div class="k">m/${o.key.path.map(v => (v & 0x80000000 ? `${v & 0x7fffffff}'` : v)).join("/")}  fp ${o.key.fingerprint.toString(16).padStart(8, "0")}</div>` : ""}
+    </div>`;
+  });
+
+  return `<div class="card">
+      <div class="row"><span class="k">${plan.inputs.length} input(s), total</span><span>${btc(plan.totalIn)} BTC</span></div>
+      <div class="row"><span class="k">fee</span><span class="amount">${btc(plan.fee)} BTC</span></div>
+      <div class="k">version ${plan.txVersion}  locktime ${plan.locktime}</div>
+    </div>` + parts.join("");
+}
+
+async function parse(bytes) {
+  const out = document.getElementById("out");
+  try {
+    parser ||= await loadParser();
+    address ||= await load(ADDRESS_WASM);
+    // fingerprint 0: this page holds no keys, so it never decides what is ours
+    const plan = parser.parse(bytes, 0);
+    out.innerHTML = render(plan, document.getElementById("testnet").checked);
+  } catch (e) {
+    out.innerHTML = `<div class="card err">${e.message}</div>`;
+  }
+}
+
+/* The camera: read with the same quirc the device runs (qr.wasm), then hand the parts to parser.wasm */
+async function camera() {
+  const video = document.getElementById("video"), stat = document.getElementById("camstat");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const seen = new Set();
+  let W = 0, H = 0, mode = 0;
+  /* Chrome and Android expose the OS decoder. Use it where it exists; it costs no extra bytes */
+  const bd = ("BarcodeDetector" in window) ? new BarcodeDetector({ formats: ["qr_code"] }) : null;
+
+  parser ||= await loadParser();
+  address ||= await load(ADDRESS_WASM);
+  qr ||= await load(QR_WASM);
+  parser.urReset();
+
+  const sel = document.getElementById("camsel");
+  let stream;
+  /* Outside a secure context navigator.mediaDevices is missing entirely, which surfaces as an
+   * unhelpful TypeError */
+  if (!navigator.mediaDevices?.getUserMedia) {
+    stat.textContent = `No camera on this page (${location.protocol}//${location.hostname}).`
+      + " Open it over HTTPS, on localhost, or from file://."
+      + " Chrome on Android refuses the camera even on file://, so use localhost over USB";
+    return;
+  }
+  try {
+    /* Decoding crops the centre at native scale, so a higher sensor resolution means bigger modules */
+    const want = Object.assign({ width: { ideal: 1920 }, height: { ideal: 1080 } },
+                               sel.value ? { deviceId: { exact: sel.value } } : { facingMode: "environment" });
+    stream = await navigator.mediaDevices.getUserMedia({ video: want });
+  } catch (e) {
+    stat.textContent = `Cannot open the camera: ${e.name}. Some browsers refuse on file://`;
+    return;
+  }
+  /* Names only become readable once permission is given; offer a choice when there is more than one */
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  if (cams.length > 1 && !sel.options.length) {
+    cams.forEach((c, i) => sel.add(new Option(c.label || `camera ${i + 1}`, c.deviceId)));
+    sel.value = stream.getVideoTracks()[0].getSettings().deviceId || cams[0].deviceId;
+    sel.style.display = "inline-block";
+    sel.onchange = () => { stream.getTracks().forEach(t => t.stop()); camera(); };
+  }
+  video.srcObject = stream;
+  video.style.display = "block";
+  await video.play();
+
+  /* Shrinking the whole frame puts a module at about 2px, which will not decode. Cropping the middle
+   * half at native scale keeps the resolution and still fits the decoder's memory */
+  const box = document.getElementById("cambox");
+  /* Lets the exact image handed to the decoder be saved, for when something will not read */
+  const save = document.getElementById("camsave");
+  save.style.display = "inline-block";
+  save.onclick = () => canvas.toBlob(b => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = "qr-frame.png";
+    a.click();
+  });
+  const tick = async () => {
+    if (!video.videoWidth) return requestAnimationFrame(tick);
+    if (W !== (video.videoWidth >> 1)) {
+      W = canvas.width = video.videoWidth >> 1;
+      H = canvas.height = video.videoHeight >> 1;
+      box.style.display = "block";
+      if (!qr.qr_init(W, H)) { stat.textContent = "the QR decoder would not start"; return; }
+      stat.textContent = `looking at the middle ${W}x${H} of ${video.videoWidth}x${video.videoHeight}`
+        + ` (quirc${bd ? " + built-in" : ""}${self.jsQR ? " + jsQR" : ""})`;
+    }
+    /* Alternate between the centre at native scale, for a QR that lands small, and the whole frame
+     * scaled down, for one that overflows the box */
+    if (mode & 1) ctx.drawImage(video, W >> 1, H >> 1, W, H, 0, 0, W, H);
+    else ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, W, H);
+    box.style.display = (mode & 1) ? "block" : "none";
+    mode++;
+
+    /* quirc first, the same one the device runs, then the browser's own, then jsQR. Only parser.wasm
+     * is anywhere near a key, so the transport is free to use whatever reads. Which one succeeded is
+     * reported, which also shows up the conditions quirc struggles with */
+    const rgba = ctx.getImageData(0, 0, W, H);
+    let text = null, how = (mode & 1) ? "centre" : "whole frame", detail = "";
+    {
+      const gray = new Uint8Array(qr.memory.buffer, qr.qr_input(), W * H);
+      const d = rgba.data;
+      for (let i = 0, j = 0; i < gray.length; i++, j += 4)  // ITU-R BT.601 luma
+        gray[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+      const n = qr.qr_decode();
+      if (n > 0) {
+        text = new TextDecoder().decode(new Uint8Array(qr.memory.buffer, qr.qr_output(), n));
+        how += "・quirc";
+      } else if (n < 0) {
+        const px = qr.qr_last_px(), cells = qr.qr_last_cells();
+        detail = `quirc: ${px}px / ${cells} modules = ${(px / (cells || 1)).toFixed(1)}px per module`;
+      }
+    }
+    if (text === null && bd) {
+      const codes = await bd.detect(canvas).catch(() => []);
+      if (codes.length) { text = codes[0].rawValue; how += ", built-in"; }
+    }
+    if (text === null && self.jsQR) {
+      const r = jsQR(rgba.data, W, H);
+      if (r) { text = r.data; how += "・jsQR"; }
+    }
+    if (text === null && detail) stat.textContent = `nothing read (${how}) ${detail}`;
+    if (text !== null) {
+      const n = text.length;
+      /* The device's Show xpub gives a bare descriptor rather than a UR; pick it up so it need not
+       * be typed out */
+      if (!text.startsWith("UR:")) {
+        stream.getTracks().forEach(t => t.stop());
+        video.style.display = "none";
+        stat.innerHTML = "";
+        const box = document.createElement("textarea");
+        box.readOnly = true; box.rows = 3; box.value = text;
+        box.style.cssText = "width:100%;background:#242833;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;font:12px ui-monospace,monospace";
+        stat.append(`read ${n} characters (${how})`, box);
+        return;
+      }
+      let psbt = null;
+      try { psbt = parser.urReceive(text); } catch (e) { stat.textContent = e.message; }
+      if (psbt) {                                     // the PSBT is complete
+        stream.getTracks().forEach(t => t.stop());
+        video.style.display = "none";
+        stat.textContent = `reassembled from ${seen.size + 1} parts (${psbt.length} bytes, ${how})`;
+        return parse(psbt);
+      }
+      seen.add(text.split("/")[1]);
+      const m = text.match(/\/(\d+)-(\d+)\//);
+      stat.textContent = m ? `${seen.size}/${m[2]} parts` : `${seen.size} parts`;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+document.getElementById("camstart").onclick = camera;
+
+function fromText(s) {
+  s = s.trim().replace(/\s+/g, "");
+  if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0)
+    return Uint8Array.from(s.match(/../g).map(h => parseInt(h, 16)));
+  return b64(s);
+}
+
+const drop = document.getElementById("drop"), file = document.getElementById("file");
+document.getElementById("pick").onclick = () => file.click();
+file.onchange = async () => file.files[0] && parse(new Uint8Array(await file.files[0].arrayBuffer()));
+document.getElementById("parse").onclick = () => {
+  const t = document.getElementById("text").value;
+  if (t.trim()) parse(fromText(t));
+};
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = async e => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  if (e.dataTransfer.files[0]) parse(new Uint8Array(await e.dataTransfer.files[0].arrayBuffer()));
+};
+</script>
+</body>
+</html>
