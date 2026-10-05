@@ -76,8 +76,7 @@ class UrEncoder internal constructor(val seqLen: Int, private val next: () -> St
 /**
  * @param parserWasm the contents of parser.wasm
  * @param sha256 when given, the module must hash to exactly this, or it is refused. Take the value
- *   from the project's `checksums.txt`, or from the device's `Parser hash` screen if you are
- *   checking that you are running what it runs.
+ *   from the project's `checksums.txt` or a release's `SHA256SUMS`.
  */
 class Parser(parserWasm: ByteArray, sha256: String? = null) {
     init {
