@@ -141,12 +141,21 @@ check-core-diff: build/parser.wasm build/signer.wasm parser/build/vectors/own_p2
 RUST_TOOLCHAIN := 1.95.0
 RUST_WASM := parser/rust/target/wasm32-unknown-unknown/release/wasm_psbt_parser.wasm
 
-$(RUST_WASM): $(wildcard parser/rust/src/*.rs) parser/rust/Cargo.toml
+$(RUST_WASM): $(wildcard parser/rust/src/*.rs parser/rust/src/*/*.rs) parser/rust/Cargo.toml
 	cd parser/rust && rustup run $(RUST_TOOLCHAIN) cargo build --release --target wasm32-unknown-unknown
 
 
 
 # The Rust module has to meet the same bar as the C: nothing to call, and no feature creep
+# wasm-opt has to be told the features: cargo leaves no target_features section for it to read, the
+# way the C build's --keep-section=target_features does
+RS_FEATURES := --enable-bulk-memory-opt --enable-nontrapping-float-to-int --enable-sign-ext \
+               --enable-mutable-globals --enable-multivalue --enable-extended-const
+build/parser-rs.wasm: $(RUST_WASM)
+	@mkdir -p build
+	$(WASM_OPT) $< -Oz --strip-debug --strip-producers $(RS_FEATURES) -o $@
+	@shasum -a 256 $@
+
 # The whole 5,016-byte plan, the prevtx offsets and what finalize produces, compared against the C
 # through the real ABI. Comparing the plan whole means a field this check does not know about cannot
 # hide a difference

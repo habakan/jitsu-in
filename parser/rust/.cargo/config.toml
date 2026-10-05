@@ -1,0 +1,9 @@
+# The default wasm stack is 1 MB, which on a microcontroller is the whole budget and then some: it put
+# this module's linear memory at 18 pages against the C's 3.
+#
+# 48 KB is what this needs and 32 KB is not enough — Rust passes `Parsed` (a 5,016-byte plan plus its
+# side tables) by value in places the C passed a pointer, and the bounds-checked slicing adds frames.
+# The C reserves 16 KB. The linear memory still comes to 3 pages either way, which is the number that
+# matters on the device; the stack lives inside it.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=49152"]

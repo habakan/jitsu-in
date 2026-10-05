@@ -20,26 +20,50 @@ Core are guarding. The move is worth making, and it is not a substitute for any 
 
 The port is complete, so this is the whole module both ways, with the same flags (2026-10-05):
 
-| | after `wasm-opt -Oz` | imports | dependencies |
-|---|---:|---:|---:|
-| C | **15,570** | 0 | — |
-| Rust, `no_std` | **20,967** | 0 | **0** |
+| | wasm (flash) | linear memory | `__heap_base` | imports | dependencies |
+|---|---:|---:|---:|---:|---:|
+| C | **15,570** | 196,608 (3 pages) | 136,064 | 0 | — |
+| Rust, `no_std` | **20,542** | 196,608 (3 pages) | 174,608 | 0 | **0** |
 
-**Rust is 35% larger here, and the earlier measurement said the opposite.** On `reader.h` and
-`tx.c` alone Rust came out smaller — 1,067 against 1,221 — and that did not hold once `psbt.c` and
-`ur.c` came across. Measuring a slice predicted the wrong sign for the whole.
+**The linear memory is the same, and that is the number that matters on a microcontroller.** The
+module's bytes cost 5 KB more of flash, out of 4 MB, and the interpreter's writable copy of it costs
+5 KB more of RAM, out of 162 KB free.
 
-Where it goes is `core`'s bounds-checked slicing and the panic paths that `overflow-checks` and
-indexing produce: each one is a branch and a trap that the C simply did not have, because the C
-checked by hand and the reviewer had to believe it. That is the trade, stated plainly — **5.4 KB for
-not having to believe it**.
+Getting there took two corrections, both of which inflated an earlier measurement by a long way:
 
-`--release` with `panic = "abort"` is already as small as the profile gets. What would reduce it is
-turning off `overflow-checks`, which is exactly the protection the move was for, so it stays on.
+- **Cargo's default wasm stack is 1 MB.** Without `-zstack-size` the linear memory came to 18 pages
+  against the C's 3 — it would not have fitted on the device at all. `.cargo/config.toml` sets it to
+  48 KB, which is what this needs; 32 KB is not enough, because Rust passes `Parsed` (the 5,016-byte
+  plan plus its side tables) by value where the C passed a pointer
+- **The working arrays belonged in `static`, not on the stack.** The sampler's 1,024 weights, its
+  aliases and the shuffle's index array are 22 KB, and the linker reserves the deepest stack any path
+  needs. The C had them in `static` for exactly this reason
+
+Neither was visible from measuring a slice. An earlier comparison of `reader.h` and `tx.c` alone had
+Rust *smaller* — 1,067 bytes against 1,221 — and that reversed once `psbt.c` and `ur.c` came across.
+**Measuring part of it predicted the wrong sign for the whole.**
+
+Where the 5 KB goes is `core`'s bounds-checked slicing and the panic paths that `overflow-checks` and
+indexing produce: each is a branch and a trap the C did not have, because the C checked by hand and
+the reviewer had to believe it. That is the trade, stated plainly — **5 KB for not having to believe
+it**. Turning `overflow-checks` off would reduce it, and that is the protection the move was for, so
+it stays on.
 
 The one place C is clearly ahead on the terms this project cares about is **pinning the toolchain**:
 wasi-sdk is two tarballs checked by hash, where Rust is `rustup` with a `rust-toolchain.toml`. The
 version is pinned; the bytes are not pinned as tightly.
+
+## Not decided, and not measured
+
+- **Neither module has been run on the hardware or under QEMU.** The instruction counts are unknown,
+  so nothing here says anything about speed. The device repository can measure both on the same
+  footing (`make check-qemu-psbt`), and that is the next thing worth knowing
+- The 48 KB stack is larger than the C's 16 KB. The device gives its native side 32 KB, and whether
+  those interact has not been checked
+- The signer stays C: it links libsecp256k1, which is C. Only the parser is in question
+- Which one becomes the shipped module is open. Keeping both is not only a migration cost — two
+  independent implementations required to return the same plan is the arrangement
+  [design.md](../../docs/module-abi.md) argued was stronger than a replacement
 
 ## How the port is run
 

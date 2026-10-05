@@ -140,6 +140,21 @@ impl Sampler {
         Sampler { probs: [0.0; MAX_SEQ_LEN], aliases: [0; MAX_SEQ_LEN], n: 0 }
     }
 
+    /// Initialises from DEGREE_WEIGHTS, read through a raw pointer so that the weights and this
+    /// sampler are not two live borrows of the same static at once.
+    fn init_from_static(&mut self, n: usize) {
+        let w = (&raw const DEGREE_WEIGHTS) as *const f64;
+        self.n = n;
+        let mut sum = 0.0f64;
+        for i in 0..n {
+            sum += unsafe { *w.add(i) };
+        }
+        for i in 0..n {
+            self.probs[i] = unsafe { *w.add(i) } * n as f64 / sum;
+        }
+        self.build(n);
+    }
+
     pub fn init(&mut self, weights: &[f64]) {
         let n = weights.len();
         self.n = n;
@@ -147,7 +162,15 @@ impl Sampler {
         for i in 0..n {
             self.probs[i] = weights[i] * n as f64 / sum;
         }
-        let mut stack = [0i16; MAX_SEQ_LEN];
+        self.build(n);
+    }
+
+    /// Vose's method over `probs`, which init has already filled.
+    fn build(&mut self, n: usize) {
+        // Also static: the two stacks are 2 KB and this is called from the same single path
+        static mut STACK: [i16; MAX_SEQ_LEN] = [0; MAX_SEQ_LEN];
+        let stack: &mut [i16] =
+            unsafe { core::slice::from_raw_parts_mut((&raw mut STACK) as *mut i16, MAX_SEQ_LEN) };
         let mut ns = 0usize;
         let mut nl = 0usize;
         // Reversed, as in the reference
@@ -199,13 +222,25 @@ impl Sampler {
 }
 
 /// How many fragments a mixed part combines: 1/i over i in 1..=seq_len, sampled.
+///
+/// The working arrays are static, not local. On a microcontroller the linker reserves the deepest
+/// stack any path needs, and 1,024 f64 weights plus a sampler is 18 KB of it — which is what pushed
+/// the module's linear memory from 3 pages to 18 before these moved here. The C put them in `static`
+/// for the same reason.
+///
+/// This module is single-threaded by construction: wasm without the threads proposal has no way to
+/// call in concurrently, so sharing one buffer across calls is safe and there is nothing to lock.
+static mut DEGREE_WEIGHTS: [f64; MAX_SEQ_LEN] = [0.0; MAX_SEQ_LEN];
+static mut DEGREE_SAMPLER: Sampler = Sampler::new();
+
 pub fn choose_degree(seq_len: usize, r: &mut Rng) -> usize {
-    let mut weights = [0.0f64; MAX_SEQ_LEN];
+    let weights: &mut [f64] =
+        unsafe { core::slice::from_raw_parts_mut((&raw mut DEGREE_WEIGHTS) as *mut f64, MAX_SEQ_LEN) };
     for i in 1..=seq_len {
         weights[i - 1] = 1.0 / i as f64;
     }
-    let mut s = Sampler::new();
-    s.init(&weights[..seq_len]);
+    let s: &mut Sampler = unsafe { &mut *(&raw mut DEGREE_SAMPLER) };
+    s.init_from_static(seq_len);
     s.next(r) + 1
 }
 
@@ -238,7 +273,10 @@ pub fn choose_fragments(seq_num: u32, seq_len: usize, checksum: u32, bits: &mut 
     seed[4..].copy_from_slice(&checksum.to_be_bytes());
     let mut r = Rng::from_seed(&seed);
     let degree = choose_degree(seq_len, &mut r);
-    let mut idx = [0u16; MAX_SEQ_LEN];
+    // Static for the same reason as the sampler's arrays: 2 KB of stack the linker would reserve
+    static mut IDX: [u16; MAX_SEQ_LEN] = [0; MAX_SEQ_LEN];
+    let idx: &mut [u16] =
+        unsafe { core::slice::from_raw_parts_mut((&raw mut IDX) as *mut u16, MAX_SEQ_LEN) };
     for i in 0..seq_len {
         idx[i] = i as u16;
     }
