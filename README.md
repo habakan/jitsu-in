@@ -1,137 +1,118 @@
-# wasm-psbt-parser
+# wasm-bitcoin-signer
 
-A PSBT v0 ([BIP174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki)) parser, with animated-QR (UR) decoding and encoding, that compiles to a ~16 KB WebAssembly module with
-**no imports and no keys**.
-It turns an untrusted PSBT into a fixed-layout *plan* (`include/plan.h`) that a signer can check and sign,
-and inserts the signer's signatures back into the PSBT.
+**Two WebAssembly modules that split a Bitcoin signer in half.** One reads the untrusted
+transaction and holds no keys; the other holds the keys and reads nothing else. Both have **zero
+imports**: no clock, no filesystem, no network, nothing to call.
 
-> **Status: experimental.** Not audited. Do not use with real funds.
+> **Status: experimental, and not audited.** Do not put real funds through it. What a review would
+> need to cover is in [docs/module-abi.md](docs/module-abi.md); the signer's own limits are in
+> [signer/docs/abi.md](signer/docs/abi.md).
 
-## Why
+| | bytes | imports | what it does |
+|---|---:|---:|---|
+| [`parser.wasm`](parser/README.md) | 15,570 | **0** | animated QR (UR) reassembly, PSBT v0 parsing, building a fixed-layout plan, taking signatures back, UR encoding |
+| [`signer.wasm`](signer/docs/abi.md) | 56,522 | **0** | keys, BIP32 derivation, re-checking that plan, building what to display, sighash, signing, xpub export |
 
-In an air-gapped hardware signer, the PSBT parser is the most complex code that reads attacker-controlled input.
-This module is meant to run inside a WebAssembly sandbox (e.g. WAMR on a microcontroller) while the keys, sighash
-computation and signing stay in native code outside the sandbox:
+## Why two modules
 
-- The module has **zero imports**. It cannot call the host, draw on the screen, read keys or produce randomness.
-  The host only reads and writes buffers the module exports, after bounds-checking the addresses.
-- It never sees private keys. If a malicious PSBT compromises the parser, it still cannot reach the keys.
-- The signer derives what it shows and what it signs from the **same** plan. A compromised parser can make the
-  signer sign what it displays, but not display one transaction and sign another.
+The parser is the most complex code in a signer that reads bytes an attacker chose. Isolating it
+means that compromising it does not reach the key: it is not in the same module, and the module it
+is in cannot call anything.
 
-The signer is still responsible for checking the plan (key ownership, change detection, fees, and the SegWit v0
-fee attack via `non_witness_utxo`); see [the ABI](docs/abi.md) for the full list of what a host must do.
+What stops a compromised parser lying about the transaction is not the sandbox but the plan. The
+signer re-derives every key itself, decides for itself what is change, computes the fee itself, and
+builds every string it displays from the plan's bytes. **It then refuses to sign anything but the
+plan it was shown**, by requiring the SHA-256 to match. So a malicious parser can make the signer
+sign what it displayed, but it cannot display one transaction and sign another.
 
-## Releases
+## Why this is worth sharing
 
-Each release carries a `SHA256SUMS`, a detached PGP signature over it, and a GitHub build
-provenance attestation — and the build is reproducible, so you can skip all three and check the
-bytes yourself. See [docs/releases.md](docs/releases.md).
+Compiling Bitcoin logic to wasm is not scarce; libwally and BDK do it too. What is scarce is being
+able to **check rather than trust**:
 
-## Animated QR (UR)
+| | |
+|---|---|
+| **no imports** | neither module can call a host function. Verified in CI, not merely intended |
+| **memory cannot grow** | built with `--no-growable-memory`, so neither can take more of the host's memory than it declared |
+| **a pinned feature set** | [Lime1](https://github.com/WebAssembly/tool-conventions/blob/main/Lime.md), enforced at link time, so a dependency cannot quietly widen what a runtime must support |
+| **reproducible** | macOS arm64 and Linux x86_64 give the same bytes from a toolchain pinned by version and by hash |
+| **the same answers as Bitcoin Core** | 37 PSBTs agree on the parse, and 8 signatures are byte-identical, ECDSA and Schnorr alike |
+| **three host libraries that agree** | JavaScript, Kotlin and Swift, required to produce identical output byte for byte |
 
-PSBTs usually arrive as animated QR codes in the [Uniform Resources](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-005-ur.md)
-format (`ur:crypto-psbt/...` or `ur:psbt/...`). The module reassembles them itself, so the fountain decoding of
-untrusted QR payloads also stays inside the sandbox:
+That combination is what makes the "runs anywhere" picture mean something. It is not about
+portability being convenient — it is that **a review of one of these modules carries over to every
+platform that loads it**. The audit amortizes; that is the point.
 
-```
-parser_ur_reset()
-parser_ur_receive(len) -> PSBT length once complete (the PSBT is then in the input buffer for parser_parse),
-                          0 while more parts are needed, or a negative UR_ERR_* (include/ur.h)
-parser_ur_progress()   -> parts expected (upper 16 bits) and fragments recovered (lower 16 bits)
-```
+## Host libraries
 
-The signed PSBT goes back the same way:
+No native build in any of them: no JNI, no NDK, no `.so` or XCFramework per architecture.
 
-```
-parser_ur_encode_start(len, max_fragment_len) -> number of pure parts (len is what parser_finalize() returned)
-parser_ur_encode_next()                       -> length of the next part, written to the input buffer
-```
+| | runtime | |
+|---|---|---|
+| JavaScript / browser / Node | the engine you already have | [parser](parser/hosts/js) · [signer](signer/hosts/js) |
+| Kotlin / JVM / **Android** | [Chicory](https://github.com/dylibso/chicory), pure Java | [parser](parser/hosts/kotlin) · [signer](signer/hosts/kotlin) |
+| Swift / macOS / **iOS** | [WasmKit](https://github.com/swiftwasm/WasmKit), pure Swift | [parser](parser/hosts/swift) · [signer](signer/hosts/swift) |
 
-Parts are uppercase (QR alphanumeric mode) `ur:crypto-psbt` parts. After the pure parts come mixed ones, so a
-device can loop them and a scanner that missed some still recovers the PSBT. The encoder builds each fragment on
-the fly from the output buffer, without a second copy of the message.
+Each one bounds-checks every offset the module hands back, and each can refuse a module whose
+SHA-256 is not the build you expected — which for a module that holds a key is the difference
+between running your signer and running someone else's.
 
-Parts may arrive in any order, in either case, with duplicates, and mixed with parts of another message (those are
-rejected without disturbing the rest). Limits: 1024 parts per message, and up to 64 mixed parts (16 KB) kept while
-waiting to be reduced; the oldest is dropped when full. The PRNG, alias sampler and shuffle that decide which
-fragments a mixed part combines match the Blockchain Commons reference implementation bit for bit.
+## Building and testing
 
-## Interface
-
-```
-parser_input()        -> address of the 32 KB input buffer
-parser_parse(len, fp) -> 0 or an error code (include/psbt_parser.h)
-parser_plan()         -> address of plan_t
-parser_prevtx_off(i)  -> offset/length of input i's non_witness_utxo inside the input buffer
-parser_prevtx_len(i)
-parser_sigs()         -> address of plan_sig_t[16] for the host to fill
-parser_finalize(n)    -> length of the signed PSBT, or a negative error
-parser_output()       -> address of the signed PSBT
+```sh
+make deps     # libsecp256k1 at its pinned commit
+make          # build/parser.wasm and build/signer.wasm
+make test     # the vectors, the host libraries, the layout, the shape of the output
 ```
 
-`fp` is the signer's master key fingerprint (not a secret). Only derivation paths with this fingerprint become
-key candidates, so the signer never learns about cosigners' paths.
+Needs clang with the wasm32 target, a wasi-libc sysroot, and [uv](https://docs.astral.sh/uv/).
+With Homebrew: `brew install llvm lld wasi-libc wasi-runtimes uv`.
 
-`plan_t` has no pointers or `long`s, and its size and offsets are pinned with `_Static_assert`, so wasm32,
-RV32 and 64-bit hosts share the same layout.
+That uses whatever clang you have, which is fine for development but will not reproduce a release
+byte for byte. For that, use the pinned toolchain — see
+[parser/docs/releases.md](parser/docs/releases.md).
 
-## What it checks
+The JVM and Swift host libraries need `kotlinc` and Swift 6.3 or newer:
 
-Strict for the fields it interprets: duplicate keys, key/value lengths per type, PSBT v2-only fields,
-scriptSig/witness in the unsigned transaction, `non_witness_utxo` txid and its consistency with `witness_utxo`,
-trailing bytes, and the limits below.
-
-Fields it does not interpret (MuSig2, script-path details, proprietary) are passed through untouched.
-It does not check that public keys are on the curve: the signer is expected to derive its own keys instead of
-trusting the PSBT.
-
-It never marks these inputs as signable: finalized inputs, inputs that already carry the candidate key's signature, and P2TR inputs with
-a script tree (only [BIP86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki) key-path spends are supported).
-
-Limits: PSBT up to 32 KB, 16 inputs, 16 outputs, scriptPubKey up to 83 bytes, derivation depth up to 8.
-
-## Build and test
-
-Requires clang with the wasm32 target, wasi-libc and compiler-rt builtins for wasm32, and [uv](https://docs.astral.sh/uv/)
-for the tests. With Homebrew: `brew install llvm lld wasi-libc wasi-runtimes uv`.
-
-```
-make          # build/parser.wasm and its SHA-256
-make test
+```sh
+make check-signer-kotlin check-signer-swift
+make check-hosts-agree       # and require all of them to produce the same bytes
 ```
 
-This uses whatever clang you have, which is fine for development but will not reproduce a release
-byte for byte. To do that, use the pinned toolchain — see [docs/releases.md](docs/releases.md).
+## What is tested
 
-The UR building blocks are first checked natively (with ASan / UBSan) against the expected values of the
-[bc-ur](https://github.com/BlockchainCommons/bc-ur) test suite (`tests/bc-ur-test.cpp`, extracted by
-`tools/gen_ur_ref_vectors.py`): CRC32, Bytewords, the Xoshiro256** sequences, 500 sampler draws, shuffles,
-200 degree choices, fragment choices, and the single-part and 20-part example URs. On a sequence with a dropped
-part in reverse order, the decoder needs the same number of parts (16) as the reference decoder.
+| | |
+|---|---|
+| the parser | 529 PSBT vectors including Bitcoin Core's own `rpc_psbt.json`, 1,174 UR checks against Blockchain Commons' reference values, continuous fuzzing, a pinned set of exports |
+| the signer | 74 checks across three host libraries, with the signatures required to equal what the native implementation produced, byte for byte |
+| both | the shape of the output (`make check-wasm`), and that every structure offset in both specifications and all three host libraries equals what C says it is (`make check-layout`) |
 
-The tests then run `build/parser.wasm` itself under wasmtime:
+Signing is deterministic — ECDSA grinds for a low R as Bitcoin Core does, and Schnorr passes a zero
+`aux_rand` — so "the same signature" means identical bytes, not merely another valid one. That is
+what lets a browser reproduce a hardware signer's output exactly. **It also has to be revisited
+before multisig**, where [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
+says deterministic nonces are unsafe.
 
-- the module has no imports;
-- Bitcoin Core's `test/functional/data/rpc_psbt.json`: no traps; every invalid vector is rejected except 15 whose
-  only defect is in MuSig2 fields this parser does not interpret; valid vectors are accepted or rejected only as
-  PSBT v2 (unsupported), missing UTXO data, or a transaction with no inputs;
-- PSBTs built with [embit](https://github.com/diybitcoinhardware/embit) (P2WPKH, P2TR, mixed, a foreign input):
-  every plan field matches the values the PSBT was built from, and a different fingerprint selects no keys;
-- signature insertion: the signed PSBT parses with embit, the transaction is unchanged, the signatures are in the
-  right inputs, and invalid signature lists are rejected;
-- UR: the same PSBTs encoded as `crypto-psbt` and `psbt` URs by [@ngraveio/bc-ur](https://github.com/ngraveio/bc-ur)
-  (`tests/ur_vectors.json`, from `tools/gen_ur_vectors.cjs`) reassemble to the original bytes with every third pure
-  part dropped, and then parse;
-- UR encoding: the module encodes each of those PSBTs part for part identically to the reference encoder, and its
-  parts decode back to the PSBT. Natively, it reproduces bc-ur's 20-part and single-part example URs character for
-  character.
+## Where things are
 
-## License
+```
+parser/        parser.wasm: sources, its ABI, three host libraries, vectors, fuzzing
+signer/        signer.wasm: sources, its ABI, three host libraries, golden signatures
+docs/
+  module-abi.md   the convention both modules follow, and what a host must do
+tools/         checking the shape of the output, the layout, and fetching the pinned toolchain
+```
 
-MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for the bundled test data.
+A reference implementation on bare metal — an RP2350 with no operating system, running the same
+`parser.wasm` byte for byte — uses these as a submodule.
 
-## Fuzzing
+## Scope
 
-`make check-fuzz` runs both harnesses for a fixed number of iterations; `make fuzz-psbt` and
-`make fuzz-ur` run until stopped. See [docs/abi.md](docs/abi.md).
+Single-signature P2WPKH ([BIP84](https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki))
+and P2TR key path ([BIP86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki)),
+`SIGHASH_ALL` and Taproot's `SIGHASH_DEFAULT`. No multisig, no script trees, no legacy P2PKH
+signing.
+
+## Licence
+
+MIT, except where [NOTICE](NOTICE) says otherwise.

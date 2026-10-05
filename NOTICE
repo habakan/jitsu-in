@@ -1,11 +1,19 @@
-tests/rpc_psbt.json is copied from Bitcoin Core
+wasm-bitcoin-signer
+Copyright (c) 2026 habakan
+
+The code in this repository is distributed under the MIT License (LICENSE), except as noted below.
+
+libsecp256k1 is fetched by `make deps` at a pinned commit and is not vendored here.
+Copyright (c) 2013 Pieter Wuille and contributors. MIT.
+
+parser/tests/rpc_psbt.json is copied from Bitcoin Core
 (https://github.com/bitcoin/bitcoin/blob/master/test/functional/data/rpc_psbt.json).
 
 Copyright (c) 2009-2026 The Bitcoin Core developers
 Distributed under the MIT software license (https://opensource.org/licenses/MIT).
 
-tests/bc-ur-test.cpp is copied from Blockchain Commons bc-ur
-(https://github.com/BlockchainCommons/bc-ur/blob/master/test/test.cpp), and tests/ur_ref_vectors.h holds
+parser/tests/bc-ur-test.cpp is copied from Blockchain Commons bc-ur
+(https://github.com/BlockchainCommons/bc-ur/blob/master/test/test.cpp), and parser/tests/ur_ref_vectors.h holds
 values extracted from it.
 
 Copyright (c) Blockchain Commons
