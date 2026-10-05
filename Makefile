@@ -166,7 +166,7 @@ check-core-diff: build/parser.wasm build/signer.wasm parser/build/vectors/own_p2
 # until the port is complete: a port checked only against its own tests is a port whose bugs become
 # its tests. See parser/rust/README.md for what has moved across so far.
 RUST_TOOLCHAIN := 1.95.0
-RUST_WASM := parser/rust/target/wasm32-unknown-unknown/release/wasm_psbt_parser.wasm
+RUST_WASM := parser/rust/target/wasm32-unknown-unknown/release/jitsu_in_parser.wasm
 
 $(RUST_WASM): $(wildcard parser/rust/src/*.rs parser/rust/src/*/*.rs) parser/rust/Cargo.toml
 	cd parser/rust && rustup run $(RUST_TOOLCHAIN) cargo build --release --target wasm32-unknown-unknown

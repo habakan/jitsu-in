@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "jitsu-in"
+name = "jitsu-in-parser"
 version = "0.1.0"
