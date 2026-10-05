@@ -24,6 +24,11 @@ docs/bitcoin.svg is the Bitcoin logo from Wikimedia Commons and is embedded in d
 
 Public domain.
 
+docs/everywhere.svg embeds the WebAssembly logo, drawn by Carlos Baraza
+(https://github.com/WebAssembly/web-assembly-logo).
+
+Dedicated to the public domain under CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/).
+
 examples/viewer/vendor/jsQR.min.js is jsQR (Apache License 2.0; license in the same directory).
 
 examples/viewer/vendor/quirc is a submodule fork of quirc (ISC License).

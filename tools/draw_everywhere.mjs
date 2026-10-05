@@ -45,8 +45,18 @@ function icon(kind, x, y, size, color) {
          `stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d.join("")}</g>`;
 }
 
+const WASM_PATH = "M66.12,0c0,.19,0,.38,0,.58a12.34,12.34,0,1,1-24.68,0c0-.2,0-.39,0-.58H0V107.62H10" +
+  "7.62V0ZM51.38,96.1,46.14,70.17H46L40.39,96.1H33.18L25,58h7.13L37,83.93h.09L42.94,58h6.67L54.9,8" +
+  "4.25H55L60.55,58h7L58.46,96.1Zm39.26,0-2.43-8.48H75.4L73.53,96.1H66.36L75.59,58H86.83L98,96.1Z";
+const WASM_NOTCH = "79.87 67.39 76.76 81.37 86.44 81.37 82.87 67.39 79.87 67.39";
 const BITCOIN_MARK = readFileSync(new URL("../docs/bitcoin.svg", import.meta.url), "utf8")
   .match(/<g[^>]*>([\s\S]*?)<\/g>/)[1];
+
+function wasmLogo(cx, cy, size) {
+  const k = size / 107.62;
+  return `<g transform="translate(${cx - size / 2},${cy - size / 2}) scale(${k})" fill="#654FF0">` +
+    `<path d="${WASM_PATH}"/><polygon points="${WASM_NOTCH}"/></g>`;
+}
 
 function bitcoinLogo(cx, cy, size) {
   const k = size / 64;
@@ -81,7 +91,8 @@ const hw = 258, hh = 196;
 const top = CY - hh / 2;
 s.push(`<rect x="${CX - hw / 2}" y="${top}" width="${hw}" height="${hh}" rx="12" ` +
        `fill="${HUB_FILL}" stroke="${HUB_LINE}" stroke-width="1.8"/>`);
-s.push(bitcoinLogo(CX, top + 44, 52));
+s.push(wasmLogo(CX - 23, top + 44, 36));
+s.push(bitcoinLogo(CX + 23, top + 44, 36));
 s.push(`<text x="${CX}" y="${top + 94}" fill="${HUB_LINE}" font-size="20" text-anchor="middle" ` +
        `letter-spacing="0.5">${NAME}</text>`);
 s.push(`<line x1="${CX - hw / 2 + 22}" y1="${top + 108}" x2="${CX + hw / 2 - 22}" y2="${top + 108}" ` +
