@@ -20,27 +20,24 @@ sign what it displayed, but it cannot display one transaction and sign another.
 
 ## What this is for
 
-Bitcoin's own position is that you should not have to trust anyone — you should be able to check. A
-signer is where that is hardest to live up to: it is the one piece that must be trusted absolutely,
-and almost nobody can read the whole of one.
+Bitcoin lets users verify the rules and transactions for themselves. Signing software is harder to
+inspect: it handles the keys and decides what to sign, and few users can review all of its code.
 
-**This exists to lower the cost of verifying a signer**, by two means.
+**jitsu-in aims to make a signer easier to verify in two ways.**
 
-**Fewer dependencies, so the supply chain is cheaper to check.** Both modules have zero imports,
-pull in no package manager, and are built by a toolchain pinned by version and by hash. The whole of
-`parser.wasm` is 15,570 bytes from four C files.
+**No host imports; pinned build tools.** Both modules have zero imports. The build uses no package
+manager, and the toolchain is pinned by version and hash. `parser.wasm` is 15,570 bytes, built from
+four C files.
 
-> This lowers the **cost of checking**, not the risk. A dependency you did not audit is no safer for
-> being pinned; it is only easier to find out what you are running. Pretending otherwise would be
-> the opposite of the point.
+> Pinning makes builds reproducible and identifies the dependencies. It does not make an unaudited
+> dependency safe; those dependencies still need review.
 
-**More platforms, so the same program is verified more times.** One module, byte for byte, runs on a
-microcontroller with no OS, in a browser, on Android and on iOS. Every platform that loads it is
-another set of eyes on the same bytes, and a bug found on one is a bug fixed for all of them — which
-is only true because the code is shared rather than reimplemented per platform.
+**The same module across platforms.** The same wasm file runs on a microcontroller with no OS, in a
+browser, on Android and on iOS. Running it in several runtimes checks whether they produce the same
+output. A fix to the shared module applies wherever that version is used; runtime and host bugs still
+need their own fixes.
 
-That is what the "runs anywhere" picture is for. Not that portability is convenient: that
-**verification accumulates** instead of starting over on each device.
+The [platform diagram](everywhere.md) lists where the modules have run and what those runs checked.
 
 ## What you can check
 

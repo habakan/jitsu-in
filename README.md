@@ -2,10 +2,9 @@
 
 <sup>[日本語](docs/ja/README.md)</sup>
 
-**jitsu-in is the signing logic a Bitcoin signer needs, pulled out into WebAssembly modules.**
-Being WebAssembly means every platform runs signing logic built from the same source, and each
-module runs sandboxed with only what it needs: one reads the untrusted transaction and holds no
-keys, the other holds the keys and reads nothing else.
+**jitsu-in provides two WebAssembly modules for Bitcoin transaction signing.** `parser.wasm` reads
+an untrusted PSBT and builds a fixed-layout plan. `signer.wasm` checks that plan, prepares transaction
+details for review, and signs the transaction. The parser has no keys; the signer does not read the PSBT.
 
 > **Status: experimental, and not audited.** Be careful before putting real funds through it. What
 > it handles is in [Scope](#scope); the signer's own limits are in
@@ -22,8 +21,7 @@ against what it claims to be, and 実印 itself, the mark that commits you.</sub
 
 <img src="docs/everywhere.svg" alt="The same bytes run everywhere: jitsu-in at the centre, six places it has been run" width="940">
 
-Where these have been run, and what the figure does not claim, is in
-[docs/everywhere.md](docs/everywhere.md).
+The tested runtimes and the limits of those tests are in [docs/everywhere.md](docs/everywhere.md).
 
 ## Using it
 
@@ -40,11 +38,10 @@ build step, so what you run is what you can read — with a `.d.mts` beside each
 are type-checked in place with JSDoc (`make check-types`), and the committed `.d.mts` has to be
 current or that check fails.
 
-Each library bounds-checks every offset the module hands back, and each can refuse a module whose
-SHA-256 is not the build you expected — which for a module that holds a key is the difference
-between running your signer and running someone else's.
+The JavaScript, Kotlin and Swift host libraries check offsets returned by the modules and can pin
+each module's SHA-256. A host configured with that hash can refuse a different build before it runs.
 
-Why it is shaped this way is in [docs/rationale.md](docs/rationale.md); what is where is in [ARCHITECTURE.md](ARCHITECTURE.md).
+See [the design rationale](docs/rationale.md) and [the repository map](ARCHITECTURE.md).
 
 ## Building and testing
 

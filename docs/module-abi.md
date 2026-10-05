@@ -2,17 +2,14 @@
 
 <sup>[日本語](ja/module-abi.md)</sup>
 
-Both WebAssembly modules in this repository share one shape. This page is what a host author needs
-before reading either module's own documentation.
-
-What makes them worth sharing is not that they are portable — compiling Bitcoin logic to wasm is not
-scarce. It is that each one can be **checked rather than trusted**, and a review of one carries over
-to every platform that loads it.
+Both WebAssembly modules use the same calling conventions. This page describes the properties a host
+can rely on and the rules shared by both modules. Module-specific exports and structures are in each
+module's ABI documentation.
 
 ## What the modules guarantee
 
-Every one of these is enforced by a check that runs in CI, named beside it. A host may rely on them,
-and anyone is welcome to hold their own modules to the same list.
+CI checks each property in this table. Hosts may rely on them; the list can also serve as a checklist
+for other modules.
 
 | | what it means | checked by |
 |---|---|---|
@@ -25,12 +22,8 @@ and anyone is welcome to hold their own modules to the same list.
 | **Independent hosts agree** | Three host libraries, written separately, must produce byte-identical output over the same input | `make check-hosts-agree` |
 | **An outside oracle agrees** | The parser's answers are compared against Bitcoin Core rather than against a second implementation by the same author | `make check-core-diff` |
 
-The first four are properties of the module alone, and a reviewer can confirm them from the `.wasm`
-file without building anything. The last four are properties of how it is developed.
-
-None of this is specific to Bitcoin. A module that reads attacker-chosen bytes in any domain can be
-held to the same list, and the point of writing it out is that it can be checked against rather than
-taken on description.
+The first four properties can be checked directly from the `.wasm` file. The remaining four require
+building or running the repository checks.
 
 ## The rules
 
@@ -53,9 +46,7 @@ both could not tell them apart by name.
 A module that genuinely has one combined scratch area says so: `prim_io` is a fixed layout of
 seckey, message, aux and result, and calling it an input or an output would be a lie.
 
-**Operations are `<mod>_<verb>`.** There is no single return convention, because three different
-kinds of thing are being reported, and pretending otherwise would mean a host checking the wrong
-sense somewhere. Each module states which of these each function uses:
+**Operations are `<mod>_<verb>`.** Functions use one of three return conventions:
 
 | | |
 |---|---|
@@ -63,9 +54,9 @@ sense somewhere. Each module states which of these each function uses:
 | an error code | `0` on success, a positive module-specific code otherwise |
 | a count | the number produced, or the negated error code |
 
-Writing the first host library for `signer.wasm` is what found that `signer_xpub` had been returning
-`1` for success while `signer_review` next to it returned `0`. It now returns an error code like its
-neighbours. A convention nobody has driven from another language is a guess.
+The first host library for `signer.wasm` exposed that `signer_xpub` returned `1` for success while
+`signer_review` returned `0`. It now uses the same error-code convention as `signer_review`. A return
+convention needs to be checked from a host language, not inferred from the C implementation alone.
 
 **Every module has zero imports.** No clock, no randomness, no filesystem, no network, nothing to
 polyfill. A host that needs randomness passes it in through a buffer. This is checked in CI
@@ -96,10 +87,8 @@ byte-identical to the native implementation's, which is the first evidence that 
 usable by someone other than this repository's own applications. What building it found is in its
 README: the ABI itself needed no Android-specific anything, and the two problems were both packaging.
 
-Three hosts matter more than three times one host: `make check-hosts-agree` runs all of them over
-the same PSBT and requires their output to match byte for byte. A single host's tests pass just as happily when the
-library and its expectations are wrong together, which is what caught `signer_xpub` returning the
-opposite sense from its neighbours.
+`make check-hosts-agree` runs all three hosts over the same PSBT and compares their output byte for
+byte. This caught `signer_xpub` returning the opposite success value from `signer_review`.
 
 Three further modules are built from these sources by the bare-metal repository rather than here —
 the signing primitives on their own, a scriptPubKey-to-address module, and a QR decoder. They are
