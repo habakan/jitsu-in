@@ -1,100 +1,134 @@
-# Needs clang with the wasm32 target and a wasi-libc sysroot. With Homebrew: llvm / lld / wasi-libc / wasi-runtimes
-# WASM_OPT is called explicitly: the clang driver would otherwise run whatever wasm-opt is on PATH,
-# which silently changes the output (2.7 KB and a different hash when it is missing)
-LLVM    ?= /opt/homebrew/opt/llvm/bin
+# Two WebAssembly modules and the host libraries that drive them. The parser has no keys; the signer
+# has nothing else. docs/module-abi.md is the convention both follow.
+#
+#   make              build both modules
+#   make test         everything: vectors, every host library, the layout, the shape of the output
+#   make deps         fetch libsecp256k1 at its pinned commit (the signer needs it)
+LLVM     ?= /opt/homebrew/opt/llvm/bin
+WASI     ?= /opt/homebrew/opt/wasi-libc/share/wasi-sysroot
+RTLIB    ?= /opt/homebrew/opt/wasi-runtimes/share/wasi-runtimes/lib/wasm32-unknown-wasip1
 WASM_OPT ?= wasm-opt
+TOOLS    := LLVM=$(LLVM) WASI=$(WASI) RTLIB=$(RTLIB) WASM_OPT=$(WASM_OPT)
+
 # Lime1: WebAssembly 1.0 plus seven phase-5 features, defined in WebAssembly/tool-conventions/Lime.md
 # and promised not to change. Passing it to the linker makes it a gate: if a dependency ever starts
 # using SIMD or threads, the link fails instead of the module quietly requiring more of a runtime.
 LIME1 := mutable-globals,multivalue,sign-ext,nontrapping-fptoint,bulk-memory-opt,extended-const,call-indirect-overlong
-WASI    ?= /opt/homebrew/opt/wasi-libc/share/wasi-sysroot
-RTLIB   ?= /opt/homebrew/opt/wasi-runtimes/share/wasi-runtimes/lib/wasm32-unknown-wasip1
-SRC     := src/psbt.c src/ur.c src/tx.c src/sha256.c
+LIME_FLAGS := -mcpu=lime1 -Xlinker --features=$(LIME1)
 
-# The input / output buffers (just over 32 KB each) and the UR decoder need three pages of linear memory. With no memory.grow,
-# WAMR's shrunk-memory option trims it down to __heap_base
-build/parser.wasm: $(SRC) include/*.h
+# Pinned, not a tag: a library that holds keys must not vary by the day it was fetched
+SECP      := third_party/secp256k1
+SECP_REV  := 46db787112beabdb5e17e0dc35680716f1057e7b
+COMB      ?= -DCOMB_BLOCKS=2 -DCOMB_TEETH=5
+SECP_DEFS := -DENABLE_MODULE_EXTRAKEYS=1 -DENABLE_MODULE_SCHNORRSIG=1 -DECMULT_WINDOW_SIZE=2 \
+             -DUSE_EXTERNAL_DEFAULT_CALLBACKS=1 $(COMB)
+
+SIGNER_SRC := signer/wasm_main.c signer/core.c signer/address.c signer/bip32.c signer/sighash.c \
+  signer/ripemd160.c signer/sha512.c signer/secp_callbacks.c signer/secp256k1_unity.c \
+  parser/src/tx.c parser/src/sha256.c
+
+all: build/parser.wasm build/signer.wasm
+.PHONY: all
+
+deps:
+	mkdir -p third_party
+	git clone --filter=blob:none https://github.com/bitcoin-core/secp256k1.git $(SECP)
+	cd $(SECP) && git checkout --detach $(SECP_REV)
+.PHONY: deps
+
+check-deps:
+	@test -d $(SECP) || { echo "run make deps first"; exit 1; }
+	@cd $(SECP) && test "$$(git rev-parse HEAD)" = "$(SECP_REV)" \
+	  && echo "secp256k1 at its pinned commit" || { echo "secp256k1 is NOT at $(SECP_REV)"; exit 1; }
+.PHONY: check-deps
+
+# The parser keeps its own Makefile: it was released from it, and the build that produced v0.1.0
+# should not become a different build by being rewritten here
+build/parser.wasm: $(wildcard parser/src/*.c parser/include/*.h)
+	$(MAKE) -C parser build/parser.wasm $(TOOLS)
+	@mkdir -p build && cp parser/build/parser.wasm $@
+
+build/signer.wasm: $(SIGNER_SRC) signer/*.h parser/include/*.h | check-deps
 	mkdir -p build
-	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs -Oz -Wall -Wextra \
-	  -mcpu=lime1 -Xlinker --features=$(LIME1) \
-	  -Iinclude -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
+	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs \
+	  -Oz -Wall -Wno-unused-function -DNDEBUG $(LIME_FLAGS) -Isigner -Iparser/include \
+	  -I$(SECP)/include $(SECP_DEFS) \
+	  -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=16384 \
 	  -Wl,--export=__heap_base -Wl,--export=__data_end \
 	  -Wl,--initial-memory=196608 -Wl,--no-growable-memory \
 	  --no-wasm-opt -Wl,--keep-section=target_features \
-	  -o $@ $(SRC) -lc $(RTLIB)/libclang_rt.builtins.a
+	  -o $@ $(SIGNER_SRC) -lc $(RTLIB)/libclang_rt.builtins.a
 	$(WASM_OPT) $@ -Oz -o $@
-	shasum -a 256 $@
+	@shasum -a 256 $@
 
-build/vectors/own_p2wpkh_1in.psbt: tools/gen_vectors.py tests/rpc_psbt.json
-	rm -rf build/vectors && uv run -q $< tests/rpc_psbt.json build/vectors
+# The structure offsets in the specs and in every host library, against what C says they are. A
+# number written by hand in a document is wrong the moment a struct changes, and nothing else notices
+build/layout: signer/tests/layout.c signer/core.h parser/include/plan.h
+	@mkdir -p build
+	$(CC) -Isigner -Iparser/include -o $@ $<
 
-# UR building blocks against the bc-ur reference tests, natively with sanitizers
-build/test_ur: tests/test_ur.c tests/ur_ref_vectors.h src/ur.c src/sha256.c include/*.h
-	mkdir -p build
-	cc -O2 -Wall -Wextra -Iinclude -Itests -fsanitize=address,undefined -o $@ tests/test_ur.c src/ur.c src/sha256.c
+check-layout: build/layout
+	uv run -q tools/check_layout.py $<
+.PHONY: check-layout
 
-# Fuzzing. Needs a clang with libFuzzer (Apple's does not ship it; Homebrew's llvm does).
-# The PSBT and the UR parts both come from whoever holds up a QR code, so both are fuzzed.
-FUZZ_CC  := $(LLVM)/clang
-FUZZ_CFLAGS := -O1 -g -Wall -Wextra -Iinclude -fsanitize=fuzzer,address,undefined \
-  -fno-sanitize-recover=all -fuse-ld=lld
+# Vectors, fuzzing and the parser's own three host libraries
+check-parser: build/parser.wasm
+	$(MAKE) -C parser test $(TOOLS)
+.PHONY: check-parser
 
-build/fuzz_%: tests/fuzz_%.c $(SRC) include/*.h
-	mkdir -p build
-	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer -o $@ $< $(SRC)
+check-signer-js: build/signer.wasm build/parser.wasm
+	node signer/hosts/js/test.mjs
+.PHONY: check-signer-js
 
-# Seeds: the PSBT vectors, and the UR parts from the reference encoder
-build/corpus/psbt: build/vectors/own_p2wpkh_1in.psbt
-	mkdir -p $@ && for f in build/vectors/*.psbt; do \
-	  printf '\x73\xc5\xda\x0a' | cat - $$f > $@/$$(basename $$f); done
+check-signer-kotlin: build/signer.wasm build/parser.wasm
+	$(MAKE) -C signer/hosts/kotlin check
+.PHONY: check-signer-kotlin
 
-build/corpus/ur: tests/ur_vectors.json
-	mkdir -p $@ && python3 -c "import json; \
-	  v=json.load(open('tests/ur_vectors.json'))['vectors']; \
-	  [open('$@/%s_%d' % (x['name'], x['fragment_len']), 'w').write('\n'.join(x['parts'])) for x in v]"
+check-signer-swift: build/signer.wasm build/parser.wasm
+	$(MAKE) -C signer/hosts/swift check
+.PHONY: check-signer-swift
 
-# Run until stopped: make fuzz-psbt / make fuzz-ur
-fuzz-%: build/fuzz_% build/corpus/%
-	build/fuzz_$* build/corpus/$* -max_len=40000
-.PHONY: fuzz-psbt fuzz-ur
-
-# Short deterministic run, for CI
-check-fuzz: build/fuzz_psbt build/fuzz_ur build/corpus/psbt build/corpus/ur
-	build/fuzz_psbt build/corpus/psbt -runs=200000 -max_len=40000 -print_final_stats=1
-	build/fuzz_ur   build/corpus/ur   -runs=200000 -max_len=40000 -print_final_stats=1
-.PHONY: check-fuzz
-
-# The JavaScript host. Tests the host itself: hidden offsets, named errors, and that a module
-# returning a bad offset is stopped rather than followed
-# The set of exports is part of the ABI. Growing it by accident is how a module starts offering
-# more than it documents, so the list is pinned and compared
-check-exports: build/parser.wasm
-	wasm-tools print $< | grep -oE '\(export "[^"]+"' | sed 's/(export "//; s/"//' | sort > /tmp/exports.now
-	diff /tmp/exports.now tools/parser.exports && echo "exports unchanged"
-.PHONY: check-exports
-
-check-hosts: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt
-	node hosts/js/test.mjs build/parser.wasm build/vectors
-.PHONY: check-hosts
-
-# The JVM host, which is also the Android one. REQUIRE_KOTLIN=1 turns a missing kotlinc into a
-# failure; a check that silently succeeds without its tool is worse than no check
-check-hosts-kotlin: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt
+# Independent hosts driving the same module have to agree byte for byte. If they do not, one of them
+# is reading the layout wrong, which no single-host test would catch: a lone host's tests pass just as
+# happily when the library and its expectations are wrong together.
+# One shell for the whole recipe, so a guard can actually skip the rest. REQUIRE_KOTLIN=1 and
+# REQUIRE_SWIFT=1 turn a missing tool into a failure; CI requires Kotlin but cannot require Swift,
+# because WasmKit needs Swift 6.3 or newer and the runners do not have it
+PSBT_VECTOR := parser/build/vectors/own_mixed_nwu.psbt
+check-hosts-agree: build/signer.wasm build/parser.wasm
 	@set -e; \
-	if ! command -v kotlinc >/dev/null; then \
-	  if [ "$(REQUIRE_KOTLIN)" = "1" ]; then echo "kotlinc not found and REQUIRE_KOTLIN=1"; exit 1; fi; \
-	  echo "kotlinc not found; skipping (pass REQUIRE_KOTLIN=1 to make this a failure)"; exit 0; \
-	fi; \
-	$(MAKE) -C hosts/kotlin check WASM=$(PWD)/build/parser.wasm \
-	  PSBT=$(PWD)/build/vectors/own_p2wpkh_1in.psbt
-.PHONY: check-hosts-kotlin
+	node signer/hosts/js/dump.mjs build/signer.wasm build/parser.wasm $(PSBT_VECTOR) > build/host-js.out; \
+	if command -v kotlinc >/dev/null; then \
+	  $(MAKE) -s -C signer/hosts/kotlin dump.jar; \
+	  $(MAKE) -s -C signer/hosts/kotlin dump PSBT=$(PWD)/$(PSBT_VECTOR) > build/host-kotlin.out; \
+	  diff build/host-js.out build/host-kotlin.out && echo "JavaScript and Kotlin agree"; \
+	elif [ "$(REQUIRE_KOTLIN)" = "1" ]; then echo "kotlinc not found and REQUIRE_KOTLIN=1"; exit 1; \
+	else echo "kotlinc not found; skipping the Kotlin host"; fi; \
+	if command -v swift >/dev/null; then \
+	  $(MAKE) -s -C signer/hosts/swift dump PSBT=$(PWD)/$(PSBT_VECTOR) 2>/dev/null \
+	    | grep -vE '^Building|^Build complete|^\[' > build/host-swift.out; \
+	  diff build/host-js.out build/host-swift.out && echo "JavaScript and Swift agree"; \
+	elif [ "$(REQUIRE_SWIFT)" = "1" ]; then echo "swift not found and REQUIRE_SWIFT=1"; exit 1; \
+	else echo "swift not found; skipping the Swift host"; fi
+.PHONY: check-hosts-agree
 
-test: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt build/test_ur
-	build/test_ur
-	uv run -q tools/run_tests.py build/parser.wasm build/vectors tests/rpc_psbt.json tests/ur_vectors.json
-	$(MAKE) check-hosts
-	$(MAKE) check-exports
+# What we ship has to have the right shape, checked rather than intended
+check-wasm: build/parser.wasm build/signer.wasm
+	uv run -q tools/check_wasm.py build/parser.wasm build/signer.wasm
+.PHONY: check-wasm
+
+check-repro:
+	uv run -q tools/toolchain.sh >/dev/null
+	@echo "see the signer repository for the five-module reproducible build"
+.PHONY: check-repro
+
+test: check-layout check-parser check-signer-js check-hosts-agree
+	@echo
+	@echo "both modules, the vectors, and the JavaScript hosts passed."
+	@echo "the JVM and Swift hosts need kotlinc and Swift 6.3+: make check-signer-kotlin check-signer-swift"
+.PHONY: test
 
 clean:
 	rm -rf build
-.PHONY: test clean
+	$(MAKE) -C parser clean 2>/dev/null || true
+.PHONY: clean
