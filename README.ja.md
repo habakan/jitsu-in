@@ -1,4 +1,4 @@
-# jitsu-in
+<h1><img src="docs/bitcoin.svg" width="26" align="top" alt=""> jitsu-in</h1>
 
 > **jitsu-in ── 実印。** 署名に拘束力を与える、登録された印。引き出しに入れておく認印ではない。
 > ここにある2つのモジュールは、実印を使う行為の2つの半分から名を取っている ──

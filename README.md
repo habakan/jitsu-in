@@ -1,4 +1,4 @@
-# jitsu-in
+<h1><img src="docs/bitcoin.svg" width="26" align="top" alt=""> jitsu-in</h1>
 
 > **jitsu-in** — 実印, the registered seal that makes a signature binding in Japan. Not a 認印, the
 > everyday stamp you keep in a drawer. The two modules here are named for the two halves of using
