@@ -17,6 +17,10 @@
 | [`parser.wasm`](parser/README.md) | 15,570 | **0** | アニメーション QR（UR）の復元、PSBT v0 の解析、固定長 plan の生成、署名の差し込み、UR の符号化 |
 | [`signer.wasm`](signer/docs/abi.md) | 56,522 | **0** | 鍵、BIP32 導出、plan の再検証、表示内容の組み立て、sighash、署名、xpub 出力 |
 
+<img src="docs/everywhere.svg" alt="同じバイト列がどこでも動く。中央が jitsu-in、周囲が実際に動かした6箇所" width="940">
+
+どこで動かしたか、この図が主張していないことは [docs/everywhere.md](docs/everywhere.md)。
+
 ## なぜ2つに分けるのか
 
 署名器の中で、攻撃者が選んだバイト列を読む最も複雑なコードが解析器である。そこを隔離すると、

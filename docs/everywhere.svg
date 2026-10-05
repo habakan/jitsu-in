@@ -6,19 +6,21 @@
 <line x1="470" y1="334" x2="748.8601800185893" y2="440" stroke="#2f9e5e" stroke-width="2.2" opacity="0.5"/>
 <line x1="470" y1="334" x2="470" y2="546" stroke="#2f9e5e" stroke-width="2.2" opacity="0.5"/>
 <line x1="470" y1="334" x2="191.1398199814107" y2="440" stroke="#2f9e5e" stroke-width="2.2" opacity="0.5"/>
-<line x1="470" y1="334" x2="191.13981998141077" y2="227.99999999999997" stroke="#2f9e5e" stroke-width="2.2" opacity="0.5"/>
-<rect x="344" y="250" width="252" height="168" rx="12" fill="#faf8ff" stroke="#654FF0" stroke-width="1.8"/>
-<g transform="translate(442,268) scale(0.5203493774391377)" fill="#654FF0"><path d="M66.12,0c0,.19,0,.38,0,.58a12.34,12.34,0,1,1-24.68,0c0-.2,0-.39,0-.58H0V107.62H107.62V0ZM51.38,96.1,46.14,70.17H46L40.39,96.1H33.18L25,58h7.13L37,83.93h.09L42.94,58h6.67L54.9,84.25H55L60.55,58h7L58.46,96.1Zm39.26,0-2.43-8.48H75.4L73.53,96.1H66.36L75.59,58H86.83L98,96.1Z"/><polygon points="79.87 67.39 76.76 81.37 86.44 81.37 82.87 67.39 79.87 67.39"/></g>
-<text x="364" y="356" fill="#1a1d24" font-size="13.5">parser.wasm</text>
-<text x="576" y="356" fill="#6b7280" font-size="12.5" text-anchor="end">15,570 B</text>
-<text x="364" y="380" fill="#1a1d24" font-size="13.5">signer.wasm</text>
-<text x="576" y="380" fill="#6b7280" font-size="12.5" text-anchor="end">56,522 B</text>
-<text x="470" y="402" fill="#654FF0" font-size="12" text-anchor="middle">the same file, wherever it runs</text>
+<line x1="470" y1="334" x2="191.13981998141077" y2="227.99999999999997" stroke="#d4d8e0" stroke-width="1.6" opacity="0.35"/>
+<rect x="341" y="236" width="258" height="196" rx="12" fill="#faf8ff" stroke="#654FF0" stroke-width="1.8"/>
+<g transform="translate(444,254) scale(0.4831815647649136)" fill="#654FF0"><path d="M66.12,0c0,.19,0,.38,0,.58a12.34,12.34,0,1,1-24.68,0c0-.2,0-.39,0-.58H0V107.62H107.62V0ZM51.38,96.1,46.14,70.17H46L40.39,96.1H33.18L25,58h7.13L37,83.93h.09L42.94,58h6.67L54.9,84.25H55L60.55,58h7L58.46,96.1Zm39.26,0-2.43-8.48H75.4L73.53,96.1H66.36L75.59,58H86.83L98,96.1Z"/><polygon points="79.87 67.39 76.76 81.37 86.44 81.37 82.87 67.39 79.87 67.39"/></g>
+<text x="470" y="330" fill="#654FF0" font-size="20" text-anchor="middle" letter-spacing="0.5">jitsu-in</text>
+<line x1="363" y1="344" x2="577" y2="344" stroke="#654FF0" stroke-width="1" opacity="0.3"/>
+<text x="363" y="368" fill="#1a1d24" font-size="13.5">parser.wasm</text>
+<text x="577" y="368" fill="#6b7280" font-size="12.5" text-anchor="end">15,570 B</text>
+<text x="363" y="392" fill="#1a1d24" font-size="13.5">signer.wasm</text>
+<text x="577" y="392" fill="#6b7280" font-size="12.5" text-anchor="end">56,522 B</text>
+<text x="470" y="416" fill="#6b7280" font-size="11.5" text-anchor="middle">the same file, wherever it runs</text>
 <rect x="347" y="82" width="246" height="80" rx="9" fill="#f2fbf5" stroke="#2f9e5e" stroke-width="1.6"/>
 <g transform="translate(362,105) scale(1.4166666666666667)" fill="none" stroke="#2f9e5e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="10" y1="7" x2="10" y2="4"/><line x1="14" y1="7" x2="14" y2="4"/><line x1="10" y1="17" x2="10" y2="20"/><line x1="14" y1="17" x2="14" y2="20"/><line x1="7" y1="10" x2="4" y2="10"/><line x1="7" y1="14" x2="4" y2="14"/><line x1="17" y1="10" x2="20" y2="10"/><line x1="17" y1="14" x2="20" y2="14"/></g>
 <text x="409" y="110" fill="#166534" font-size="15">Bare metal MCU</text>
 <text x="409" y="129" fill="#6b7280" font-size="11.5">WAMR · RP2350 · no OS</text>
-<text x="409" y="147" fill="#654FF0" font-size="10.5">parser.wasm · signer is native C</text>
+<text x="409" y="147" fill="#654FF0" font-size="10.5">parser.wasm · signer native</text>
 <rect x="625.8601800185893" y="188" width="246" height="80" rx="9" fill="#f2fbf5" stroke="#2f9e5e" stroke-width="1.6"/>
 <g transform="translate(640.8601800185893,211) scale(1.4166666666666667)" fill="none" stroke="#2f9e5e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><line x1="10.5" y1="5.5" x2="13.5" y2="5.5"/><circle cx="12" cy="18" r="0.9"/></g>
 <text x="687.8601800185893" y="216" fill="#166534" font-size="15">Android</text>
@@ -39,10 +41,10 @@
 <text x="130.1398199814107" y="428" fill="#166534" font-size="15">Linux / macOS</text>
 <text x="130.1398199814107" y="447" fill="#6b7280" font-size="11.5">WAMR · the same interpreter</text>
 <text x="130.1398199814107" y="465" fill="#654FF0" font-size="10.5">parser.wasm · signer.wasm</text>
-<rect x="68.13981998141077" y="187.99999999999997" width="246" height="80" rx="9" fill="#f2fbf5" stroke="#2f9e5e" stroke-width="1.6"/>
-<g transform="translate(83.13981998141077,210.99999999999997) scale(1.4166666666666667)" fill="none" stroke="#2f9e5e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="4" ry="8.5"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><path d="M5.5 7 Q12 10 18.5 7"/><path d="M5.5 17 Q12 14 18.5 17"/></g>
-<text x="130.13981998141077" y="215.99999999999997" fill="#166534" font-size="15">Web viewer</text>
+<rect x="68.13981998141077" y="187.99999999999997" width="246" height="80" rx="9" fill="#fafafa" stroke="#cbd2dc" stroke-width="1.6"/>
+<g transform="translate(83.13981998141077,210.99999999999997) scale(1.4166666666666667)" fill="none" stroke="#6b7280" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="4" ry="8.5"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><path d="M5.5 7 Q12 10 18.5 7"/><path d="M5.5 17 Q12 14 18.5 17"/></g>
+<text x="130.13981998141077" y="215.99999999999997" fill="#1a1d24" font-size="15">Web viewer</text>
 <text x="130.13981998141077" y="234.99999999999997" fill="#6b7280" font-size="11.5">the browser's own engine</text>
-<text x="130.13981998141077" y="252.99999999999997" fill="#654FF0" font-size="10.5">parser.wasm · no keys, no signing</text>
-<text x="26" y="618" fill="#6b7280" font-size="11.5">green = run, and the output checked against the others &#183; purple = what runs as WebAssembly there</text>
+<text x="130.13981998141077" y="252.99999999999997" fill="#6b7280" font-size="10.5">parser.wasm · read-only</text>
+<text x="26" y="618" fill="#6b7280" font-size="11.5">green = run, and the output checked against the others &#183; grey = works, but not a recommended place for it</text>
 </svg>

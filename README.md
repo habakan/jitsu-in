@@ -18,6 +18,11 @@ imports**: no clock, no filesystem, no network, nothing to call.
 | [`parser.wasm`](parser/README.md) | 15,570 | **0** | animated QR (UR) reassembly, PSBT v0 parsing, building a fixed-layout plan, taking signatures back, UR encoding |
 | [`signer.wasm`](signer/docs/abi.md) | 56,522 | **0** | keys, BIP32 derivation, re-checking that plan, building what to display, sighash, signing, xpub export |
 
+<img src="docs/everywhere.svg" alt="The same bytes run everywhere: jitsu-in at the centre, six places it has been run" width="940">
+
+Where these have been run, and what the figure does not claim, is in
+[docs/everywhere.md](docs/everywhere.md).
+
 ## Why two modules
 
 The parser is the most complex code in a signer that reads bytes an attacker chose. Isolating it

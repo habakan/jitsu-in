@@ -12,15 +12,16 @@ const CARD_W = 246, CARD_H = 80;
 // The third line is not decoration: the device runs the signer as native C, and the browser viewer
 // holds no keys, so claiming both modules everywhere would be false.
 const PLATFORMS = [
-  ["Bare metal MCU", "WAMR · RP2350 · no OS", "parser.wasm · signer is native C", true, -90, "chip"],
+  ["Bare metal MCU", "WAMR · RP2350 · no OS", "parser.wasm · signer native", true, -90, "chip"],
   ["Android", "Chicory · a plain JAR, no NDK", "parser.wasm · signer.wasm", true, -30, "phone"],
   ["iOS", "WasmKit · pure Swift", "parser.wasm · signer.wasm", true, 30, "phone"],
   ["Node / CI", "V8 · vectors, fuzzing, Core", "parser.wasm · signer.wasm", true, 90, "terminal"],
   ["Linux / macOS", "WAMR · the same interpreter", "parser.wasm · signer.wasm", true, 150, "laptop"],
-  ["Web viewer", "the browser's own engine", "parser.wasm · no keys, no signing", true, 210, "globe"],
+  ["Web viewer", "the browser's own engine", "parser.wasm · read-only", false, 210, "globe"],
 ];
 
 const MODULES = [["parser.wasm", "15,570 B"], ["signer.wasm", "56,522 B"]];
+const NAME = "jitsu-in";
 
 // Brand logos are trademarked, so each platform gets a shape that says what kind it is
 function icon(kind, x, y, size, color) {
@@ -80,17 +81,22 @@ const pos = PLATFORMS.map(([, , , done, deg]) => {
   return [x, y];
 });
 
-// The hub: the logo, then what it is
-const hw = 252, hh = 168;
-s.push(`<rect x="${CX - hw / 2}" y="${CY - hh / 2}" width="${hw}" height="${hh}" rx="12" ` +
+// The hub: the logo, the name, and the two files it stands for
+const hw = 258, hh = 196;
+const top = CY - hh / 2;
+s.push(`<rect x="${CX - hw / 2}" y="${top}" width="${hw}" height="${hh}" rx="12" ` +
        `fill="${HUB_FILL}" stroke="${HUB_LINE}" stroke-width="1.8"/>`);
-s.push(wasmLogo(CX, CY - hh / 2 + 46, 56));
+s.push(wasmLogo(CX, top + 44, 52));
+s.push(`<text x="${CX}" y="${top + 94}" fill="${HUB_LINE}" font-size="20" text-anchor="middle" ` +
+       `letter-spacing="0.5">${NAME}</text>`);
+s.push(`<line x1="${CX - hw / 2 + 22}" y1="${top + 108}" x2="${CX + hw / 2 - 22}" y2="${top + 108}" ` +
+       `stroke="${HUB_LINE}" stroke-width="1" opacity="0.3"/>`);
 MODULES.forEach(([n, sz], i) => {
-  const y = CY - hh / 2 + 106 + i * 24;
-  s.push(`<text x="${CX - hw / 2 + 20}" y="${y}" fill="${FG}" font-size="13.5">${n}</text>`);
-  s.push(`<text x="${CX + hw / 2 - 20}" y="${y}" fill="${DIM}" font-size="12.5" text-anchor="end">${sz}</text>`);
+  const y = top + 132 + i * 24;
+  s.push(`<text x="${CX - hw / 2 + 22}" y="${y}" fill="${FG}" font-size="13.5">${n}</text>`);
+  s.push(`<text x="${CX + hw / 2 - 22}" y="${y}" fill="${DIM}" font-size="12.5" text-anchor="end">${sz}</text>`);
 });
-s.push(`<text x="${CX}" y="${CY + hh / 2 - 16}" fill="${HUB_LINE}" font-size="12" text-anchor="middle">` +
+s.push(`<text x="${CX}" y="${CY + hh / 2 - 16}" fill="${DIM}" font-size="11.5" text-anchor="middle">` +
        `the same file, wherever it runs</text>`);
 
 // The platforms
@@ -108,7 +114,7 @@ PLATFORMS.forEach(([name, rt, runs, done, , kind], i) => {
 });
 
 s.push(`<text x="26" y="${H - 22}" fill="${DIM}" font-size="11.5">` +
-       `green = run, and the output checked against the others &#183; purple = what runs as WebAssembly there</text>`);
+       `green = run, and the output checked against the others &#183; grey = works, but not a recommended place for it</text>`);
 s.push("</svg>");
 
 const out = process.argv[2] ?? "docs/everywhere.svg";
