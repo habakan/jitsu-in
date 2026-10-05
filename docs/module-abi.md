@@ -61,8 +61,8 @@ by accident is how a module starts offering more than it documents.
 
 | module | prefix | what it does | spec | host libraries |
 |---|---|---|---|---|
-| `parser.wasm` | `parser_` | UR reassembly, PSBT parsing, building the Plan, taking signatures back, UR encoding | [abi.md](../components/parser/docs/abi.md) | JS, Kotlin, Swift |
-| `signer.wasm` | `signer_` | keys, derivation, re-checking a Plan, the display model, signing, xpub export | [abi.md](../components/signer/docs/abi.md) | JS, Kotlin, Swift |
+| `parser.wasm` | `parser_` | UR reassembly, PSBT parsing, building the Plan, taking signatures back, UR encoding | [abi.md](../parser/docs/abi.md) | JS, Kotlin, Swift |
+| `signer.wasm` | `signer_` | keys, derivation, re-checking a Plan, the display model, signing, xpub export | [abi.md](../signer/docs/abi.md) | JS, Kotlin, Swift |
 | `bitcoin-signer.wasm` | `prim_` | the signing primitives on their own; what the RV32 benchmark exercises | none | none |
 | `address.wasm` | `addr_` | a scriptPubKey to an address string | none | none |
 | `qr.wasm` | `qr_` | QR decoding (quirc), for the browser | none | none |
@@ -70,9 +70,9 @@ by accident is how a module starts offering more than it documents.
 **`parser.wasm` is finished as a part**: a specification, three host libraries, 529 vectors,
 fuzzing, its own CI and a signed release. **`signer.wasm` now matches it** — a specification, host
 libraries for JavaScript, Kotlin and Swift, and 74 checks of its own — which satisfies the first of
-the conditions in [design.md](design.md) §16 for giving it a repository of its own.
+the conditions in jitsu-in-pico's `docs/design.md` §16 for giving it a repository of its own.
 
-An Android app built on the Kotlin host is in [../apps/android](../apps/android). Its signatures are
+An Android app built on the Kotlin host is in jitsu-in-pico's `apps/android`. Its signatures are
 byte-identical to the native implementation's, which is the first evidence that these modules are
 usable by someone other than this repository's own applications. What building it found is in its
 README: the ABI itself needed no Android-specific anything, and the two problems were both packaging.

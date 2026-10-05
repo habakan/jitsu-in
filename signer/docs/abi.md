@@ -4,7 +4,7 @@
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
 It is 56,522 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
-shared conventions are in [../../../docs/module-abi.md](../../../docs/module-abi.md); this page is
+shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
 Two host libraries drive it, and `make check-hosts-agree` requires their output to match byte for
@@ -163,4 +163,4 @@ says deterministic nonces are unsafe.
 
 Single-signature P2WPKH (BIP84) and P2TR key path (BIP86), `SIGHASH_ALL` and Taproot's
 `SIGHASH_DEFAULT`. No multisig, no script trees, no legacy P2PKH signing. The full list is in
-[../../../docs/limitations.md](../../../docs/limitations.md).
+jitsu-in-pico's `docs/limitations.md`.

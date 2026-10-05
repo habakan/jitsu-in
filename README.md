@@ -1,4 +1,9 @@
-# wasm-bitcoin-signer
+# jitsu-in
+
+> **jitsu-in** — 実印, the registered seal that makes a signature binding in Japan. Not a 認印, the
+> everyday stamp you keep in a drawer. The two modules here are named for the two halves of using
+> one: 照合 (*shougou*), checking the document against what it claims to be, and 実印 itself, the
+> mark that commits you.
 
 **Two WebAssembly modules that split a Bitcoin signer in half.** One reads the untrusted
 transaction and holds no keys; the other holds the keys and reads nothing else. Both have **zero

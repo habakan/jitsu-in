@@ -129,7 +129,7 @@ The tests then run `build/parser.wasm` itself under wasmtime:
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for the bundled test data.
+MIT. See [LICENSE](../LICENSE) and [NOTICE](../NOTICE) for the bundled test data.
 
 ## Fuzzing
 

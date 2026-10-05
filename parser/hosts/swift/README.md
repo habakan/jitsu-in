@@ -33,7 +33,7 @@ for out in plan.outputs {
 Add it to your own package:
 
 ```swift
-.package(path: "../wasm-psbt-parser/hosts/swift")   // or a URL once this is tagged
+.package(path: "../jitsu-in/hosts/swift")   // or a URL once this is tagged
 ```
 
 ## What you get

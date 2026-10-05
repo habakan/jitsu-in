@@ -12,12 +12,12 @@ sha256sum -c SHA256SUMS
 gpg --verify SHA256SUMS.asc SHA256SUMS
 
 # 3. the file was built by this repository's workflow, from a known commit
-gh attestation verify parser.wasm --repo habakan/wasm-psbt-parser
+gh attestation verify parser.wasm --repo habakan/jitsu-in
 ```
 
 The maintainer's public key is at https://github.com/habakan.gpg, fingerprint
 `8BD4 8DD6 70AF 9B34 7EA0  41CF 36D4 93A2 8A8B EB79`
-(also in [SECURITY.md](../SECURITY.md)).
+(also in [SECURITY.md](../../SECURITY.md)).
 
 Step 3 is independent of step 2: it does not depend on the maintainer's key at all, only on GitHub's
 signing of the build. Steps 2 and 3 fail for different reasons, which is the point of having both.
@@ -48,7 +48,7 @@ sha256sum build/parser.wasm   # must equal what SHA256SUMS says
 
 The macOS arm64 tarballs (`-arm64-macos`) produce the same bytes. `make` alone uses whatever clang is
 on your machine and is **not** expected to reproduce the release: the versions above are the ones that
-do. [.github/workflows/release.yml](../.github/workflows/release.yml) is the authoritative copy of
+do. [.github/workflows/release.yml](../../.github/workflows/release.yml) is the authoritative copy of
 these pins, because it is what actually built the artifact.
 
 One trap worth naming: if a different `wasm-opt` is earlier on your `PATH`, `WASM_OPT` above is what
