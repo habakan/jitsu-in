@@ -144,42 +144,28 @@ RUST_WASM := parser/rust/target/wasm32-unknown-unknown/release/wasm_psbt_parser.
 $(RUST_WASM): $(wildcard parser/rust/src/*.rs) parser/rust/Cargo.toml
 	cd parser/rust && rustup run $(RUST_TOOLCHAIN) cargo build --release --target wasm32-unknown-unknown
 
-build/probe-c.wasm: parser/tests/probe.c parser/src/tx.c parser/src/sha256.c parser/include/*.h
-	mkdir -p build
-	$(LLVM)/clang --target=wasm32-wasip1 --sysroot=$(WASI) -nostartfiles -nodefaultlibs -Oz -Wall \
-	  $(LIME_FLAGS) -Iparser/include -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all \
-	  -Wl,-z,stack-size=16384 -Wl,--initial-memory=1114112 -Wl,--no-growable-memory \
-	  --no-wasm-opt -Wl,--keep-section=target_features \
-	  -o $@ parser/tests/probe.c parser/src/tx.c parser/src/sha256.c -lc $(RTLIB)/libclang_rt.builtins.a
 
-# The whole 5,016-byte plan, the prevtx offsets and what finalize produces, compared through the real
-# ABI. Comparing the plan whole means a field this check does not know about cannot hide a difference
-check-rust-plan: build/parser.wasm $(RUST_WASM) parser/build/vectors/own_p2wpkh_1in.psbt
-	@cp $(RUST_WASM) build/parser-rs.wasm
+
+# The Rust module has to meet the same bar as the C: nothing to call, and no feature creep
+# The whole 5,016-byte plan, the prevtx offsets and what finalize produces, compared against the C
+# through the real ABI. Comparing the plan whole means a field this check does not know about cannot
+# hide a difference
+check-rust-plan: build/parser.wasm build/parser-rs.wasm parser/build/vectors/own_p2wpkh_1in.psbt
 	node parser/tools/check_rust_plan.mjs build/parser.wasm build/parser-rs.wasm parser/build/vectors
 .PHONY: check-rust-plan
 
 # The suite the C is tested with, run against the Rust module. It drives the module by its exported
-# names, so the UR sections skip themselves until parser_ur_* has been ported
-check-rust-suite: $(RUST_WASM) parser/build/vectors/own_p2wpkh_1in.psbt
-	@cp $(RUST_WASM) build/parser-rs.wasm
+# names, so porting the tests was never necessary
+check-rust-suite: build/parser-rs.wasm parser/build/vectors/own_p2wpkh_1in.psbt
 	cd parser && node tools/run_tests.mjs ../build/parser-rs.wasm build/vectors \
 	  tests/rpc_psbt.json tests/ur_vectors.json
 .PHONY: check-rust-suite
 
-check-rust-agrees: build/probe-c.wasm $(RUST_WASM)
-	@set -e; \
-	command -v rustup >/dev/null || { echo "rustup not found; skipping the Rust port check"; exit 0; }; \
-	cp $(RUST_WASM) build/probe-rs.wasm; \
-	node parser/tools/check_rust_agrees.mjs build/probe-c.wasm build/probe-rs.wasm parser/build/vectors
-.PHONY: check-rust-agrees
-
-# The Rust module has to meet the same bar as the C: nothing to call, and no feature creep
-check-rust-shape: $(RUST_WASM)
-	@n=$$(wasm-tools print $(RUST_WASM) | grep -c '(import ' || true); \
+check-rust-shape: build/parser-rs.wasm
+	@n=$$(wasm-tools print build/parser-rs.wasm | grep -c '(import ' || true); \
 	test "$$n" = "0" || { echo "the Rust module has $$n import(s)"; exit 1; }
 	wasm-tools validate --features=-all,floats,saturating-float-to-int,bulk-memory-opt,-mutable-global,sign-extension \
-	  $(RUST_WASM)
+	  build/parser-rs.wasm
 	@echo "the Rust module has no imports and stays inside Lime1"
 .PHONY: check-rust-shape
 

@@ -23,5 +23,6 @@ pub mod psbt;
 pub mod reader;
 pub mod sha256;
 pub mod tx;
+pub mod ur;
 
 mod exports;
