@@ -1,6 +1,6 @@
 #!/bin/sh
-# 再現可能ビルド用のツールチェーンを build/toolchain に用意する。版とハッシュを固定するので、
-# 第三者が同じ parser.wasm（同じ SHA-256）を作れる。
+# Puts the toolchain for a reproducible build in build/toolchain. Pinned by version and by the hash
+# of the tarball, so that someone else can produce the same bytes and therefore the same SHA-256.
 set -e
 
 WASI_SDK=34.0
@@ -14,17 +14,17 @@ Darwin-arm64) SDK_A=arm64-macos; BIN_A=arm64-macos
 Linux-x86_64) SDK_A=x86_64-linux; BIN_A=x86_64-linux
     SDK_SUM=b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
     BIN_SUM=195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572 ;;
-*)  echo "未対応の環境: $(uname -s)-$(uname -m)。ハッシュを足せば使えます"; exit 1 ;;
+*)  echo "no pinned toolchain for $(uname -s)-$(uname -m); add its hashes to use it"; exit 1 ;;
 esac
 
 sum() { shasum -a 256 "$1" 2>/dev/null || sha256sum "$1"; }
 
-fetch() { # url 展開先 期待するハッシュ
+fetch() { # url, where to unpack it, the hash to expect
     [ -d "$2" ] && return 0
     mkdir -p $DIR && t=$DIR/dl.tar.gz
     curl -sL -o $t "$1"
     got=$(sum $t | cut -d' ' -f1)
-    [ "$got" = "$3" ] || { echo "ハッシュが違う: $1"; echo "  期待 $3"; echo "  実際 $got"; rm -f $t; exit 1; }
+    [ "$got" = "$3" ] || { echo "wrong hash for $1"; echo "  expected $3"; echo "  got      $got"; rm -f $t; exit 1; }
     tar xzf $t -C $DIR && rm $t
 }
 

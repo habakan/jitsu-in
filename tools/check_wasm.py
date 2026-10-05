@@ -1,34 +1,36 @@
 # /// script
 # dependencies = []
 # ///
-"""配る .wasm が、公開して差し支えない形になっているかを検査する。
-利用者が「中身を信じなくても確かめられる」性質を、こちらでも常に確かめておくため。
+"""Checks that a .wasm we are about to ship has the shape it claims.
 
-使い方: uv run tools/check_wasm.py build/parser.wasm ...
+The properties that let a user check rather than trust are worth checking continuously on our side
+too, so that none of them can quietly stop being true.
 
-見るもの:
-  import が無い           ホスト関数を呼べない。時計もネットワークも触れない
-  メモリに上限がある       memory.grow でホストのメモリを食えない
-  可変 global を輸出しない  ホストから内部状態を書き換えられない
-  table を輸出しない       間接呼び出しの表を差し替えられない
-  start 関数が無い         読み込んだだけで何も動かない
-  未知の custom 節が無い    余計なものが混ざっていない
+Usage: uv run tools/check_wasm.py build/parser.wasm ...
+
+What it looks at:
+  no imports              it cannot call a host function: no clock, no network
+  memory has a maximum    it cannot eat the host's memory through memory.grow
+  no mutable global export the host cannot reach in and rewrite internal state
+  no table export         the indirect call table cannot be swapped out
+  no start function       loading it does not run anything
+  no unfamiliar custom sections  nothing extra came along
 """
 import subprocess
 import sys
 
 ALLOWED_CUSTOM = {"target_features", "producers"}
 
-# wasm-tools validate の既定は「phase 4 以降の提案を全部有効」で、help が自ら
-# "relatively bleeding edge" と書いている。MCU の WAMR で動かすものの検査としては逆向きなので、
-# 要求する機能をモジュールごとに固定して、知らないうちに広がらないようにする。
-# -mutable-global を入れているのは、可変 global の import/export だけを対象にする提案だから。
-# これで「可変 global を輸出していない」が spec レベルの検査になる
-# Lime1 でビルドしているので、要求するのは WebAssembly 1.0 + phase-5 の狭い集合で足りる。
-# floats と saturating-float-to-int は ur.c の fountain code のサンプラが f64 を使うため
+# wasm-tools validate defaults to enabling every proposal from phase 4 on, and its own help calls
+# that "relatively bleeding edge". For something that has to run on WAMR on an MCU that is the wrong
+# direction, so the features each module may require are pinned here and cannot widen unnoticed.
+# -mutable-global is in the list because that proposal covers exactly the import and export of a
+# mutable global, which turns "exports no mutable global" into a check at the spec level.
+# Built with Lime1, so WebAssembly 1.0 plus a narrow phase-5 set is all that is needed. floats and
+# saturating-float-to-int are there because the fountain code sampler in ur.c uses f64
 BASE_FEATURES = "-all,floats,saturating-float-to-int,bulk-memory-opt,-mutable-global"
 EXTRA_FEATURES = {
-    # 署名側は secp256k1 由来で sign-extension を使う
+    # The signer needs sign-extension, which comes in with secp256k1
     "signer.wasm": ",sign-extension",
 }
 
@@ -36,7 +38,7 @@ EXTRA_FEATURES = {
 def wat(path):
     r = subprocess.run(["wasm-tools", "print", path], capture_output=True, text=True)
     if r.returncode:
-        sys.exit(f"wasm-tools print が失敗: {r.stderr.strip()}")
+        sys.exit(f"wasm-tools print failed: {r.stderr.strip()}")
     return r.stdout
 
 
@@ -44,22 +46,22 @@ def check(path):
     features = BASE_FEATURES + EXTRA_FEATURES.get(path.rsplit("/", 1)[-1], "")
     r = subprocess.run(["wasm-tools", "validate", f"--features={features}", path],
                        capture_output=True, text=True)
-    bad = [] if r.returncode == 0 else [f"検証に失敗（{features}）: {r.stderr.strip().splitlines()[0]}"]
+    bad = [] if r.returncode == 0 else [f"did not validate ({features}): {r.stderr.strip().splitlines()[0]}"]
     text = wat(path)
 
     # import
     imports = [l for l in text.splitlines() if l.strip().startswith("(import ")]
     if imports:
-        bad.append(f"import が {len(imports)} 個ある: {imports[0].strip()[:60]}")
+        bad.append(f"has {len(imports)} import(s): {imports[0].strip()[:60]}")
 
-    # メモリの上限。(memory (;0;) 3 3) のように min max と並ぶ
+    # The memory maximum, printed as min then max: (memory (;0;) 3 3)
     mem = [l.strip() for l in text.splitlines() if l.strip().startswith("(memory ")]
     for m in mem:
         nums = [w for w in m.replace(")", " ").split() if w.isdigit()]
         if len(nums) < 2:
-            bad.append(f"メモリに上限が無い（伸長できる）: {m}")
+            bad.append(f"memory has no maximum, so it can grow: {m}")
 
-    # 可変 global の輸出
+    # Exported mutable globals
     mutable = {i for i, l in enumerate(
         [l for l in text.splitlines() if l.strip().startswith("(global ")]) if "(mut " in l}
     for l in text.splitlines():
@@ -67,23 +69,23 @@ def check(path):
         if s.startswith("(export ") and "(global " in s:
             idx = int(s.split("(global ")[1].split(")")[0])
             if idx in mutable:
-                bad.append(f"可変 global を輸出している: {s[:60]}")
+                bad.append(f"exports a mutable global: {s[:60]}")
 
-    # table / memory の輸出、start 関数
+    # Exported tables and memories, and a start function
     for l in text.splitlines():
         s = l.strip()
         if s.startswith("(export ") and "(table " in s:
-            bad.append(f"table を輸出している: {s[:60]}")
+            bad.append(f"exports a table: {s[:60]}")
         if s.startswith("(start "):
-            bad.append(f"start 関数がある: {s[:60]}")
+            bad.append(f"has a start function: {s[:60]}")
 
-    # custom 節
+    # Custom sections
     for l in text.splitlines():
         s = l.strip()
         if s.startswith("(@custom "):
             name = s.split('"')[1] if '"' in s else "?"
             if name not in ALLOWED_CUSTOM:
-                bad.append(f"見覚えのない custom 節: {name}")
+                bad.append(f"unfamiliar custom section: {name}")
     return bad, text
 
 
@@ -92,10 +94,10 @@ for path in sys.argv[1:]:
     bad, text = check(path)
     mem = next((l.strip() for l in text.splitlines() if l.strip().startswith("(memory ")), "?")
     exports = sum(1 for l in text.splitlines() if l.strip().startswith("(export "))
-    print(f"{path}: {mem}  輸出 {exports} 個")
+    print(f"{path}: {mem}  {exports} export(s)")
     for b in bad:
         print(f"  × {b}")
         failed += 1
     if not bad:
-        print("  import 無し / メモリ上限あり / 可変 global も table も輸出せず / start 無し")
+        print("  no imports / memory is capped / no mutable global or table exported / no start")
 sys.exit(1 if failed else 0)
