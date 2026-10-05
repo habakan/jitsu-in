@@ -67,6 +67,8 @@ jobs:
       - name: Is what we ship the right shape (no imports, fixed memory, no mutable global exported)
         run: make check-wasm
 
+      - name: The host libraries type-check, and the committed .d.mts are current
+        run: make check-types
       - name: The specs, all three host libraries and the structs agree on every offset
         run: make check-layout
 

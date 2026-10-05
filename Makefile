@@ -133,6 +133,32 @@ check-core-diff: build/parser.wasm build/signer.wasm parser/build/vectors/own_p2
 	exit $$rc
 .PHONY: check-core-diff
 
+# The host libraries ship as plain .mjs that anyone can read and import with no build step. This
+# type-checks them in place and regenerates the .d.mts beside them, failing if the committed ones are
+# stale — so a TypeScript consumer gets types without this repository shipping a build artifact as
+# the thing you run. TypeScript is pinned by version and by the hash of its tarball, like every
+# other tool here
+TS_VERSION := 5.9.3
+TS_SHA     := 10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3
+TSC         = build/ts/package/bin/tsc
+
+build/ts/package/bin/tsc:
+	@mkdir -p build/ts
+	cd build/ts && npm pack typescript@$(TS_VERSION) >/dev/null
+	echo "$(TS_SHA)  build/ts/typescript-$(TS_VERSION).tgz" | (shasum -a 256 -c - || sha256sum -c -)
+	cd build/ts && tar xzf typescript-$(TS_VERSION).tgz
+
+check-types: $(TSC)
+	@set -e; \
+	command -v node >/dev/null || { echo "node not found"; exit 1; }; \
+	node $(TSC) -p tsconfig.json; \
+	for f in parser/hosts/js/parser signer/hosts/js/signer; do \
+	  diff -u $$f.d.mts build/types/$$f.d.mts \
+	    || { echo "$$f.d.mts is stale: it has been regenerated, so commit the result"; exit 1; }; \
+	done; \
+	echo "the host libraries type-check, and the committed .d.mts files are current"
+.PHONY: check-types
+
 # What we ship has to have the right shape, checked rather than intended
 check-wasm: build/parser.wasm build/signer.wasm
 	python3 tools/check_wasm.py build/parser.wasm build/signer.wasm
@@ -143,7 +169,7 @@ check-repro:
 	@echo "see the signer repository for the five-module reproducible build"
 .PHONY: check-repro
 
-test: check-layout check-parser check-signer-js check-hosts-agree
+test: check-types check-layout check-parser check-signer-js check-hosts-agree
 	@echo
 	@echo "both modules, the vectors, and the JavaScript hosts passed."
 	@echo "the JVM and Swift hosts need kotlinc and Swift 6.3+: make check-signer-kotlin check-signer-swift"

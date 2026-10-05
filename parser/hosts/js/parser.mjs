@@ -8,6 +8,48 @@
 const MAGIC = 0x4e4c5042; // "BPLN"
 const ABI_VERSION = 1;
 
+/**
+ * The exports parser.wasm provides. Declared so that a typo in a name is a type error rather than a
+ * call to undefined at runtime.
+ * @typedef {{
+ *   memory: WebAssembly.Memory,
+ *   parser_input: () => number,
+ *   parser_input_cap: () => number,
+ *   parser_parse: (len: number, fingerprint: number) => number,
+ *   parser_plan: () => number,
+ *   parser_sigs: () => number,
+ *   parser_output: () => number,
+ *   parser_prevtx_off: (i: number) => number,
+ *   parser_prevtx_len: (i: number) => number,
+ *   parser_finalize: (n: number) => number,
+ *   parser_ur_reset: () => void,
+ *   parser_ur_receive: (len: number) => number,
+ *   parser_ur_progress: () => number,
+ *   parser_ur_encode_start: (len: number, fragmentLen: number) => number,
+ *   parser_ur_encode_next: () => number,
+ * }} ParserExports
+ */
+
+/**
+ * One input of a plan. `amount` and `spk` come from the PSBT's utxo; verifying `prevtx` against
+ * `prevTxid` is the only way to know the amount is real.
+ * @typedef {{
+ *   prevTxid: Uint8Array,
+ *   prevVout: number,
+ *   sequence: number,
+ *   amount: bigint,
+ *   spk: Uint8Array,
+ *   key: KeyOrigin | null,
+ *   sighashType: number,
+ *   prevtx: Uint8Array | null,
+ * }} PlanInput
+ */
+
+/** @typedef {{ amount: bigint, spk: Uint8Array, key: KeyOrigin | null }} PlanOutput */
+
+/** A signature for the host to hand back, one per input it signed.
+ *  @typedef {{ input: number, pubkey: Uint8Array, sig: Uint8Array }} Signature */
+
 // Layout of plan_t, from docs/abi.md. Kept in one place so a version bump touches one table.
 const L = {
   magic: 0, version: 4, txVersion: 8, locktime: 12, nInputs: 16, nOutputs: 17,
@@ -22,6 +64,10 @@ const P_ERR = ["OK", "MAGIC", "FORMAT", "DUPLICATE", "TX", "UNSUPPORTED", "LIMIT
 const UR_ERR = ["", "SCHEME", "BYTEWORDS", "PART", "MISMATCH", "LIMIT", "MESSAGE", "TYPE"];
 
 export class ParserError extends Error {
+  /**
+   * @param {number} code the module's return value: a P_ERR_* when positive, a UR_ERR_* when negative
+   * @param {"P_ERR" | "UR_ERR"} [kind]
+   */
   constructor(code, kind = "P_ERR") {
     const name = kind === "P_ERR" ? P_ERR[code] : UR_ERR[-code];
     super(`${kind}_${name ?? code}`);
@@ -33,13 +79,17 @@ export class ParserError extends Error {
 /** A BIP32 derivation the module read out of the PSBT — BIP380 calls this key origin information.
  *  It is a *claim*: derive the key yourself and check it produces the scriptPubKey before trusting it. */
 export class KeyOrigin {
+  /**
+   * @param {number} fingerprint the master fingerprint this derivation claims
+   * @param {number[]} path the raw uint32 path; the high bit means hardened
+   */
   constructor(fingerprint, path) {
     this.fingerprint = fingerprint;
     this.path = path;
   }
   toString() {
     const f = this.fingerprint.toString(16).padStart(8, "0");
-    return [f, ...this.path.map(v => (v & 0x80000000 ? `${v & 0x7fffffff}h` : `${v}`))].join("/");
+    return [f, ...this.path.map((/** @type {number} */ v) => (v & 0x80000000 ? `${v & 0x7fffffff}h` : `${v}`))].join("/");
   }
 }
 
@@ -59,6 +109,7 @@ export class Parser {
 
   /** Synchronous variant, for Node or anywhere compiling on the main thread is fine.
    *  It cannot check a digest: SubtleCrypto has no synchronous form. Use `load` if you want one. */
+  /** @param {BufferSource} parserWasm */
   static loadSync(parserWasm) {
     const module = new WebAssembly.Module(parserWasm);
     Parser.#assertNoImports(module);
@@ -66,6 +117,10 @@ export class Parser {
   }
 
   /** A hash in a file nobody checks is documentation. Checking it here makes it a gate. */
+  /**
+   * @param {BufferSource} bytes
+   * @param {string} want
+   */
   static async #assertDigest(bytes, want) {
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     const got = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
@@ -75,6 +130,7 @@ export class Parser {
   }
 
   /** The module must not be able to call the host at all. Checked before it is instantiated. */
+  /** @param {WebAssembly.Module} module */
   static #assertNoImports(module) {
     const imports = WebAssembly.Module.imports(module);
     if (imports.length) {
@@ -83,9 +139,15 @@ export class Parser {
     }
   }
 
+  /** @param {WebAssembly.Instance} instance */
   constructor(instance) {
-    this.exports = instance.exports;
-    const need = ["memory", "parser_input", "parser_input_cap", "parser_parse", "parser_plan"];
+    /** @type {ParserExports} */
+    this.exports = /** @type {any} */ (instance.exports);
+    /** @type {Uint8Array} */
+    this.mem = new Uint8Array(0);
+    /** @type {DataView} */
+    this.view = new DataView(new ArrayBuffer(0));
+    const need = /** @type {const} */ (["memory", "parser_input", "parser_input_cap", "parser_parse", "parser_plan"]);
     for (const n of need) if (!this.exports[n]) throw new Error(`not a parser.wasm module: ${n} missing`);
     this.#refresh();
   }
@@ -95,25 +157,44 @@ export class Parser {
     this.view = new DataView(this.exports.memory.buffer);
   }
 
+  /**
+   * @param {number} off
+   * @param {number} len
+   * @returns {number} the offset, once it is known to be inside the module's memory
+   */
   #check(off, len) {
     if (!Number.isInteger(off) || !Number.isInteger(len) || off < 0 || len < 0 || off + len > this.mem.length)
       throw new RangeError(`the module returned an offset outside its memory: ${off}+${len}`);
     return off;
   }
-  #u8(off) { return this.mem[this.#check(off, 1)]; }
+  /** @param {number} off */
+  #u8(off) { return this.mem[this.#check(off, 1)] ?? 0; }
+  /** @param {number} off */
   #u32(off) { return this.view.getUint32(this.#check(off, 4), true); }
+  /** @param {number} off */
   #i32(off) { return this.view.getInt32(this.#check(off, 4), true); }
+  /** @param {number} off */
   #u64(off) { return this.view.getBigUint64(this.#check(off, 8), true); }
+  /**
+   * @param {number} off
+   * @param {number} len
+   */
   #bytes(off, len) { return this.mem.slice(this.#check(off, len), off + len); }
 
+  /** @param {number} off */
   #script(off) {
     const n = this.#u8(off + L.script.len);
     return this.#bytes(off + L.script.bytes, n);
   }
 
+  /**
+   * @param {number} off
+   * @returns {KeyOrigin | null}
+   */
   #key(off) {
     const depth = this.#u8(off + L.key.depth);
     if (!depth) return null; // depth 0 means "the module found no derivation for this"
+    /** @type {number[]} */
     const path = [];
     for (let i = 0; i < depth; i++) path.push(this.#u32(off + L.key.path + i * 4));
     return new KeyOrigin(this.#u32(off + L.key.fingerprint), path);
@@ -122,6 +203,7 @@ export class Parser {
   /** How many bytes the input buffer takes. */
   get inputCapacity() { return this.exports.parser_input_cap(); }
 
+  /** @param {Uint8Array} bytes */
   #writeInput(bytes) {
     if (bytes.length > this.inputCapacity)
       throw new RangeError(`${bytes.length} bytes does not fit in ${this.inputCapacity}`);
@@ -203,6 +285,10 @@ export class Parser {
    * Encode a signed PSBT as animated QR parts.
    * @returns {{ seqLen: number, next: () => string }}
    */
+  /**
+   * @param {number} psbtLen
+   * @param {number} [fragmentLen]
+   */
   urEncode(psbtLen, fragmentLen = 100) {
     const seqLen = this.exports.parser_ur_encode_start(psbtLen, fragmentLen);
     if (seqLen < 0) throw new ParserError(seqLen, "UR_ERR");
@@ -239,6 +325,12 @@ export class Parser {
 
 /** What the module read out of the PSBT. Every field is a claim until the host checks it. */
 export class Plan {
+  /**
+   * @param {number} txVersion
+   * @param {number} locktime
+   * @param {PlanInput[]} inputs
+   * @param {PlanOutput[]} outputs
+   */
   constructor(txVersion, locktime, inputs, outputs) {
     this.txVersion = txVersion;
     this.locktime = locktime;

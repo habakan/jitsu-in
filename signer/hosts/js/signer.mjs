@@ -17,15 +17,63 @@ const L = {
   limits: { maxInputs: 16, maxOutputs: 16, xpubMax: 120, descMax: 180 },
 };
 
+/**
+ * The exports signer.wasm provides. Declared so that a typo in a name is a type error rather than a
+ * call to undefined at runtime.
+ * @typedef {{
+ *   memory: WebAssembly.Memory,
+ *   signer_input: () => number,
+ *   signer_input_cap: () => number,
+ *   signer_plan: () => number,
+ *   signer_prevtx: () => number,
+ *   signer_review_output: () => number,
+ *   signer_display_output: () => number,
+ *   signer_sigs: () => number,
+ *   signer_xpub_output: () => number,
+ *   signer_desc_output: () => number,
+ *   signer_init: (testnet: number) => number,
+ *   signer_seed_from_mnemonic: (mnLen: number, passLen: number) => number,
+ *   signer_load_seed: () => number,
+ *   signer_unload: () => void,
+ *   signer_fingerprint: () => number,
+ *   signer_set_prevtx: (i: number, off: number, len: number) => number,
+ *   signer_review: () => number,
+ *   signer_display: () => number,
+ *   signer_sign: () => number,
+ *   signer_xpub: () => number,
+ * }} SignerExports
+ */
+
+/** What review() reports. `owner` has one entry per output, `willSign` one per input.
+ *  @typedef {{
+ *    totalIn: bigint, totalOut: bigint, fee: bigint, nSign: number,
+ *    owner: number[], willSign: number[],
+ *  }} Review */
+
+/** One line of what to show. Every string here was built inside the module from the plan's bytes.
+ *  @typedef {{ amount: bigint, owner: number, textKind: number, text: string }} DisplayOutput */
+
+/** `spend` is the total of external outputs; ours and change are excluded.
+ *  @typedef {{ fee: bigint, spend: bigint, outputs: DisplayOutput[] }} Display */
+
+/** Hand `raw` to parser.wasm's signature buffer; `sig` and `pubkey` are for showing or checking.
+ *  @typedef {{ input: number, pubkey: Uint8Array, sig: Uint8Array, raw: Uint8Array }} Signature */
+
 export const OWNER = { EXTERNAL: 0, CHANGE: 1, SELF: 2 };
 export const TEXT_KIND = { ADDRESS: 0, OP_RETURN: 1, SCRIPT: 2 };
 
+/** CORE_ERR_* by value, as signer/docs/abi.md lists them.
+ *  @type {Record<number, string>} */
 export const ERRORS = {
   1: "FORMAT", 2: "NO_SEED", 3: "NOT_OURS", 4: "NOTHING_TO_SIGN", 5: "SIGHASH", 6: "SCRIPT",
   7: "PREVTX_MISSING", 8: "PREVTX_MISMATCH", 9: "FEE", 10: "NOT_REVIEWED", 11: "CRYPTO",
 };
 
 export class SignerError extends Error {
+  /**
+   * @param {string} stage which call refused: "review", "display", "sign" or "xpub"
+   * @param {number} code a CORE_ERR_* value
+   */
   constructor(stage, code) {
     super(`${stage}: ${ERRORS[code] ?? `unknown(${code})`}`);
     this.name = "SignerError";
@@ -34,6 +82,7 @@ export class SignerError extends Error {
   }
 }
 
+/** @param {BufferSource} bytes */
 async function sha256Hex(bytes) {
   const d = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -43,12 +92,17 @@ export class Signer {
   #e;
   #reviewed = false;
 
+  /** @param {WebAssembly.Instance} instance */
   constructor(instance) {
-    this.#e = instance.exports;
+    this.#e = /** @type {SignerExports} */ (/** @type {any} */ (instance.exports));
   }
 
   /** `sha256` refuses any module that is not the build you expected. For a module that will hold a
    *  key, pinning it is the difference between running your signer and running someone else's. */
+  /**
+   * @param {BufferSource} signerWasm
+   * @param {{ sha256?: string }} [opts]
+   */
   static async load(signerWasm, opts = {}) {
     if (opts.sha256) {
       const got = await sha256Hex(signerWasm);
@@ -70,6 +124,10 @@ export class Signer {
     return new Uint8Array(this.#e.memory.buffer);
   }
 
+  /**
+   * @param {number} off
+   * @param {number} len
+   */
   #view(off, len) {
     const end = off + len;
     if (off < 0 || len < 0 || end > this.#e.memory.buffer.byteLength) {
@@ -87,6 +145,10 @@ export class Signer {
 
   /** Derives the key from a BIP39 mnemonic. PBKDF2 2048 rounds, about half a second.
    *  The module wipes its own input buffer; the strings you passed in are yours to deal with. */
+  /**
+   * @param {string} mnemonic
+   * @param {string} [passphrase]
+   */
   seedFromMnemonic(mnemonic, passphrase = "") {
     const enc = new TextEncoder();
     const mn = enc.encode(mnemonic.normalize("NFKD"));
@@ -106,6 +168,7 @@ export class Signer {
   }
 
   /** For a seed you already have. 64 bytes. */
+  /** @param {Uint8Array} seed */
   loadSeed(seed) {
     if (seed.length !== 64) throw new RangeError(`a seed is 64 bytes, got ${seed.length}`);
     this.#mem.set(seed, this.#e.signer_input());
@@ -125,6 +188,7 @@ export class Signer {
   }
 
   /** The plan parser.wasm produced, copied in verbatim. Loading a plan invalidates any review. */
+  /** @param {Uint8Array} planBytes */
   setPlan(planBytes) {
     if (planBytes.length !== L.plan.size) {
       throw new RangeError(`a plan is ${L.plan.size} bytes, got ${planBytes.length}`);
@@ -136,6 +200,7 @@ export class Signer {
 
   /** The non_witness_utxo for each input, in the same order as the plan's inputs. `null` for an
    *  input that had none. */
+  /** @param {(Uint8Array | null)[]} prevTxs */
   setPrevTxs(prevTxs) {
     const base = this.#e.signer_prevtx();
     let used = 0;
@@ -233,7 +298,7 @@ export class Signer {
     const rc = this.#e.signer_xpub();
     if (rc !== 0) throw new SignerError("xpub", rc);
     const dec = new TextDecoder();
-    const read = (at, cap) => {
+    const read = (/** @type {number} */ at, /** @type {number} */ cap) => {
       const raw = this.#mem.subarray(at, at + cap);
       const nul = raw.indexOf(0);
       return dec.decode(raw.subarray(0, nul < 0 ? raw.length : nul));

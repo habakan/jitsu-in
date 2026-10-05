@@ -1,0 +1,24 @@
+{
+  // Type-checks the JavaScript without changing it. What ships stays plain .mjs that anyone can read
+  // and import with no build step; this only reads it. `make check-types` runs it, and also
+  // regenerates the .d.ts files and fails if the committed ones are stale.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "build/types",
+    "skipLibCheck": true
+  },
+  "include": [
+    "parser/hosts/js/parser.mjs",
+    "signer/hosts/js/signer.mjs"
+  ]
+}

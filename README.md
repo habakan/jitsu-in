@@ -53,7 +53,12 @@ No native build in any of them: no JNI, no NDK, no `.so` or XCFramework per arch
 | Kotlin / JVM / **Android** | [Chicory](https://github.com/dylibso/chicory), pure Java | [parser](parser/hosts/kotlin) · [signer](signer/hosts/kotlin) |
 | Swift / macOS / **iOS** | [WasmKit](https://github.com/swiftwasm/WasmKit), pure Swift | [parser](parser/hosts/swift) · [signer](signer/hosts/swift) |
 
-Each one bounds-checks every offset the module hands back, and each can refuse a module whose
+The JavaScript libraries ship as plain `.mjs` — importable from Node, a browser or a CDN with no
+build step, so what you run is what you can read — with a `.d.mts` beside each for TypeScript. They
+are type-checked in place with JSDoc (`make check-types`), and the committed `.d.mts` has to be
+current or that check fails.
+
+Each library bounds-checks every offset the module hands back, and each can refuse a module whose
 SHA-256 is not the build you expected — which for a module that holds a key is the difference
 between running your signer and running someone else's.
 

@@ -93,7 +93,7 @@ check-hosts-kotlin: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt
 
 test: build/parser.wasm build/vectors/own_p2wpkh_1in.psbt build/test_ur
 	build/test_ur
-	uv run -q tools/run_tests.py build/parser.wasm build/vectors tests/rpc_psbt.json tests/ur_vectors.json
+	node tools/run_tests.mjs build/parser.wasm build/vectors tests/rpc_psbt.json tests/ur_vectors.json
 	$(MAKE) check-hosts
 	$(MAKE) check-exports
 
