@@ -112,6 +112,27 @@ check-hosts-agree: build/signer.wasm build/parser.wasm
 	else echo "swift not found; skipping the Swift host"; fi
 .PHONY: check-hosts-agree
 
+# Bitcoin Core as the oracle. Core decides what a PSBT means, so agreeing with it is worth more than
+# agreeing with our own expectations. Both modules are driven from JavaScript here, so this needs
+# neither a native host nor Python. Its own port, so a node already on the default one is undisturbed
+BTCDIR  ?= build/btcregtest
+BTCPORT ?= 18999
+BTCCLI   = bitcoin-cli -datadir=$(PWD)/$(BTCDIR) -regtest -rpcport=$(BTCPORT)
+check-core-diff: build/parser.wasm build/signer.wasm parser/build/vectors/own_p2wpkh_1in.psbt
+	@set -e; \
+	command -v bitcoind >/dev/null || { echo "bitcoind not found (brew install bitcoin)"; exit 1; }; \
+	$(BTCCLI) stop >/dev/null 2>&1 || true; sleep 1; \
+	rm -rf $(BTCDIR) && mkdir -p $(BTCDIR); \
+	bitcoind -regtest -datadir=$(PWD)/$(BTCDIR) -rpcport=$(BTCPORT) -daemon -fallbackfee=0.0001; \
+	for i in $$(seq 1 30); do $(BTCCLI) getblockchaininfo >/dev/null 2>&1 && break; sleep 1; done; \
+	$(BTCCLI) getblockchaininfo >/dev/null || { echo "the regtest node did not come up"; exit 1; }; \
+	rc=0; \
+	node tools/check_against_core.mjs "$(BTCCLI)" build/parser.wasm build/signer.wasm \
+	  parser/build/vectors/*.psbt || rc=1; \
+	$(BTCCLI) stop >/dev/null 2>&1 || true; \
+	exit $$rc
+.PHONY: check-core-diff
+
 # What we ship has to have the right shape, checked rather than intended
 check-wasm: build/parser.wasm build/signer.wasm
 	uv run -q tools/check_wasm.py build/parser.wasm build/signer.wasm

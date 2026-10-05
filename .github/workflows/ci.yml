@@ -88,3 +88,18 @@ jobs:
       # have it yet, so it is verified on macOS. check-layout does check its constants either way
       - name: The hosts that can run here agree byte for byte
         run: make check-hosts-agree REQUIRE_KOTLIN=1
+
+      # Bitcoin Core as the oracle: it decides what a PSBT means, and our signatures have to equal
+      # its signatures byte for byte. Pinned and hash-checked like every other tool here
+      - name: Bitcoin Core (pinned by version and by hash)
+        run: |
+          V=28.1
+          curl -sL -o /tmp/btc.tar.gz \
+            https://bitcoincore.org/bin/bitcoin-core-$V/bitcoin-$V-x86_64-linux-gnu.tar.gz
+          echo "07f77afd326639145b9ba9562912b2ad2ccec47b8a305bd075b4f4cb127b7ed7  /tmp/btc.tar.gz" \
+            | sha256sum -c -
+          tar xzf /tmp/btc.tar.gz -C /tmp
+          sudo install /tmp/bitcoin-$V/bin/bitcoind /tmp/bitcoin-$V/bin/bitcoin-cli /usr/local/bin/
+          bitcoind --version | head -1
+      - name: The parse and the signatures equal Bitcoin Core's
+        run: make check-core-diff
