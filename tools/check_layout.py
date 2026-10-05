@@ -1,7 +1,4 @@
-#!/usr/bin/env -S uv run -q --script
-# /// script
-# requires-python = ">=3.11"
-# ///
+#!/usr/bin/env python3
 """The structure offsets in the spec and in the host library have to equal what C says they are.
 
 A number written by hand in a document is wrong the moment a struct changes, and nothing would

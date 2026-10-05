@@ -25,8 +25,10 @@ build/parser.wasm: $(SRC) include/*.h
 	$(WASM_OPT) $@ -Oz -o $@
 	shasum -a 256 $@
 
-build/vectors/own_p2wpkh_1in.psbt: tools/gen_vectors.py tests/rpc_psbt.json
-	rm -rf build/vectors && uv run -q $< tests/rpc_psbt.json build/vectors
+# The own_* vectors are committed (tests/vectors); the rpc_* ones are a base64 decode of Bitcoin
+# Core's own file. Neither needs a Bitcoin library, which is why there is no longer an embit here
+build/vectors/own_p2wpkh_1in.psbt: tools/expand_rpc_vectors.py tests/rpc_psbt.json $(wildcard tests/vectors/own_*)
+	python3 $< tests/rpc_psbt.json tests/vectors build/vectors
 
 # UR building blocks against the bc-ur reference tests, natively with sanitizers
 build/test_ur: tests/test_ur.c tests/ur_ref_vectors.h src/ur.c src/sha256.c include/*.h

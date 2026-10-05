@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Extracts the expected values from Blockchain Commons' bc-ur test suite (tests/bc-ur-test.cpp) into a C header,
 so the UR building blocks are checked against the reference implementation without transcribing numbers by hand."""
 import re, sys

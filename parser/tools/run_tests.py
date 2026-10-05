@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["wasmtime", "embit"]
+# dependencies = ["wasmtime"]
 # ///
 """Tests build/parser.wasm itself under wasmtime.
 1) no imports  2) Bitcoin Core's rpc_psbt.json  3) plans match expectations  4) signature insertion and failures
@@ -7,9 +7,7 @@
 6) UR encoding of the output, part for part against the reference encoder, and back through the decoder"""
 import glob, json, os, re, struct, sys
 import wasmtime
-from embit import ec
-from embit.psbt import PSBT
-from embit.transaction import Transaction
+
 
 WASM, VEC, RPC, URV = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 P_OK, P_ERR_TX, P_ERR_UNSUPPORTED, P_ERR_UTXO = 0, 4, 5, 7
@@ -122,8 +120,9 @@ for path in sorted(glob.glob(os.path.join(VEC, "own_*.psbt"))):
             check(got[k] == want[k], f"{name}: input {i} {k}: {got[k]} != {want[k]}")
         prev = p.prevtx(i)
         check(bool(prev) == want["has_prevtx"], f"{name}: input {i} prevtx presence")
-        if prev:
-            check(bytes(reversed(Transaction.parse(prev).txid())).hex() == want["prev_txid"], f"{name}: prevtx txid")
+        # That those bytes really are the transaction the input claims is checked against Bitcoin
+        # Core, by ../tools/check_against_core.mjs. Doing it here would need a txid implementation,
+        # and a txid excludes the witness — a second Bitcoin implementation in the tests
     for i, (got, want) in enumerate(zip(plan["outputs"], exp["outputs"])):
         for k in ("amount", "spk", "key"):
             check(got[k] == want[k], f"{name}: output {i} {k}: {got[k]} != {want[k]}")
@@ -145,12 +144,20 @@ for path in sorted(glob.glob(os.path.join(VEC, "own_*.psbt"))):
     n, out = p.finalize(sigs)
     inserted = sum(2 + 33 + 1 + len(s) if pub[0] else 2 + 1 + len(s) for _, pub, s in sigs)
     check(n == len(raw) + inserted, f"{name}: finalize length {n}")
-    signed, orig = PSBT.parse(out), PSBT.parse(raw)
-    check(signed.tx.serialize() == orig.tx.serialize(), f"{name}: tx unchanged")
+    # Checked as bytes rather than by parsing the result with another PSBT library: each signature
+    # has to appear as its own key/value record, and everything else has to be the original bytes
+    # untouched. That the signed PSBT is valid to a real implementation is checked separately, by
+    # tools/check_against_core.mjs against Bitcoin Core
     for i, pub, sig in sigs:
-        got = signed.inputs[i].unknown.get(b"\x13") if pub[0] == 0 else \
-            signed.inputs[i].partial_sigs.get(ec.PublicKey.parse(pub))
-        check(got == sig, f"{name}: input {i} signature inserted")
+        key = (b"\x13" if pub[0] == 0 else b"\x02" + pub)      # PSBT_IN_TAP_KEY_SIG or PSBT_IN_PARTIAL_SIG
+        record = bytes([len(key)]) + key + bytes([len(sig)]) + sig
+        check(record in out[:n], f"{name}: input {i} signature inserted")
+    # Nothing but those records was added: removing them leaves the input unchanged
+    stripped = out[:n]
+    for i, pub, sig in sigs:
+        key = (b"\x13" if pub[0] == 0 else b"\x02" + pub)
+        stripped = stripped.replace(bytes([len(key)]) + key + bytes([len(sig)]) + sig, b"", 1)
+    check(stripped == raw, f"{name}: nothing but the signatures changed")
 
     # failures: sig for a foreign input, the same input twice, too many sigs, bad pubkey prefix
     unsigned = [i for i, w in enumerate(exp["inputs"]) if w["key"] is None]

@@ -68,7 +68,7 @@ build/layout: signer/tests/layout.c signer/core.h parser/include/plan.h
 	$(CC) -Isigner -Iparser/include -o $@ $<
 
 check-layout: build/layout
-	uv run -q tools/check_layout.py $<
+	python3 tools/check_layout.py $<
 .PHONY: check-layout
 
 # Vectors, fuzzing and the parser's own three host libraries
@@ -135,11 +135,11 @@ check-core-diff: build/parser.wasm build/signer.wasm parser/build/vectors/own_p2
 
 # What we ship has to have the right shape, checked rather than intended
 check-wasm: build/parser.wasm build/signer.wasm
-	uv run -q tools/check_wasm.py build/parser.wasm build/signer.wasm
+	python3 tools/check_wasm.py build/parser.wasm build/signer.wasm
 .PHONY: check-wasm
 
 check-repro:
-	uv run -q tools/toolchain.sh >/dev/null
+	./tools/toolchain.sh >/dev/null
 	@echo "see the signer repository for the five-module reproducible build"
 .PHONY: check-repro
 

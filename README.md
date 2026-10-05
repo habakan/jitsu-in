@@ -65,8 +65,13 @@ make          # build/parser.wasm and build/signer.wasm
 make test     # the vectors, the host libraries, the layout, the shape of the output
 ```
 
-Needs clang with the wasm32 target, a wasi-libc sysroot, and [uv](https://docs.astral.sh/uv/).
-With Homebrew: `brew install llvm lld wasi-libc wasi-runtimes uv`.
+Needs clang with the wasm32 target, a wasi-libc sysroot, and Node. With Homebrew:
+`brew install llvm lld wasi-libc wasi-runtimes node`.
+
+One test runs `parser.wasm` under [wasmtime](https://wasmtime.dev/) and so wants
+[uv](https://docs.astral.sh/uv/) as well; nothing else here needs Python, and nothing needs a second
+Bitcoin library. Where an independent opinion is required, it comes from **Bitcoin Core itself**
+(`make check-core-diff`, which needs `bitcoind`).
 
 That uses whatever clang you have, which is fine for development but will not reproduce a release
 byte for byte. For that, use the pinned toolchain — see

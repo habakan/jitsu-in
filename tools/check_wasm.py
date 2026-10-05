@@ -1,6 +1,4 @@
-# /// script
-# dependencies = []
-# ///
+#!/usr/bin/env python3
 """Checks that a .wasm we are about to ship has the shape it claims.
 
 The properties that let a user check rather than trust are worth checking continuously on our side
