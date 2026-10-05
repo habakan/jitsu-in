@@ -1,13 +1,36 @@
 # The module convention
 
-Five WebAssembly modules in this repository share one shape. This page is what a host author needs
-before reading any single module's own documentation.
+<sup>[日本語](ja/module-abi.md)</sup>
 
-The thing that makes these modules worth sharing is not that they are portable — compiling Bitcoin
-logic to wasm is not scarce. It is that each one can be checked rather than trusted: no imports, a
-memory that cannot grow, a pinned feature set, bytes that rebuild to the same hash, and in the
-parser's case answers that match Bitcoin Core's. A review of one of these modules carries over to
-every platform that loads it, which is the point of the picture in the README.
+Both WebAssembly modules in this repository share one shape. This page is what a host author needs
+before reading either module's own documentation.
+
+What makes them worth sharing is not that they are portable — compiling Bitcoin logic to wasm is not
+scarce. It is that each one can be **checked rather than trusted**, and a review of one carries over
+to every platform that loads it.
+
+## What the modules guarantee
+
+Every one of these is enforced by a check that runs in CI, named beside it. A host may rely on them,
+and anyone is welcome to hold their own modules to the same list.
+
+| | what it means | checked by |
+|---|---|---|
+| **No imports** | The module cannot call out. No clock, no filesystem, no network, no allocator — there is no host function to supply, so `instantiate(bytes, {})` is the whole interface | `make check-wasm` |
+| **Memory cannot grow** | The linear memory declares a maximum equal to its minimum, so a malformed input cannot make the module consume the host's memory | `make check-wasm` |
+| **No mutable global is exported** | The host cannot reach in and rewrite internal state between calls | `make check-wasm` |
+| **A pinned feature set** | The module validates against [Lime1](https://github.com/WebAssembly/tool-conventions/blob/main/Lime.md) — WebAssembly 1.0 plus five standardised features — so it loads on constrained runtimes and cannot silently start needing more | `make check-wasm` |
+| **A fixed-layout answer** | What comes back is a struct at a known offset with asserted field offsets, not a serialisation format the host has to parse | `make check-layout` |
+| **The bytes rebuild to the same hash** | Building with the pinned toolchain gives the hashes in [checksums.txt](../checksums.txt), so the module a host loads can be tied back to this source | `make check-repro` |
+| **Independent hosts agree** | Three host libraries, written separately, must produce byte-identical output over the same input | `make check-hosts-agree` |
+| **An outside oracle agrees** | The parser's answers are compared against Bitcoin Core rather than against a second implementation by the same author | `make check-core-diff` |
+
+The first four are properties of the module alone, and a reviewer can confirm them from the `.wasm`
+file without building anything. The last four are properties of how it is developed.
+
+None of this is specific to Bitcoin. A module that reads attacker-chosen bytes in any domain can be
+held to the same list, and the point of writing it out is that it can be checked against rather than
+taken on description.
 
 ## The rules
 
@@ -63,16 +86,12 @@ by accident is how a module starts offering more than it documents.
 |---|---|---|---|---|
 | `parser.wasm` | `parser_` | UR reassembly, PSBT parsing, building the Plan, taking signatures back, UR encoding | [abi.md](../parser/docs/abi.md) | JS, Kotlin, Swift |
 | `signer.wasm` | `signer_` | keys, derivation, re-checking a Plan, the display model, signing, xpub export | [abi.md](../signer/docs/abi.md) | JS, Kotlin, Swift |
-| `bitcoin-signer.wasm` | `prim_` | the signing primitives on their own; what the RV32 benchmark exercises | none | none |
-| `address.wasm` | `addr_` | a scriptPubKey to an address string | none | none |
-| `qr.wasm` | `qr_` | QR decoding (quirc), for the browser | none | none |
 
 **`parser.wasm` is finished as a part**: a specification, three host libraries, 529 vectors,
 fuzzing, its own CI and a signed release. **`signer.wasm` now matches it** — a specification, host
-libraries for JavaScript, Kotlin and Swift, and 74 checks of its own — which satisfies the first of
-the conditions in jitsu-in-pico's `docs/design.md` §16 for giving it a repository of its own.
+libraries for JavaScript, Kotlin and Swift, and 74 checks of its own — which is what it needed to stand on its own.
 
-An Android app built on the Kotlin host is in jitsu-in-pico's `apps/android`. Its signatures are
+An Android app built on the Kotlin host is in the bare-metal repository (`apps/android`). Its signatures are
 byte-identical to the native implementation's, which is the first evidence that these modules are
 usable by someone other than this repository's own applications. What building it found is in its
 README: the ABI itself needed no Android-specific anything, and the two problems were both packaging.
@@ -82,8 +101,10 @@ the same PSBT and requires their output to match byte for byte. A single host's 
 library and its expectations are wrong together, which is what caught `signer_xpub` returning the
 opposite sense from its neighbours.
 
-The remaining three are built and tested through the applications that use them, not on their own
-terms, and a third party should not expect to drive them from this page alone.
+Three further modules are built from these sources by the bare-metal repository rather than here —
+the signing primitives on their own, a scriptPubKey-to-address module, and a QR decoder. They are
+tested through the applications that use them, not on their own terms, and a third party should not
+expect to drive them from this page.
 
 ## Driving one
 
@@ -103,4 +124,4 @@ if (rc !== 0) throw new Error(`refused: ${rc}`);
 
 A host must check every offset and length the module hands back against the bounds of the linear
 memory before copying. The three host libraries do this, and so does the device
-(`wasm_runtime_validate_app_addr` in `apps/device/runtime/host-abi`).
+(`wasm_runtime_validate_app_addr`, in the bare-metal repository).

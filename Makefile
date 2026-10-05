@@ -241,9 +241,18 @@ check-wasm: build/parser.wasm build/signer.wasm
 	python3 tools/check_wasm.py build/parser.wasm build/signer.wasm
 .PHONY: check-wasm
 
-check-repro:
+# Builds with the pinned toolchain and requires the bytes to be the ones in checksums.txt. This is
+# what ties a .wasm a host loaded back to this source; CI runs the same comparison.
+check-repro: | build
 	./tools/toolchain.sh >/dev/null
-	@echo "see the signer repository for the five-module reproducible build"
+	@set -e; \
+	for m in parser signer; do \
+	  h=$$(shasum -a 256 build/$$m.wasm | cut -d' ' -f1); \
+	  grep -q "$$h" checksums.txt \
+	    || { echo "$$m.wasm is $$h, which is not in checksums.txt"; exit 1; }; \
+	  echo "  $$m.wasm $$h"; \
+	done; \
+	echo "both modules match checksums.txt"
 .PHONY: check-repro
 
 test: check-types check-layout check-parser check-signer-js check-hosts-agree
