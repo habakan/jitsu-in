@@ -10,11 +10,11 @@ CP := lib/runtime-$(CHICORY).jar:lib/wasm-$(CHICORY).jar
 # is looked for first; Homebrew's openjdk is keg-only and therefore never on PATH
 JAVA ?= $(firstword $(wildcard /opt/homebrew/opt/openjdk/bin/java) \
                     $(shell command -v java 2>/dev/null))
-ROOT   := ../../../..
+ROOT   := ../../..
 SIGNER ?= $(ROOT)/build/signer.wasm
 PARSER ?= $(ROOT)/build/parser.wasm
-PSBT   ?= $(ROOT)/build/psbt/own_mixed_nwu.psbt
-SIGNED ?= $(ROOT)/build/psbt/own_mixed_nwu.signed
+PSBT   ?= $(ROOT)/parser/build/vectors/own_mixed_nwu.psbt
+SIGNED ?= $(ROOT)/signer/tests/golden/own_mixed_nwu.signed
 
 dump: dump.jar
 	@$(JAVA) -cp "dump.jar:$(CP)" DumpKt $(SIGNER) $(PARSER) $(PSBT)

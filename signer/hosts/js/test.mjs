@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { Signer, OWNER, TEXT_KIND, SignerError } from "./signer.mjs";
 
 const MNEMONIC = "abandon ".repeat(11) + "about";
-const root = new URL("../../../../", import.meta.url).pathname;
+const root = new URL("../../../", import.meta.url).pathname;
 const PLAN_SIZE = Signer.LAYOUT.plan.size;
 
 let pass = 0, fail = 0;
@@ -57,7 +57,7 @@ S.seedFromMnemonic(MNEMONIC);
 check("fingerprint from the BIP39 test vector", S.fingerprint, "73c5da0a");
 
 // --- a full round, compared against the native signer's output
-const { plan, prevTxs } = planFor(`${root}build/psbt/own_mixed_nwu.psbt`, parseInt("73c5da0a", 16));
+const { plan, prevTxs } = planFor(`${root}parser/build/vectors/own_mixed_nwu.psbt`, parseInt("73c5da0a", 16));
 S.setPlan(plan).setPrevTxs(prevTxs);
 
 const r = S.review();
@@ -77,7 +77,7 @@ const sigs = S.sign();
 check("one signature per input review chose", sigs.length, r.nSign);
 
 // The native host wrote these; deterministic signing means they have to match to the byte
-const native = readFileSync(`${root}build/psbt/own_mixed_nwu.signed`);
+const native = readFileSync(`${root}signer/tests/golden/own_mixed_nwu.signed`);
 for (const s of sigs) {
   ok(`input ${s.input}: the signature appears in the natively signed PSBT`,
      native.includes(Buffer.from(s.sig)));
