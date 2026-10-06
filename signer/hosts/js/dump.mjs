@@ -5,6 +5,8 @@
 //   node dump.mjs <signer.wasm> <parser.wasm> <psbt>
 import { readFileSync } from "node:fs";
 import { Signer } from "./signer.mjs";
+// WASM_RUNTIME=wamr runs both modules in WAMR's interpreter instead of V8
+if (process.env.WASM_RUNTIME === "wamr") globalThis.WebAssembly = (await import("../../../tools/wamr_webassembly.mjs")).default;
 
 const [signerPath, parserPath, psbtPath] = process.argv.slice(2);
 const OWNER = ["EXTERNAL", "CHANGE", "SELF"];

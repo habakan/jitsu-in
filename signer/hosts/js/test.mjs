@@ -3,6 +3,8 @@
 import { readFileSync } from "node:fs";
 import { createECDH, createHash, createHmac, pbkdf2Sync } from "node:crypto";
 import { Signer, OWNER, TEXT_KIND, SignerError } from "./signer.mjs";
+// WASM_RUNTIME=wamr runs both modules in WAMR's interpreter instead of V8
+if (process.env.WASM_RUNTIME === "wamr") globalThis.WebAssembly = (await import("../../../tools/wamr_webassembly.mjs")).default;
 
 const MNEMONIC = "abandon ".repeat(11) + "about";
 const root = new URL("../../../", import.meta.url).pathname;
