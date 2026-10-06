@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- A PSBT viewer. Parses with the same parser.wasm the device runs and shows the same thing.
-     It holds no keys. tools/build_viewer.py bakes the wasm in to make a single file -->
-<html lang="ja">
+     It holds no keys. build_viewer.py bakes the wasm in to make a single file -->
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -122,8 +122,15 @@ async function parse(bytes) {
     const plan = parser.parse(bytes, 0);
     out.innerHTML = render(plan, document.getElementById("testnet").checked);
   } catch (e) {
-    out.innerHTML = `<div class="card err">${e.message}</div>`;
+    showError(e.message);
   }
+}
+
+function showError(msg) {
+  const d = document.createElement("div");
+  d.className = "card err";
+  d.textContent = msg;
+  document.getElementById("out").replaceChildren(d);
 }
 
 /* The camera: read with the same quirc the device runs (qr.wasm), then hand the parts to parser.wasm */
@@ -274,7 +281,12 @@ document.getElementById("pick").onclick = () => file.click();
 file.onchange = async () => file.files[0] && parse(new Uint8Array(await file.files[0].arrayBuffer()));
 document.getElementById("parse").onclick = () => {
   const t = document.getElementById("text").value;
-  if (t.trim()) parse(fromText(t));
+  if (!t.trim()) return;
+  try {
+    parse(fromText(t));
+  } catch (e) {
+    showError(e.message);  // malformed base64 throws before parse() is reached
+  }
 };
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
