@@ -86,7 +86,7 @@ jobs:
             RTLIB=$SDK/lib/clang/23/lib/wasm32-unknown-wasi \
             WASM_OPT=/tmp/binaryen-version_132/bin/wasm-opt
 
-      - name: The same parser vectors under WAMR's classic interpreter
+      - name: Both modules under WAMR's classic interpreter, the signer agreeing with V8
         run: |
           make wamr-deps
           make check-wamr

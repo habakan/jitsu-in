@@ -49,7 +49,7 @@ make check-c-format check-c-tidy
 wasm32 ターゲットの clang、wasi-libc の sysroot、Node が必要です。
 Homebrew では `brew install llvm lld wasi-libc wasi-runtimes node` でインストールできます。
 
-`make wamr-deps && make check-wamr` で parser のベクタテストを WAMR 2.4.5 でも実行します。
+`make wamr-deps && make check-wamr` で parser のベクタテストと signer の JavaScript テストを WAMR 2.4.5 でも実行し、signer の出力が V8 とバイト単位で一致することを確認します。
 Node/V8 と同じ JavaScript テストを使います。独立した照合には**Bitcoin Core 自身**を使います
 （`make check-core-diff`。実行には `bitcoind` が必要です）。
 
