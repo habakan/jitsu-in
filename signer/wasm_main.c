@@ -69,7 +69,7 @@ int EXPORT(signer_init)(int testnet) {
 int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
     uint8_t salt[8 + sizeof(in)], seed[64];
     int ok = 0;
-    if (mn_len + pass_len <= sizeof(in)) {
+    if (mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len) {
         memcpy(salt, "mnemonic", 8);
         memcpy(salt + 8, in + mn_len, pass_len);
         pbkdf2_hmac_sha512(in, mn_len, salt, 8 + pass_len, 2048, seed);

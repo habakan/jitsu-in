@@ -91,10 +91,10 @@ jobs:
           make wamr-deps
           make check-wamr
 
-      - name: signer.wasm from JavaScript (24 checks)
+      - name: signer.wasm from JavaScript (29 checks)
         run: make check-signer-js
 
-      - name: signer.wasm from Kotlin (25 checks)
+      - name: signer.wasm from Kotlin (26 checks)
         run: make check-signer-kotlin
 
       # The Swift host is not run here: WasmKit 0.4.1 needs Swift 6.3 or newer and the runners do not

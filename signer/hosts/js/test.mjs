@@ -1,6 +1,7 @@
 // Drives signer.wasm through the host library and checks the result against what the native side
 // produced. The signatures are deterministic, so "the same" means byte-identical, not merely valid.
 import { readFileSync } from "node:fs";
+import { createECDH, createHash, createHmac, pbkdf2Sync } from "node:crypto";
 import { Signer, OWNER, TEXT_KIND, SignerError } from "./signer.mjs";
 
 const MNEMONIC = "abandon ".repeat(11) + "about";
@@ -53,7 +54,9 @@ try {
 const S = await Signer.load(signerWasm);
 S.init();
 check("fingerprint before a seed", S.fingerprint, "00000000");
-S.seedFromMnemonic(MNEMONIC);
+const mnBytes = new TextEncoder().encode(MNEMONIC);
+S.seedFromMnemonic(mnBytes);
+ok("the mnemonic is zeroed", mnBytes.every((b) => b === 0));
 check("fingerprint from the BIP39 test vector", S.fingerprint, "73c5da0a");
 
 // --- a full round, compared against the native signer's output
@@ -108,7 +111,7 @@ ok("the xpub is an xpub", x.xpub.startsWith("xpub"));
 // --- the module refuses to sign a plan it was not shown
 {
   const S2 = await Signer.load(signerWasm);
-  S2.init().seedFromMnemonic(MNEMONIC).setPlan(plan).setPrevTxs(prevTxs);
+  S2.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC)).setPlan(plan).setPrevTxs(prevTxs);
   try {
     S2.sign();
     ok("signing without review is refused", false);
@@ -132,16 +135,98 @@ ok("the xpub is an xpub", x.xpub.startsWith("xpub"));
 
 // --- a seed that does not fit is rejected before anything is written
 try {
-  S.seedFromMnemonic("x".repeat(600));
+  S.seedFromMnemonic(new Uint8Array(600).fill(0x78));
   ok("an oversized mnemonic is refused", false);
 } catch (e) {
   ok("an oversized mnemonic is refused", e instanceof RangeError);
+}
+// and the module refuses lengths whose sum wraps around 32 bits, rather than reading past its buffer
+{
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  E.signer_init(0);
+  let rc;
+  try {
+    rc = E.signer_seed_from_mnemonic(0xffffff00, 0x200);
+  } catch (e) {
+    rc = e.constructor.name;
+  }
+  check("mnemonic and passphrase lengths that wrap", rc, 0);
 }
 
 // --- unload clears the key
 S.unload();
 S.init();
 check("fingerprint after unload", S.fingerprint, "00000000");
+
+// --- after unload, no secret is left anywhere in linear memory. SHA-512 keeps its message schedule
+// as native u64 words, so each secret is also searched for with every 8 bytes reversed
+{
+  const mn = new TextEncoder().encode(MNEMONIC);
+  // every HMAC-SHA512 from the mnemonic to each key. Chain codes below m/84h/0h/0h are in the xpub
+  const secrets = [["mnemonic", Buffer.from(mn)]];
+  const hmac = (name, key, msg) => {
+    const ipad = Buffer.alloc(128, 0x36);
+    Buffer.from(key).forEach((b, i) => (ipad[i] ^= b));
+    const out = createHmac("sha512", key).update(msg).digest();
+    if (msg[0] === 0) secrets.push([`${name} input`, msg]);  // hardened: 0x00 || parent key
+    secrets.push([`${name} inner hash`, createHash("sha512").update(ipad).update(msg).digest()],
+                 [`${name} tweak`, out.subarray(0, 32)]);
+    if (!name.startsWith("m/84h/0h/0h")) secrets.push([`${name} chain code`, out.subarray(32)]);
+    return out;
+  };
+  const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+  const ser = (n) => Buffer.from(n.toString(16).padStart(64, "0"), "hex");
+  const child = ([k, c], i, name) => {
+    const ecdh = createECDH("secp256k1");
+    ecdh.setPrivateKey(k);
+    const data = i >= 0x80000000 ? Buffer.concat([Buffer.alloc(1), k]) : ecdh.getPublicKey(null, "compressed");
+    const I = hmac(name, c, Buffer.concat([data, Buffer.from([i >>> 24, (i >> 16) & 255, (i >> 8) & 255, i & 255])]));
+    const key = ser((BigInt("0x" + I.subarray(0, 32).toString("hex")) + BigInt("0x" + k.toString("hex"))) % N);
+    secrets.push([`${name} key`, key]);
+    return [key, I.subarray(32)];
+  };
+  const seed = pbkdf2Sync(mn, "mnemonic", 2048, 64, "sha512");
+  secrets.push(["seed", seed]);
+  const I = hmac("m", "Bitcoin seed", seed);
+  secrets.push(["m key", I.subarray(0, 32)]);
+  const H = 0x80000000;
+  for (const purpose of [84, 86]) {
+    let node = [I.subarray(0, 32), I.subarray(32)], path = "m";
+    for (const i of [purpose + H, H, H]) node = child(node, i, (path += `/${i - H}h`));
+    for (const chain of [0, 1]) {
+      const c = child(node, chain, `${path}/${chain}`);
+      for (let i = 0; i < 4; i++) child(c, i, `${path}/${chain}/${i}`);
+    }
+  }
+  const swap = (b) => Buffer.concat([...Array(b.length >> 3)].map((_, i) => Buffer.from(b.subarray(8 * i, 8 * i + 8)).reverse()));
+
+  async function survivors(round) {
+    const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+    const mem = () => new Uint8Array(E.memory.buffer);
+    E.signer_init(0);
+    mem().set(mn, E.signer_input());
+    E.signer_seed_from_mnemonic(mn.length, 0);
+    if (round) {
+      mem().set(plan, E.signer_plan());
+      let used = 0;
+      prevTxs.forEach((raw, i) => {
+        if (!raw) return E.signer_set_prevtx(i, 0, 0);
+        mem().set(raw, E.signer_prevtx() + used);
+        E.signer_set_prevtx(i, used, raw.length);
+        used += raw.length;
+      });
+      ok("the leak check signs a real plan", E.signer_review() === 0 && E.signer_sign() > 0);
+      E.signer_xpub();
+    }
+    E.signer_unload();
+    const m = Buffer.from(mem());
+    return secrets.filter(([, s]) => [s, swap(s)].some((v) =>
+      [...Array(v.length >> 4)].some((_, i) => m.indexOf(v.subarray(16 * i, 16 * i + 16)) >= 0)))
+      .map(([name]) => name).join(", ");
+  }
+  check("secrets left after loading a seed and unloading", await survivors(false), "");
+  check("secrets left after signing, xpub and unloading", await survivors(true), "");
+}
 
 console.log(`${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

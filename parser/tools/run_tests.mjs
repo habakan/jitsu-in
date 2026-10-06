@@ -305,6 +305,16 @@ for (const v of ur.vectors) {
   check(rc > 0 && p.call("parser_parse", rc, exp.fingerprint) === P_OK, `${name}: parses`);
 }
 
+// A part received after parse overwrites the PSBT, so finalize must not splice into the new bytes
+{
+  const v = ur.vectors[0];
+  const p = new Parser();
+  check(p.parse(Buffer.from(v.psbt_hex, "hex"), readJson(join(VEC, `${v.name}.json`)).fingerprint) === P_OK,
+        "parse before a UR part");
+  p.ur(v.parts[0]);
+  check(p.finalize([])[0] < 0, "finalize after a UR part replaced the parsed PSBT");
+}
+
 // --- 6) encoding: finalize with no signatures returns the PSBT unchanged, which the reference encoded too
 for (const v of ur.vectors.filter((v) => v.type === "crypto-psbt")) {
   const name = `encode ${v.name}/${v.fragment_len}`;

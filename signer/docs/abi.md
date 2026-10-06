@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 56,522 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 56,537 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 

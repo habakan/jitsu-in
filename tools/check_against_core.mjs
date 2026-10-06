@@ -93,7 +93,7 @@ if (!res.every((r) => r.success)) {
 const signerWasm = readFileSync(signerPath);
 {
   const s = await Signer.load(signerWasm);
-  s.init().seedFromMnemonic(MNEMONIC);
+  s.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
   if (s.fingerprint !== FINGERPRINT) {
     console.error(`the committed fingerprint is ${FINGERPRINT}, signer.wasm derives ${s.fingerprint}`);
     process.exit(1);
@@ -217,7 +217,7 @@ for (const path of psbtPaths.sort()) {
   if (name.startsWith("own_")) {
     const S = await Signer.load(signerWasm);
     try {
-      S.init().seedFromMnemonic(MNEMONIC).setPlan(ours.plan).setPrevTxs(ours.prevTxs);
+      S.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC)).setPlan(ours.plan).setPrevTxs(ours.prevTxs);
       const r = S.review();
       if ("fee" in core) eq("fee", r.fee, sats(core.fee));
       const oursSigs = {};

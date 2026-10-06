@@ -132,9 +132,11 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
      * zeroed before returning. The caller still owns whatever it built the CharArray from.
      */
     fun seedFromMnemonic(mnemonic: CharArray, passphrase: CharArray = charArrayOf()): Signer {
-        val mn = String(mnemonic).toByteArray(Charsets.UTF_8)
-        val pass = String(passphrase).toByteArray(Charsets.UTF_8)
+        var mn = ByteArray(0)
+        var pass = ByteArray(0)
         try {
+            mn = utf8(mnemonic)
+            pass = utf8(passphrase)
             require(mn.size + pass.size <= inputCapacity) {
                 "${mn.size + pass.size} bytes of mnemonic and passphrase does not fit in $inputCapacity"
             }
@@ -146,8 +148,22 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
             }
         } finally {
             mn.fill(0); pass.fill(0)
+            mnemonic.fill('\u0000'); passphrase.fill('\u0000')
         }
         return this
+    }
+
+    /** UTF-8 without going through a String, which could not be cleared */
+    private fun utf8(chars: CharArray): ByteArray {
+        val buf = java.nio.ByteBuffer.allocate(chars.size * 3) // UTF-8 needs at most 3 bytes per UTF-16 unit
+        try {
+            val enc = Charsets.UTF_8.newEncoder()
+            enc.encode(java.nio.CharBuffer.wrap(chars), buf, true).also { if (it.isError) it.throwException() }
+            enc.flush(buf)
+            return buf.array().copyOf(buf.position())
+        } finally {
+            buf.array().fill(0)
+        }
     }
 
     /** For a seed you already have. 64 bytes. */

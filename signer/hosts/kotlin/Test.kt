@@ -60,7 +60,9 @@ fun main(args: Array<String>) {
     val s = Signer(signerWasm)
     s.init()
     check("fingerprint before a seed", s.fingerprint, "00000000")
-    s.seedFromMnemonic(mnemonic)
+    val mn = mnemonic.copyOf()
+    s.seedFromMnemonic(mn)
+    ok("the mnemonic is zeroed", mn.all { it == '\u0000' })
     check("fingerprint from the BIP39 test vector", s.fingerprint, "73c5da0a")
 
     // --- a full round, compared against the native signer's output
@@ -117,7 +119,7 @@ fun main(args: Array<String>) {
 
     // --- signing without a review is refused by this library, and by the module
     run {
-        val s2 = Signer(signerWasm).init().seedFromMnemonic(mnemonic).setPlan(plan).setPrevTxs(prevTxs)
+        val s2 = Signer(signerWasm).init().seedFromMnemonic(mnemonic.copyOf()).setPlan(plan).setPrevTxs(prevTxs)
         try {
             s2.sign()
             ok("signing without review is refused", false)

@@ -55,7 +55,7 @@ that would mean it is not the module you think it is.
 ## Checking you have the right module
 
 ```swift
-let parser = try Parser(parserWasm: bytes, sha256: "21ea6dbc…")
+let parser = try Parser(parserWasm: bytes, sha256: "7c89bf15…")
 ```
 
 The module is refused unless it hashes to exactly that. Take the value from the project's

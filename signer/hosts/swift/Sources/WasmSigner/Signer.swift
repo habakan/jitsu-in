@@ -197,6 +197,10 @@ public final class Signer {
     /// you pass is zeroed here. On iOS, read from the field into a mutable buffer and clear that.
     @discardableResult
     public func seedFromMnemonic(_ mnemonic: inout [UInt8], passphrase: inout [UInt8]) throws -> Signer {
+        defer {
+            for i in mnemonic.indices { mnemonic[i] = 0 }
+            for i in passphrase.indices { passphrase[i] = 0 }
+        }
         let cap = inputCapacity
         guard mnemonic.count + passphrase.count <= cap else {
             throw SignerError.tooLarge(size: mnemonic.count + passphrase.count, capacity: cap)
@@ -206,8 +210,6 @@ public final class Signer {
         try write(passphrase, at: at + mnemonic.count)
         let rc = try call("signer_seed_from_mnemonic",
                           [.i32(UInt32(mnemonic.count)), .i32(UInt32(passphrase.count))])
-        for i in mnemonic.indices { mnemonic[i] = 0 }
-        for i in passphrase.indices { passphrase[i] = 0 }
         guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_mnemonic failed") }
         return self
     }

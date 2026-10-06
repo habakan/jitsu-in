@@ -71,6 +71,7 @@ void sha512_compress(uint64_t s[8], const unsigned char block[128]) {
     s[5] += f;
     s[6] += g;
     s[7] += h;
+    wipe(w, sizeof(w));
 }
 
 void sha512_init(sha512_ctx *c) {
