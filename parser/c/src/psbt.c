@@ -453,6 +453,7 @@ int EXPORT(parser_ur_receive)(unsigned len) {
     size_t psbt_len;
     long n;
 
+    parsed = 0; /* the part overwrites the parsed PSBT that finalize would splice into */
     if (!ur_ready) parser_ur_reset();
     if (len > PSBT_MAX) return UR_ERR_LIMIT;
     if ((n = ur_decoder_receive((char *)in_buf, len)) <= 0) return (int)n;

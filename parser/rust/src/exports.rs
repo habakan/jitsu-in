@@ -189,6 +189,10 @@ pub extern "C" fn parser_ur_reset() {
 /// leaves the parts received so far untouched.
 #[no_mangle]
 pub extern "C" fn parser_ur_receive(len: u32) -> i32 {
+    // the part overwrites the parsed PSBT that finalize would splice into
+    unsafe {
+        IS_PARSED = false;
+    }
     if !unsafe { UR_READY } {
         parser_ur_reset();
     }
