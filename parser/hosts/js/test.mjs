@@ -105,6 +105,17 @@ for (const name of vectors) {
   check(got && Buffer.compare(Buffer.from(got), Buffer.from(out)) === 0, "round trip is byte identical");
 }
 
+// --- a signature that does not fit its slot is refused before anything is written
+{
+  const p = Parser.loadSync(parserWasm);
+  p.parse(readFileSync(`${vectorDir}/own_mixed_nwu.psbt`), FP);
+  const sig = { input: 0, pubkey: new Uint8Array(33).fill(2), sig: new Uint8Array(71) };
+  throws(() => p.finalize(Array(17).fill(sig)), "RangeError", "17 signatures");
+  throws(() => p.finalize([{ ...sig, pubkey: new Uint8Array(34) }]), "RangeError", "a 34-byte pubkey");
+  throws(() => p.finalize([{ ...sig, sig: new Uint8Array(74) }]), "RangeError", "a 74-byte signature");
+  throws(() => p.finalize([{ ...sig, input: 16 }]), "RangeError", "input 16");
+}
+
 // --- a module with imports is refused before it is instantiated
 {
   // (module (import "env" "f" (func)) (memory 1 1))

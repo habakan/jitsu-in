@@ -10,7 +10,7 @@ import Foundation
 import Crypto
 import WasmKit
 
-// What the host decodes. components/signer/tests/layout.c prints these from the structs themselves
+// What the host decodes. signer/tests/layout.c prints these from the structs themselves
 // and `make check-layout` fails if this table drifts from them.
 private enum L {
     static let planSize = 5016, planNInputs = 16, planNOutputs = 17
@@ -29,7 +29,7 @@ private enum L {
     static let sigInput = 0, sigPubkey = 1, sigLen = 34, sigSig = 35
 
     static let maxInputs = 16, maxOutputs = 16
-    static let xpubMax = 120, descMax = 180
+    static let xpubMax = 120, descMax = 180, prevtxMax = 32768
 }
 
 private let coreErr = [
@@ -254,10 +254,13 @@ public final class Signer {
                 _ = try call("signer_set_prevtx", [.i32(UInt32(i)), .i32(0), .i32(0)])
                 continue
             }
+            guard raw.count <= L.prevtxMax - used else {
+                throw SignerError.tooLarge(size: raw.count, capacity: L.prevtxMax - used)
+            }
             try write(raw, at: base + used)
             guard try call("signer_set_prevtx",
                            [.i32(UInt32(i)), .i32(UInt32(used)), .i32(UInt32(raw.count))]) == 1 else {
-                throw SignerError.tooLarge(size: raw.count, capacity: 32768 - used)
+                throw SignerError.tooLarge(size: raw.count, capacity: L.prevtxMax - used)
             }
             used += raw.count
         }

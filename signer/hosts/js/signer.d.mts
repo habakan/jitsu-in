@@ -70,6 +70,7 @@ export class Signer {
             maxOutputs: number;
             xpubMax: number;
             descMax: number;
+            prevtxMax: number;
         };
     };
     /** @param {WebAssembly.Instance} instance */

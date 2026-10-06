@@ -199,6 +199,12 @@ class Parser(parserWasm: ByteArray, sha256: String? = null) {
 
     /** Insert signatures and return the signed PSBT. */
     fun finalize(sigs: List<Signature>): ByteArray {
+        require(sigs.size <= L.MAX_INPUTS) { "${sigs.size} signatures, a plan has at most ${L.MAX_INPUTS} inputs" }
+        for (s in sigs) {
+            require(s.input in 0 until L.MAX_INPUTS && s.pubkey.size == 33 && s.sig.size <= 73) {
+                "input ${s.input}: a signature slot takes a 33-byte pubkey and at most 73 bytes of signature"
+            }
+        }
         val base = call("parser_sigs")
         memory.write(base, ByteArray(L.SIG_SIZE * L.MAX_INPUTS))
         sigs.forEachIndexed { i, s ->

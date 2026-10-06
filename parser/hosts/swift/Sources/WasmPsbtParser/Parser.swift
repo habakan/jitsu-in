@@ -38,6 +38,8 @@ public enum ParserError: Error, CustomStringConvertible {
     case unexpectedModule(String)
     /// More bytes than the module's input buffer takes.
     case tooLarge(size: Int, capacity: Int)
+    /// A signature that does not fit the module's fixed-size slot.
+    case badSignature(String)
 
     public var description: String {
         switch self {
@@ -46,6 +48,7 @@ public enum ParserError: Error, CustomStringConvertible {
         case .outOfBounds(let o, let n): return "the module returned an offset outside its memory: \(o)+\(n)"
         case .unexpectedModule(let s): return s
         case .tooLarge(let s, let c): return "\(s) bytes does not fit in \(c)"
+        case .badSignature(let s): return s
         }
     }
 }
@@ -108,8 +111,7 @@ public final class Parser {
     /// - Parameters:
     ///   - parserWasm: the contents of parser.wasm
     ///   - sha256: when given, the module must hash to exactly this, or it is refused. Take the
-    ///     value from the project's `checksums.txt`, or from the device's `Parser hash` screen if
-    ///     you are checking that you are running what it runs.
+    ///     value from the project's `checksums.txt` or a release's `SHA256SUMS`.
     public init(parserWasm: [UInt8], sha256: String? = nil) throws {
         // A hash in a file nobody checks is documentation. Checking it here makes it a gate.
         if let want = sha256 {
@@ -248,6 +250,13 @@ public final class Parser {
 
     /// Insert signatures and return the signed PSBT.
     public func finalize(_ sigs: [Signature]) throws -> [UInt8] {
+        guard sigs.count <= L.maxInputs else {
+            throw ParserError.badSignature("\(sigs.count) signatures, a plan has at most \(L.maxInputs) inputs")
+        }
+        for s in sigs where Int(s.input) >= L.maxInputs || s.pubkey.count != 33 || s.sig.count > 73 {
+            throw ParserError.badSignature(
+                "input \(s.input): a signature slot takes a 33-byte pubkey and at most 73 bytes of signature")
+        }
         let base = Int(try call("parser_sigs"))
         _ = try bytes(base, L.sigSize * L.maxInputs)
         memory.withUnsafeMutableBufferPointer(offset: UInt(base), count: L.sigSize * L.maxInputs) {

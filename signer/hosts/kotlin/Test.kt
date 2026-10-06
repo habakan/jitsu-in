@@ -137,6 +137,20 @@ fun main(args: Array<String>) {
         ok("a plan of the wrong size is refused", e.message!!.contains("5016 bytes"))
     }
 
+    // --- prevtxs that overflow the module's buffer are refused before they are written
+    run {
+        val s3 = Signer(signerWasm).init().seedFromMnemonic(mnemonic.copyOf()).setPlan(plan)
+        try {
+            s3.setPrevTxs(listOf(ByteArray(20000), ByteArray(20000)))
+            ok("prevtxs over the buffer are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("prevtxs over the buffer are refused", e.message!!.contains("does not fit"))
+        }
+        s3.setPrevTxs(prevTxs)
+        ok("the signer still reviews afterwards", s3.review().nSign > 0)
+        s3.unload()
+    }
+
     // --- an oversized mnemonic is rejected before anything is written
     try {
         s.seedFromMnemonic(CharArray(600) { 'x' })

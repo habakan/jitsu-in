@@ -118,19 +118,44 @@ ok("the xpub is an xpub", x.xpub.startsWith("xpub"));
   } catch (e) {
     ok("signing without review is refused", /review\(\) has to pass first/.test(e.message));
   }
-  // and the module itself refuses, not just this library
-  S2.review();
-  const swapped = plan.slice();
-  swapped[Signer.LAYOUT.plan.nOutputs] = 1;            // say there is one output, not three
-  S2.setPlan(swapped);
-  try {
-    S2.review();
-    S2.sign();
-    ok("the module refuses a plan swapped after review", true);  // review re-ran, so this is fine
-  } catch (e) {
-    ok("the module refuses a plan swapped after review", e instanceof SignerError);
-  }
   S2.unload();
+}
+// and the module itself refuses a plan changed in its memory after review, not just this library
+for (const tamper of [false, true]) {
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mem = () => new Uint8Array(E.memory.buffer);
+  const mn = new TextEncoder().encode(MNEMONIC);
+  E.signer_init(0);
+  mem().set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  mem().set(plan, E.signer_plan());
+  let used = 0;
+  prevTxs.forEach((raw, i) => {
+    if (!raw) return E.signer_set_prevtx(i, 0, 0);
+    mem().set(raw, E.signer_prevtx() + used);
+    E.signer_set_prevtx(i, used, raw.length);
+    used += raw.length;
+  });
+  check(`review passes (tampered after: ${tamper})`, E.signer_review(), 0);
+  if (tamper) mem()[E.signer_plan() + 24 + 176 * 16] ^= 1;  // the first output's amount, by one satoshi
+  const rc = E.signer_sign();
+  if (tamper) check("a plan changed after review is refused as not reviewed", rc, -10);
+  else ok("the same plan untouched signs", rc > 0);
+}
+
+// --- prevtxs that overflow the module's buffer are refused before they are written
+{
+  const S3 = await Signer.load(signerWasm);
+  S3.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC)).setPlan(plan);
+  try {
+    S3.setPrevTxs([new Uint8Array(20000), new Uint8Array(20000)]);
+    ok("prevtxs over the buffer are refused", false);
+  } catch (e) {
+    ok("prevtxs over the buffer are refused", e instanceof RangeError);
+  }
+  S3.setPrevTxs(prevTxs);
+  check("the signer still reviews afterwards", S3.review().nSign > 0, true);
+  S3.unload();
 }
 
 // --- a seed that does not fit is rejected before anything is written

@@ -94,6 +94,17 @@ fun main(args: Array<String>) {
         check(got != null && got.contentEquals(out), "round trip is byte identical")
     }
 
+    // a signature that does not fit its slot is refused before anything is written
+    run {
+        val p = Parser(parserWasm)
+        p.parse(File(vectorDir, "own_mixed_nwu.psbt").readBytes(), fp)
+        val sig = Signature(0, ByteArray(33) { 2 }, ByteArray(71))
+        throws("at most 16 inputs", "17 signatures") { p.finalize(List(17) { sig }) }
+        throws("33-byte pubkey", "a 34-byte pubkey") { p.finalize(listOf(Signature(0, ByteArray(34), sig.sig))) }
+        throws("33-byte pubkey", "a 74-byte signature") { p.finalize(listOf(Signature(0, sig.pubkey, ByteArray(74)))) }
+        throws("33-byte pubkey", "input 16") { p.finalize(listOf(Signature(16, sig.pubkey, sig.sig))) }
+    }
+
     // the digest gate accepts the real build and refuses anything else
     run {
         val sha = java.security.MessageDigest.getInstance("SHA-256").digest(parserWasm)
