@@ -11,7 +11,7 @@ package wasmsigner
 import com.dylibso.chicory.runtime.Instance
 import com.dylibso.chicory.wasm.Parser as WasmParser
 
-// Layout of what the host decodes. components/signer/tests/layout.c prints these from the structs
+// Layout of what the host decodes. signer/tests/layout.c prints these from the structs
 // themselves and `make check-layout` fails if this table drifts from them.
 private object L {
     const val PLAN_SIZE = 5016
@@ -32,7 +32,7 @@ private object L {
     const val SIG_INPUT = 0; const val SIG_PUBKEY = 1; const val SIG_LEN = 34; const val SIG_SIG = 35
 
     const val MAX_INPUTS = 16; const val MAX_OUTPUTS = 16
-    const val XPUB_MAX = 120; const val DESC_MAX = 180
+    const val XPUB_MAX = 120; const val DESC_MAX = 180; const val PREVTX_MAX = 32768
 }
 
 private val CORE_ERR = arrayOf(
@@ -199,6 +199,7 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
                 call("signer_set_prevtx", i.toLong(), 0L, 0L)
                 continue
             }
+            require(used + raw.size <= L.PREVTX_MAX) { "prevtx $i does not fit" }
             memory.write(base + used, raw)
             require(call("signer_set_prevtx", i.toLong(), used.toLong(), raw.size.toLong()) == 1) {
                 "prevtx $i does not fit"

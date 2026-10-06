@@ -3,7 +3,7 @@
 // This module holds a key. That makes it different in kind from parser.wasm, and the difference is
 // the host's problem as much as the module's: see "What a host must not do" in docs/abi.md.
 //
-// The layout constants below are not hand-written. components/signer/tests/layout.c prints them from
+// The layout constants below are not hand-written. signer/tests/layout.c prints them from
 // the structs themselves and `make check-layout` fails if these drift from it.
 
 const L = {
@@ -14,7 +14,7 @@ const L = {
     outSize: 184, outAmount: 0, outOwner: 8, outTextKind: 9, outText: 10, outTextCap: 167,
   },
   sig: { size: 108, input: 0, pubkey: 1, sigLen: 34, sig: 35 },
-  limits: { maxInputs: 16, maxOutputs: 16, xpubMax: 120, descMax: 180 },
+  limits: { maxInputs: 16, maxOutputs: 16, xpubMax: 120, descMax: 180, prevtxMax: 32768 },
 };
 
 /**
@@ -215,6 +215,7 @@ export class Signer {
         this.#e.signer_set_prevtx(i, 0, 0);
         continue;
       }
+      if (used + raw.length > L.limits.prevtxMax) throw new RangeError(`prevtx ${i} does not fit`);
       this.#mem.set(raw, base + used);
       if (!this.#e.signer_set_prevtx(i, used, raw.length)) {
         throw new RangeError(`prevtx ${i} does not fit`);

@@ -306,6 +306,12 @@ export class Parser {
    * @param {{input: number, pubkey: Uint8Array, sig: Uint8Array}[]} sigs
    */
   finalize(sigs) {
+    if (sigs.length > 16) throw new RangeError(`${sigs.length} signatures, a plan has at most 16 inputs`);
+    for (const s of sigs) {
+      if (!(s.input >= 0 && s.input < 16) || s.pubkey.length !== 33 || s.sig.length > 73) {
+        throw new RangeError(`input ${s.input}: a signature slot takes a 33-byte pubkey and at most 73 bytes of signature`);
+      }
+    }
     this.#refresh();
     const base = this.exports.parser_sigs();
     this.mem.fill(0, this.#check(base, 108 * 16), base + 108 * 16);
