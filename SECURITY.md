@@ -5,8 +5,9 @@
 **Please do not report security vulnerabilities through public GitHub issues.**
 
 Use GitHub's private vulnerability reporting on this repository
-([Security → Report a vulnerability](https://github.com/habakan/jitsu-in/security/advisories/new)),
-or email the maintainer. Public key: https://github.com/habakan.gpg
+([Security → Report a vulnerability](https://github.com/habakan/jitsu-in/security/advisories/new)).
+
+The maintainer's public key, which signs releases: https://github.com/habakan.gpg
 
 Fingerprint: `8BD4 8DD6 70AF 9B34 7EA0  41CF 36D4 93A2 8A8B EB79`
 
