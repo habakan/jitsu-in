@@ -31,4 +31,6 @@ Dedicated to the public domain under CC0 1.0 Universal (https://creativecommons.
 
 examples/viewer/vendor/jsQR.min.js is jsQR (Apache License 2.0; license in the same directory).
 
-examples/viewer/vendor/quirc is a submodule fork of quirc (ISC License).
+examples/viewer/vendor/quirc is a submodule fork of quirc (https://github.com/dlbeer/quirc).
+
+Copyright (C) 2010-2012 Daniel Beer and contributors. ISC License; the full text is in the submodule's LICENSE.

@@ -8,18 +8,18 @@ module's ABI documentation.
 
 ## What the modules guarantee
 
-CI checks each property in this table. Hosts may rely on them; the list can also serve as a checklist
-for other modules.
+Each property has a check, and CI runs every one of them (`check-repro` as its hash comparison step).
+Hosts may rely on them; the list can also serve as a checklist for other modules.
 
 | | what it means | checked by |
 |---|---|---|
 | **No imports** | The module cannot call out. No clock, no filesystem, no network, no allocator — there is no host function to supply, so `instantiate(bytes, {})` is the whole interface | `make check-wasm` |
 | **Memory cannot grow** | The linear memory declares a maximum equal to its minimum, so a malformed input cannot make the module consume the host's memory | `make check-wasm` |
 | **No mutable global is exported** | The host cannot reach in and rewrite internal state between calls | `make check-wasm` |
-| **A pinned feature set** | The module validates against [Lime1](https://github.com/WebAssembly/tool-conventions/blob/main/Lime.md) — WebAssembly 1.0 plus five standardised features — so it loads on constrained runtimes and cannot silently start needing more | `make check-wasm` |
+| **A pinned feature set** | The module validates against [Lime1](https://github.com/WebAssembly/tool-conventions/blob/main/Lime.md) — WebAssembly 1.0 plus seven standardised features — so it loads on constrained runtimes and cannot silently start needing more | `make check-wasm` |
 | **A fixed-layout answer** | What comes back is a struct at a known offset with asserted field offsets, not a serialisation format the host has to parse | `make check-layout` |
 | **The bytes rebuild to the same hash** | Building with the pinned toolchain gives the hashes in [checksums.txt](../checksums.txt), so the module a host loads can be tied back to this source | `make check-repro` |
-| **Independent hosts agree** | Three host libraries, written separately, must produce byte-identical output over the same input | `make check-hosts-agree` |
+| **Independent hosts agree** | The signer's JavaScript, Kotlin and Swift libraries, written separately, must produce byte-identical output over the same input. CI runs JavaScript and Kotlin; the Swift host needs Swift 6.3 and is run on macOS | `make check-hosts-agree` |
 | **An outside oracle agrees** | The parser's answers are compared against Bitcoin Core rather than against a second implementation by the same author | `make check-core-diff` |
 
 The first four properties can be checked directly from the `.wasm` file. The remaining four require
@@ -28,11 +28,8 @@ building or running the repository checks.
 ## The rules
 
 **One prefix per module, and no two modules share a name.** The prefix matches what the module is:
-`parser_`, `signer_`, `prim_`, `addr_`, `qr_`.
-
-This was not true until 2026-10-04: `signer.wasm` and `bitcoin-signer.wasm` both exported
-`signer_in`, `signer_init` and `signer_seed_from_mnemonic` with different meanings, so a host loading
-both could not tell them apart by name.
+`parser_`, `signer_`, and in the [viewer example](../examples/viewer) `addr_` and `qr_`. A host that
+loads several modules can then tell their exports apart by name.
 
 **Buffers are reached through accessor functions, never exported as memory offsets.**
 
@@ -42,9 +39,6 @@ both could not tell them apart by name.
 | `<mod>_input_cap` | how many bytes that buffer holds, so a host can bounds-check first |
 | `<mod>_output` | the buffer the host reads from |
 | a role name | a buffer with one specific job: `parser_plan`, `signer_sigs`, `parser_prevtx_off` |
-
-A module that genuinely has one combined scratch area says so: `prim_io` is a fixed layout of
-seckey, message, aux and result, and calling it an input or an output would be a lie.
 
 **Operations are `<mod>_<verb>`.** Functions use one of three return conventions:
 

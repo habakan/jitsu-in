@@ -2,7 +2,7 @@
 # has nothing else. docs/module-abi.md is the convention both follow.
 #
 #   make              build both modules
-#   make test         everything: vectors, every host library, the layout, the shape of the output
+#   make test         vectors, every host library and the layout (check-wasm needs wasm-tools)
 #   make deps         fetch libsecp256k1 at its pinned commit (the signer needs it)
 LLVM     ?= /opt/homebrew/opt/llvm/bin
 WASI     ?= /opt/homebrew/opt/wasi-libc/share/wasi-sysroot
@@ -95,8 +95,8 @@ build/parser.wasm: build/parser-rs.wasm
 	@mkdir -p build && cp $< $@
 	@shasum -a 256 $@
 else
-# The C keeps its own Makefile: v0.1.0 was released from it, and the build that produced those bytes
-# should not become a different build by being rewritten here
+# The C keeps its own Makefile, so the build that produces the released bytes does not change by being
+# rewritten here
 build/parser.wasm: $(wildcard parser/c/src/*.c parser/c/include/*.h)
 	$(MAKE) -C parser build/parser.wasm $(TOOLS)
 	@mkdir -p build && cp parser/build/parser.wasm $@

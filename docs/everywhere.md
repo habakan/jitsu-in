@@ -24,7 +24,8 @@ whose behaviour could differ with where the module was put.
 ## Where they have actually been run
 
 Green on the figure means the module was run there and its output checked against the other
-platforms — not that the path looks like it should work.
+platforms — not that the path looks like it should work. *The device* is the RP2350 hardware signer
+these modules were first written for, a separate project that is not public.
 
 | | runtime | what runs as WebAssembly |
 |---|---|---|
