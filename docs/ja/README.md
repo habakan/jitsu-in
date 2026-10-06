@@ -1,5 +1,7 @@
 <h1>jitsu-in</h1>
 
+<sup>[English](../../README.md)</sup>
+
 jitsu-in は Bitcoin の署名に使う処理を WebAssembly モジュールとして提供します。
 `parser.wasm` は未信頼の PSBT を読み、固定レイアウトの plan を作ります。`signer.wasm` は plan を検証し、
 レビュー用の取引情報を作り、取引に署名します。parser は鍵を持たず、signer は PSBT を読みません。
@@ -19,6 +21,9 @@ jitsu-in は Bitcoin の署名に使う処理を WebAssembly モジュールと�
 
 
 ## 利用方法
+
+[ブラウザビューア](../../examples/viewer)は、parser のホストと、PSBT と UR を確認する1ファイルのページを組み合わせたものです。
+鍵を持たず、署名用の端末でもありません。
 
 | | ランタイム | |
 |---|---|---|
@@ -40,14 +45,15 @@ JavaScript、Kotlin、Swift のホストライブラリは、モジュールが�
 ```sh
 make deps     # 固定した commit の libsecp256k1 を取得します
 make          # build/parser.wasm と build/signer.wasm をビルドします
-make test     # ベクタ、ホストライブラリ、レイアウト、出力の形を検査します
+make test     # ベクタ、ホストライブラリ、レイアウトを検査します
+make check-wasm   # 出力の形を検査します（wasm-tools が必要）
 make check-c-format check-c-tidy
 ```
 
 `make format-c` は C の書式を整えます。CI では固定した wasi-sdk に含まれる clang-format と clang-tidy を使います。
 
 wasm32 ターゲットの clang、wasi-libc の sysroot、Node が必要です。
-Homebrew では `brew install llvm lld wasi-libc wasi-runtimes node` でインストールできます。
+Homebrew では `brew install llvm lld wasi-libc wasi-runtimes node cmake` でインストールできます。
 
 `make wamr-deps && make check-wamr` で parser のベクタテストを WAMR 2.4.5 でも実行します。
 Node/V8 と同じ JavaScript テストを使います。独立した照合には**Bitcoin Core 自身**を使います

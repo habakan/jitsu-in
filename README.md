@@ -51,7 +51,8 @@ See [the design rationale](docs/rationale.md) and [the repository map](ARCHITECT
 ```sh
 make deps     # libsecp256k1 at its pinned commit
 make          # build/parser.wasm and build/signer.wasm
-make test     # the vectors, the host libraries, the layout, the shape of the output
+make test     # the vectors, the host libraries, the layout
+make check-wasm   # the shape of the output (needs wasm-tools)
 make check-c-format check-c-tidy
 ```
 

@@ -47,7 +47,7 @@ The module is refused unless it hashes to exactly that. Take the value from the 
 
 ```sh
 make run      # prints the plan for a test PSBT
-make check    # 66 checks, mirroring hosts/js/test.mjs
+make check    # mirrors hosts/js/test.mjs
 ```
 
 Both fetch the Chicory jars and verify their SHA-256 first. Needs `kotlinc` and a JDK; verified with

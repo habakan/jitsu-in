@@ -2,7 +2,7 @@
 """The structure offsets in the spec and in the host library have to equal what C says they are.
 
 A number written by hand in a document is wrong the moment a struct changes, and nothing would
-notice. components/signer/tests/layout.c prints the truth; this compares everything against it.
+notice. signer/tests/layout.c prints the truth; this compares everything against it.
 """
 import json
 import re

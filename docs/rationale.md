@@ -48,15 +48,15 @@ The [platform diagram](everywhere.md) lists where the modules have run and what 
 | **a pinned feature set** | [Lime1](https://github.com/WebAssembly/tool-conventions/blob/main/Lime.md), enforced at link time, so a dependency cannot quietly widen what a runtime must support |
 | **reproducible** | macOS arm64 and Linux x86_64 give the same bytes from a toolchain pinned by version and by hash |
 | **the same answers as Bitcoin Core** | 37 PSBTs agree on the parse, and 8 signatures are byte-identical, ECDSA and Schnorr alike |
-| **three host libraries that agree** | JavaScript, Kotlin and Swift, required to produce identical output byte for byte |
-| **no package manager** | no npm, no Gradle, no pip. The one Python left is a vector expander with no dependencies; everything else is C, JavaScript, Kotlin or Swift with its tools pinned by hash |
+| **host libraries that agree** | the signer's JavaScript, Kotlin and Swift libraries, required to produce identical output byte for byte. CI checks JavaScript and Kotlin; Swift needs 6.3 and is checked on macOS |
+| **no package manager** | no npm, no Gradle, no pip. Python appears only in build and check scripts that use its standard library; everything else is C, JavaScript, Kotlin or Swift with its tools pinned by hash |
 
 ## What is tested
 
 | | |
 |---|---|
 | the parser | 529 PSBT vectors including Bitcoin Core's own `rpc_psbt.json`, 1,174 UR checks against Blockchain Commons' reference values, continuous fuzzing, a pinned set of exports |
-| the signer | 74 checks across three host libraries, with the signatures required to equal what the native implementation produced, byte for byte |
+| the signer | the same checks from each of the three host libraries, with the signatures required to equal what the native implementation produced, byte for byte |
 | both | the shape of the output (`make check-wasm`), and that every structure offset in both specifications and all three host libraries equals what C says it is (`make check-layout`) |
 
 Signing is deterministic — ECDSA grinds for a low R as Bitcoin Core does, and Schnorr passes a zero

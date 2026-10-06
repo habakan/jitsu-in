@@ -1,5 +1,7 @@
 # 構成
 
+<sup>[English](../../ARCHITECTURE.md)</sup>
+
 概要と使い方は [README.md](README.md)、設計理由は [rationale.md](rationale.md) にまとめています。
 
 ## どこに何があるか

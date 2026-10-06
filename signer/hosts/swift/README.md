@@ -25,7 +25,7 @@ in the parser's Swift host until someone tried a clean checkout.
 ## Testing
 
 ```sh
-make check    # 25 checks, against the signatures the native signer produced
+make check    # against the signatures the native signer produced
 ```
 
 ## Using it
@@ -36,6 +36,7 @@ import WasmSigner
 // Pin the hash. A module that holds a key is the last place to accept whatever bytes arrived.
 let signer = try Signer(signerWasm: signerWasm, sha256: "96b78cd6…")
 try signer.initialise(testnet: false)
+defer { signer.unload() }                    // zeroes the key, on every path
 
 // A mutable array, not a String: a Swift String cannot be cleared, and this one is zeroed for you
 var mnemonic = [UInt8](mnemonicText.utf8)
@@ -54,7 +55,6 @@ print("fee \(display.fee)")
 
 // Only after someone has actually approved what display() returned
 let signatures = try signer.sign()            // one review permits one signing
-signer.unload()                               // zeroes the key; do not wait until you remember
 ```
 
 Hand each `Signature.raw` to `parser.wasm`'s signature buffer and call `parser_finalize()`.
@@ -70,7 +70,7 @@ be, so copy out of it into a mutable array and clear that; the array you pass is
 
 ## Agreeing with the other hosts
 
-`make -C ../../../.. check-hosts-agree` runs the JavaScript, Kotlin and Swift libraries over the same
+`make -C ../../.. check-hosts-agree` runs the JavaScript, Kotlin and Swift libraries over the same
 PSBT and requires their output to match byte for byte. Three independent hosts reading the same
 module is what catches one of them reading the layout wrong — a single host's tests pass just as
 happily when the library and its expectations are wrong together.

@@ -65,7 +65,7 @@ The module is refused unless it hashes to exactly that. Take the value from the 
 
 ```sh
 make run      # prints the plan for a test PSBT
-make check    # 66 checks, mirroring hosts/js/test.mjs and hosts/kotlin/Test.kt
+make check    # mirrors hosts/js/test.mjs and hosts/kotlin/Test.kt
 ```
 
 ## Toolchain

@@ -84,7 +84,6 @@ getting cheaper. Both are upstream of this repository.
 
 ```sh
 make check-rust-suite PARSER_IMPL=rust   # the whole suite against either one
-make bench                               # both, under QEMU, if the device repo is beside this one
 ```
 
 The QEMU measurements come from the device repository, which has the RV32 toolchain and the host that

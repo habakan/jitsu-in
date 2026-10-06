@@ -31,8 +31,8 @@ imports**, and cannot call the host. A security problem there is anything that m
 **misrepresent the transaction**, or that reads or writes outside its own linear memory.
 
 `signer.wasm` holds the key. A security problem there is anything that makes it sign something other
-than the plan `signer_review()` passed, accept a plan that breaks one of the checks in
-[its ABI](signer/docs/abi.md) §6, or leave key material in memory after `signer_unload()`.
+than the plan `signer_review()` passed, accept a plan it should refuse with one of the
+[errors its ABI lists](signer/docs/abi.md#errors), or leave key material in memory after `signer_unload()`.
 
 Things that are **not** findings on their own, because the ABI
 ([parser](parser/docs/abi.md), [signer](signer/docs/abi.md),

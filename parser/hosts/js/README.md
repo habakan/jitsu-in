@@ -72,7 +72,7 @@ A hash written in a file nobody checks is documentation. Passing it here makes i
 make check-hosts      # from the repository root; also part of `make test`
 ```
 
-76 checks: every hand-made vector parses to a sane shape, Bitcoin Core's invalid vectors are
+The tests check that every hand-made vector parses to a sane shape, Bitcoin Core's invalid vectors are
 rejected as `ParserError` rather than crashing, derivations print as `73c5da0a/84h/0h/0h/0/0`,
 errors arrive by name, a UR round trip is byte-identical, and a module that returns an offset
 outside its memory is stopped with a `RangeError`.
