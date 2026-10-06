@@ -26,7 +26,7 @@ for (let i = 0; i < plan[Signer.LAYOUT.plan.nInputs]; i++) {
 }
 
 const S = await Signer.load(readFileSync(signerPath));
-S.init().seedFromMnemonic("abandon ".repeat(11) + "about").setPlan(plan).setPrevTxs(prevTxs);
+S.init().seedFromMnemonic(new TextEncoder().encode("abandon ".repeat(11) + "about")).setPlan(plan).setPrevTxs(prevTxs);
 S.review();
 const d = S.display();
 console.log(`fingerprint ${S.fingerprint}`);

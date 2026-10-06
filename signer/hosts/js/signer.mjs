@@ -144,26 +144,31 @@ export class Signer {
   }
 
   /** Derives the key from a BIP39 mnemonic. PBKDF2 2048 rounds, about half a second.
-   *  The module wipes its own input buffer; the strings you passed in are yours to deal with. */
+   *  Takes NFKD-normalised UTF-8 bytes, not strings, because a string cannot be cleared; both arrays
+   *  are zeroed before this returns, whether or not it succeeds. */
   /**
-   * @param {string} mnemonic
-   * @param {string} [passphrase]
+   * @param {Uint8Array} mnemonic
+   * @param {Uint8Array} [passphrase]
    */
-  seedFromMnemonic(mnemonic, passphrase = "") {
-    const enc = new TextEncoder();
-    const mn = enc.encode(mnemonic.normalize("NFKD"));
-    const pass = enc.encode(passphrase.normalize("NFKD"));
-    const cap = this.#e.signer_input_cap();
-    if (mn.length + pass.length > cap) {
-      throw new RangeError(`mnemonic and passphrase are ${mn.length + pass.length} bytes, cap is ${cap}`);
+  seedFromMnemonic(mnemonic, passphrase = new Uint8Array(0)) {
+    try {
+      if (!(mnemonic instanceof Uint8Array) || !(passphrase instanceof Uint8Array)) {
+        throw new TypeError("mnemonic and passphrase are Uint8Array, so that they can be cleared");
+      }
+      const cap = this.#e.signer_input_cap();
+      if (mnemonic.length + passphrase.length > cap) {
+        throw new RangeError(`mnemonic and passphrase are ${mnemonic.length + passphrase.length} bytes, cap is ${cap}`);
+      }
+      const at = this.#e.signer_input();
+      this.#mem.set(mnemonic, at);
+      this.#mem.set(passphrase, at + mnemonic.length);
+      if (!this.#e.signer_seed_from_mnemonic(mnemonic.length, passphrase.length)) {
+        throw new Error("seed_from_mnemonic failed");
+      }
+    } finally {
+      if (mnemonic instanceof Uint8Array) mnemonic.fill(0);
+      if (passphrase instanceof Uint8Array) passphrase.fill(0);
     }
-    const at = this.#e.signer_input();
-    this.#mem.set(mn, at);
-    this.#mem.set(pass, at + mn.length);
-    const ok = this.#e.signer_seed_from_mnemonic(mn.length, pass.length);
-    mn.fill(0);
-    pass.fill(0);
-    if (!ok) throw new Error("seed_from_mnemonic failed");
     return this;
   }
 

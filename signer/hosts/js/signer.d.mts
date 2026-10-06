@@ -79,12 +79,13 @@ export class Signer {
         testnet?: boolean | undefined;
     }): this;
     /** Derives the key from a BIP39 mnemonic. PBKDF2 2048 rounds, about half a second.
-     *  The module wipes its own input buffer; the strings you passed in are yours to deal with. */
+     *  Takes NFKD-normalised UTF-8 bytes, not strings, because a string cannot be cleared; both arrays
+     *  are zeroed before this returns, whether or not it succeeds. */
     /**
-     * @param {string} mnemonic
-     * @param {string} [passphrase]
+     * @param {Uint8Array} mnemonic
+     * @param {Uint8Array} [passphrase]
      */
-    seedFromMnemonic(mnemonic: string, passphrase?: string): this;
+    seedFromMnemonic(mnemonic: Uint8Array, passphrase?: Uint8Array): this;
     /** For a seed you already have. 64 bytes. */
     /** @param {Uint8Array} seed */
     loadSeed(seed: Uint8Array): this;
