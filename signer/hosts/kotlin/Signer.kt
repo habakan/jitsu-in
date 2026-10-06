@@ -155,10 +155,15 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
 
     /** UTF-8 without going through a String, which could not be cleared */
     private fun utf8(chars: CharArray): ByteArray {
-        val buf = Charsets.UTF_8.newEncoder().encode(java.nio.CharBuffer.wrap(chars))
-        val out = ByteArray(buf.remaining()).also { buf.get(it) }
-        if (buf.hasArray()) buf.array().fill(0)
-        return out
+        val buf = java.nio.ByteBuffer.allocate(chars.size * 3) // UTF-8 needs at most 3 bytes per UTF-16 unit
+        try {
+            val enc = Charsets.UTF_8.newEncoder()
+            enc.encode(java.nio.CharBuffer.wrap(chars), buf, true).also { if (it.isError) it.throwException() }
+            enc.flush(buf)
+            return buf.array().copyOf(buf.position())
+        } finally {
+            buf.array().fill(0)
+        }
     }
 
     /** For a seed you already have. 64 bytes. */
