@@ -68,10 +68,14 @@ build/wamr.node: parser/tools/wamr_node.c $(WAMR_BUILD)/libiwasm.$(WAMR_LIB_EXT)
 	  -I$(WAMR_ROOT)/core/iwasm/include $< -L$(WAMR_BUILD) -liwasm \
 	  -Wl,-rpath,$(abspath $(WAMR_BUILD)) -o $@
 
-check-wamr: build/parser.wasm build/wamr.node
+check-wamr: build/parser.wasm build/signer.wasm build/wamr.node
 	$(MAKE) -C parser build/vectors/own_p2wpkh_1in.psbt
 	PARSER_RUNTIME=wamr node parser/tools/run_tests.mjs build/parser.wasm parser/build/vectors \
 	  parser/tests/rpc_psbt.json parser/tests/ur_vectors.json
+	WASM_RUNTIME=wamr node signer/hosts/js/test.mjs
+	node signer/hosts/js/dump.mjs build/signer.wasm build/parser.wasm $(PSBT_VECTOR) > build/host-v8.out
+	WASM_RUNTIME=wamr node signer/hosts/js/dump.mjs build/signer.wasm build/parser.wasm $(PSBT_VECTOR) > build/host-wamr.out
+	diff build/host-v8.out build/host-wamr.out && echo "V8 and WAMR agree"
 .PHONY: check-wamr
 
 check-deps:

@@ -9,8 +9,6 @@ typedef struct {
     wasm_exec_env_t env;
 } instance_t;
 
-static wasm_module_t wasm_module;
-static uint8_t *wasm_bytes;
 static int runtime_ready;
 
 static napi_value fail(napi_env env, const char *message) {
@@ -32,34 +30,45 @@ static void finalize_instance(napi_env env, void *data, void *hint) {
     free(instance);
 }
 
+static wasm_module_t get_module(napi_env env, napi_value value) {
+    wasm_module_t module = NULL;
+    if (napi_get_value_external(env, value, (void **)&module) != napi_ok) return NULL;
+    return module;
+}
+
+/* Modules are never unloaded: WAMR keeps pointers into the bytes, and a test process is short-lived */
 static napi_value load_module(napi_env env, napi_callback_info info) {
-    napi_value args[1];
+    napi_value args[1], result;
     size_t argc = 1, length = 0;
     void *source = NULL;
+    uint8_t *bytes;
     char error[256] = {0};
     if (napi_get_cb_info(env, info, &argc, args, NULL, NULL) != napi_ok || argc != 1 ||
         napi_get_buffer_info(env, args[0], &source, &length) != napi_ok)
         return fail(env, "loadModule expects a Buffer");
-    if (runtime_ready) return fail(env, "WAMR module is already loaded");
-
-    RuntimeInitArgs init_args = {0};
-    init_args.mem_alloc_type = Alloc_With_System_Allocator;
-    if (!wasm_runtime_full_init(&init_args)) return fail(env, "WAMR initialization failed");
-    runtime_ready = 1;
-    wasm_runtime_set_default_running_mode(Mode_Interp);
-    wasm_bytes = malloc(length);
-    if (!wasm_bytes) return fail(env, "WAMR module buffer allocation failed");
-    memcpy(wasm_bytes, source, length);
-    wasm_module = wasm_runtime_load(wasm_bytes, (uint32_t)length, error, sizeof(error));
-    if (!wasm_module) return fail(env, error[0] ? error : "WAMR could not load the module");
-    napi_value result;
-    napi_create_int32(env, 1, &result);
+    if (!runtime_ready) {
+        RuntimeInitArgs init_args = {0};
+        init_args.mem_alloc_type = Alloc_With_System_Allocator;
+        if (!wasm_runtime_full_init(&init_args)) return fail(env, "WAMR initialization failed");
+        runtime_ready = 1;
+        wasm_runtime_set_default_running_mode(Mode_Interp);
+    }
+    if (!(bytes = malloc(length))) return fail(env, "WAMR module buffer allocation failed");
+    memcpy(bytes, source, length);
+    wasm_module_t module = wasm_runtime_load(bytes, (uint32_t)length, error, sizeof(error));
+    if (!module) return fail(env, error[0] ? error : "WAMR could not load the module");
+    napi_create_external(env, module, NULL, NULL, &result);
     return result;
 }
 
 static napi_value instantiate(napi_env env, napi_callback_info info) {
+    napi_value args[1];
+    size_t argc = 1;
     char error[256] = {0};
-    if (!wasm_module) return fail(env, "loadModule must be called first");
+    wasm_module_t wasm_module;
+    if (napi_get_cb_info(env, info, &argc, args, NULL, NULL) != napi_ok || argc != 1 ||
+        !(wasm_module = get_module(env, args[0])))
+        return fail(env, "instantiate expects a module from loadModule");
     instance_t *instance = calloc(1, sizeof(*instance));
     if (!instance) return fail(env, "WAMR instance allocation failed");
     instance->module = wasm_runtime_instantiate(wasm_module, 16384, 0, error, sizeof(error));
@@ -125,9 +134,58 @@ static napi_value has_export(napi_env env, napi_callback_info info) {
 }
 
 static napi_value import_count(napi_env env, napi_callback_info info) {
-    napi_value result;
-    if (!wasm_module) return fail(env, "loadModule must be called first");
-    napi_create_uint32(env, wasm_runtime_get_import_count(wasm_module), &result);
+    napi_value args[1], result;
+    size_t argc = 1;
+    wasm_module_t module;
+    if (napi_get_cb_info(env, info, &argc, args, NULL, NULL) != napi_ok || argc != 1 ||
+        !(module = get_module(env, args[0])))
+        return fail(env, "importCount expects a module");
+    napi_create_uint32(env, wasm_runtime_get_import_count(module), &result);
+    return result;
+}
+
+/* [{ name, kind }] with kind "function", "memory" or "other" */
+static napi_value exports_of(napi_env env, napi_callback_info info) {
+    napi_value args[1], result;
+    size_t argc = 1;
+    wasm_module_t module;
+    if (napi_get_cb_info(env, info, &argc, args, NULL, NULL) != napi_ok || argc != 1 ||
+        !(module = get_module(env, args[0])))
+        return fail(env, "exports expects a module");
+    int32_t n = wasm_runtime_get_export_count(module);
+    napi_create_array_with_length(env, (size_t)n, &result);
+    for (int32_t i = 0; i < n; i++) {
+        wasm_export_t e;
+        napi_value item, name, kind;
+        wasm_runtime_get_export_type(module, i, &e);
+        napi_create_object(env, &item);
+        napi_create_string_utf8(env, e.name, NAPI_AUTO_LENGTH, &name);
+        napi_create_string_utf8(env,
+                                e.kind == WASM_IMPORT_EXPORT_KIND_FUNC     ? "function"
+                                : e.kind == WASM_IMPORT_EXPORT_KIND_MEMORY ? "memory"
+                                                                           : "other",
+                                NAPI_AUTO_LENGTH, &kind);
+        napi_set_named_property(env, item, "name", name);
+        napi_set_named_property(env, item, "kind", kind);
+        napi_set_element(env, result, (uint32_t)i, item);
+    }
+    return result;
+}
+
+/* The instance's linear memory as an ArrayBuffer. Valid because neither module can grow its memory */
+static napi_value memory_of(napi_env env, napi_callback_info info) {
+    napi_value args[1], result;
+    size_t argc = 1;
+    instance_t *instance;
+    if (napi_get_cb_info(env, info, &argc, args, NULL, NULL) != napi_ok || argc != 1 ||
+        !(instance = get_instance(env, args[0])))
+        return fail(env, "memory expects an instance");
+    wasm_memory_inst_t memory = wasm_runtime_get_default_memory(instance->module);
+    if (!memory) return fail(env, "WAMR instance has no memory");
+    size_t length = (size_t)wasm_memory_get_cur_page_count(memory) * wasm_memory_get_bytes_per_page(memory);
+    if (napi_create_external_arraybuffer(env, wasm_memory_get_base_address(memory), length, NULL, NULL, &result) !=
+        napi_ok)
+        return fail(env, "this Node does not allow external ArrayBuffers");
     return result;
 }
 
@@ -175,6 +233,8 @@ static napi_value init(napi_env env, napi_value exports) {
         {"call", NULL, call_export, NULL, NULL, NULL, napi_default, NULL},
         {"hasExport", NULL, has_export, NULL, NULL, NULL, napi_default, NULL},
         {"importCount", NULL, import_count, NULL, NULL, NULL, napi_default, NULL},
+        {"exports", NULL, exports_of, NULL, NULL, NULL, napi_default, NULL},
+        {"memory", NULL, memory_of, NULL, NULL, NULL, napi_default, NULL},
         {"read", NULL, read_memory, NULL, NULL, NULL, napi_default, NULL},
         {"write", NULL, write_memory, NULL, NULL, NULL, napi_default, NULL},
     };

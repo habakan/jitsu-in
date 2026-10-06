@@ -56,8 +56,9 @@ make check-wasm   # the shape of the output (needs wasm-tools)
 make check-c-format check-c-tidy
 ```
 
-`make wamr-deps && make check-wamr` runs the parser vectors in WAMR too. It uses the same JavaScript
-test suite as Node/V8. WAMR 2.4.5 is pinned for this check.
+`make wamr-deps && make check-wamr` runs the parser vectors and the signer's JavaScript tests in WAMR
+too, with the same test suites as Node/V8, and requires the signer's output to match V8's byte for
+byte. WAMR 2.4.5 is pinned for this check.
 
 `make format-c` applies the C formatting rules. Formatting and the parser's static analysis use the
 clang-format and clang-tidy shipped with the pinned wasi-sdk toolchain in CI.
@@ -65,7 +66,7 @@ clang-format and clang-tidy shipped with the pinned wasi-sdk toolchain in CI.
 Needs clang with the wasm32 target, a wasi-libc sysroot, and Node. With Homebrew:
 `brew install llvm lld wasi-libc wasi-runtimes node cmake`.
 
-The parser vectors run under Node/V8 and WAMR's classic interpreter. Where an independent opinion is
+Both modules' tests run under Node/V8 and WAMR's classic interpreter. Where an independent opinion is
 required, it comes from **Bitcoin Core itself** (`make check-core-diff`, which needs `bitcoind`).
 
 That uses whatever clang you have, which is fine for development but will not reproduce a release

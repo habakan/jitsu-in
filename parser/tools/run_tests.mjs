@@ -33,7 +33,7 @@ if (runtime === "wamr") {
   const wamr = createRequire(import.meta.url)("../../build/wamr.node");
   const module = wamr.loadModule(moduleBytes);
   createInstance = () => new WamrExports(wamr, wamr.instantiate(module));
-  importCount = wamr.importCount;
+  importCount = () => wamr.importCount(module);
 } else if (runtime === "v8") {
   compiled = await WebAssembly.compile(moduleBytes);
   createInstance = () => new V8Exports(new WebAssembly.Instance(compiled, {}).exports);
