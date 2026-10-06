@@ -34,7 +34,7 @@ make check    # 25 checks, against the signatures the native signer produced
 import WasmSigner
 
 // Pin the hash. A module that holds a key is the last place to accept whatever bytes arrived.
-let signer = try Signer(signerWasm: signerWasm, sha256: "6f05069b…")
+let signer = try Signer(signerWasm: signerWasm, sha256: "96b78cd6…")
 try signer.initialise(testnet: false)
 
 // A mutable array, not a String: a Swift String cannot be cleared, and this one is zeroed for you

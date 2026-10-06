@@ -37,7 +37,7 @@ Anything the module rejects throws a `ParserException` with a readable message (
 ## Checking you have the right module
 
 ```kotlin
-val parser = Parser(File("parser.wasm").readBytes(), sha256 = "21ea6dbc…")
+val parser = Parser(File("parser.wasm").readBytes(), sha256 = "7c89bf15…")
 ```
 
 The module is refused unless it hashes to exactly that. Take the value from the project's

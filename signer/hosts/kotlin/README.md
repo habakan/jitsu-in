@@ -24,7 +24,7 @@ you to trust.
 import wasmsigner.Signer
 
 // Pin the hash. A module that holds a key is the last place to accept whatever bytes arrived.
-val signer = Signer(signerWasm, sha256 = "6f05069b…").init(testnet = false)
+val signer = Signer(signerWasm, sha256 = "96b78cd6…").init(testnet = false)
 
 // CharArray, not String: a String cannot be cleared, and this one is zeroed for you
 signer.seedFromMnemonic(mnemonic)

@@ -58,7 +58,7 @@ a `RangeError` — that would mean the module is not the one you think it is.
 ## Checking you have the right module
 
 ```js
-const parser = await Parser.load(parserWasm, { sha256: "21ea6dbc…" });
+const parser = await Parser.load(parserWasm, { sha256: "7c89bf15…" });
 ```
 
 The module is refused unless it hashes to exactly that. Take the value from the project's
