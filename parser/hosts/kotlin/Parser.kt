@@ -13,6 +13,7 @@ import com.dylibso.chicory.wasm.Parser as WasmParser
 
 private const val MAGIC = 0x4e4c5042           // "BPLN"
 private const val ABI_VERSION = 1
+private const val PLAN_SIZE = 5016
 
 // Layout of plan_t, from docs/abi.md. Kept in one place so a version bump touches one table.
 private object L {
@@ -79,6 +80,8 @@ class UrEncoder internal constructor(val seqLen: Int, private val next: () -> St
  *   from the project's `checksums.txt` or a release's `SHA256SUMS`.
  */
 class Parser(parserWasm: ByteArray, sha256: String? = null) {
+    private var planAvailable = false
+
     init {
         // A hash in a file nobody checks is documentation. Checking it here makes it a gate.
         if (sha256 != null) {
@@ -136,10 +139,19 @@ class Parser(parserWasm: ByteArray, sha256: String? = null) {
      * @param fingerprint master fingerprint, big-endian (0x73c5da0a). Not a secret.
      */
     fun parse(psbt: ByteArray, fingerprint: Int): Plan {
+        planAvailable = false
         writeInput(psbt)
         val rc = call("parser_parse", psbt.size.toLong(), fingerprint.toLong() and 0xffffffffL)
         if (rc != 0) throw ParserException(rc)
-        return readPlan()
+        val plan = readPlan()
+        planAvailable = true
+        return plan
+    }
+
+    /** Copy the current ABI-v1 plan_t bytes for a matching signer.wasm module. */
+    fun rawPlan(): ByteArray {
+        check(planAvailable) { "parse() must succeed before rawPlan()" }
+        return bytes(call("parser_plan"), PLAN_SIZE)
     }
 
     private fun readPlan(): Plan {
@@ -176,6 +188,7 @@ class Parser(parserWasm: ByteArray, sha256: String? = null) {
 
     /** Feed one UR part. Returns the PSBT once the message is complete, otherwise null. */
     fun urReceive(part: String): ByteArray? {
+        planAvailable = false
         val raw = part.toByteArray()
         writeInput(raw)
         val rc = call("parser_ur_receive", raw.size.toLong())
@@ -188,6 +201,7 @@ class Parser(parserWasm: ByteArray, sha256: String? = null) {
 
     /** Encode the PSBT currently in the output buffer (what [finalize] produced) as QR payloads. */
     fun urEncode(psbtLen: Int, fragmentLen: Int = 100): UrEncoder {
+        planAvailable = false
         val seqLen = call("parser_ur_encode_start", psbtLen.toLong(), fragmentLen.toLong())
         if (seqLen < 0) throw ParserException(seqLen, "UR_ERR")
         return UrEncoder(seqLen) {
