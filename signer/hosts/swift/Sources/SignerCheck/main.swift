@@ -183,6 +183,21 @@ do {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
 }
 
+// --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
+for (what, bad) in [("a bad checksum", String(repeating: "abandon ", count: 11) + "abandon"),
+                    ("a double space", mnemonicText.replacingOccurrences(of: "abandon abandon", with: "abandon  abandon")),
+                    ("capitals", "A" + mnemonicText.dropFirst())] {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](bad.utf8), none: [UInt8] = []
+    do {
+        try b.seedFromMnemonic(&w, passphrase: &none)
+        ok("a mnemonic with \(what) is refused", false)
+    } catch {
+        ok("a mnemonic with \(what) is refused", "\(error)".contains("seed_from_mnemonic failed") && b.fingerprint == "00000000")
+    }
+}
+
 // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words
 do {
     let words = "forum undo fragile fade shy sign arrest garment culture tube off merit"
