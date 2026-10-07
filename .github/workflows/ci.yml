@@ -90,6 +90,9 @@ jobs:
           make wamr-deps
           make check-wamr
 
+      - name: The signer's C against the SeedQR and BIP32 vectors
+        run: make check-signer-c
+
       - name: signer.wasm from JavaScript
         run: make check-signer-js
 

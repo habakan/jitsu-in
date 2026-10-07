@@ -55,7 +55,8 @@ splits, no NDK. The module's bytes can ship as an asset, and pinning its SHA-256
 swapped out for another is refused rather than run.
 
 `seedFromMnemonic` takes a `CharArray` so it can be cleared. Android's `EditText` hands you an
-`Editable`; copy out of it and clear it, rather than taking `.toString()`.
+`Editable`; copy out of it and clear it, rather than taking `.toString()`. `seedFromSeedQR` takes the
+scanner's raw bytes, which it zeroes; the words are never returned, so show `fingerprint` to confirm.
 
 ## Agreeing with the JavaScript host
 

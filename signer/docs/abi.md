@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 56,537 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 74,220 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,16 +12,16 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 24 checks in [test.mjs](../hosts/js/test.mjs) |
-| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 25 checks in [Test.kt](../hosts/kotlin/Test.kt) |
-| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 25 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 44 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 36 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 33 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 
 This module holds a secret, which makes the host's behaviour part of the security of the whole, in a
 way it is not for `parser.wasm`.
 
-- **Do not log, serialise or copy the input buffer.** The mnemonic and the seed pass through
+- **Do not log, serialise or copy the input buffer.** The mnemonic, the SeedQR and the seed pass through
   `signer_input()`. The module wipes it after use; whatever your language did with the string you
   built it from is yours to clear
 - **Do not keep the mnemonic in a garbage-collected string** any longer than it takes to write it in.
@@ -38,7 +38,7 @@ way it is not for `parser.wasm`.
 
 ```
 signer_init(testnet)
-signer_seed_from_mnemonic(...)   or   signer_load_seed()
+signer_seed_from_mnemonic(...)   or   signer_seed_from_seedqr(...)   or   signer_load_seed()
 signer_plan()        <- write the 5016-byte plan_t here
 signer_set_prevtx(i, off, len)   for each input, after writing into signer_prevtx()
 signer_review()      -> re-derives keys, decides what is ours, computes the fee
@@ -58,7 +58,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 
 | | what goes in it |
 |---|---|
-| `signer_input() -> ptr` | the mnemonic followed by the passphrase, or a 64-byte seed |
+| `signer_input() -> ptr` | the mnemonic or a SeedQR payload followed by the passphrase, or a 64-byte seed |
 | `signer_input_cap() -> u32` | how many bytes that is (512); check before writing |
 | `signer_plan() -> ptr` | the `plan_t`, 5016 bytes, copied verbatim from `parser_plan()` |
 | `signer_prevtx() -> ptr` | the `non_witness_utxo` bytes, laid out however you like within 32768 |
@@ -74,6 +74,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 |---|---|
 | `signer_init(testnet: i32)` | 1 on success. `testnet` covers signet too |
 | `signer_seed_from_mnemonic(mn_len, pass_len)` | 1 on success. PBKDF2 2048 rounds, about half a second |
+| `signer_seed_from_seedqr(qr_len, pass_len)` | 1 on success. Standard (48 or 96 digits) or Compact (16 or 32 bytes); 0 if the BIP39 checksum fails |
 | `signer_load_seed()` | 1 on success, using the first 64 bytes of the input buffer |
 | `signer_set_prevtx(i, off, len)` | 1 on success. `len` of 0 means that input has no previous transaction |
 | `signer_review()` | 0 on success, otherwise one of the errors below |

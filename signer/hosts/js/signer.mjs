@@ -33,6 +33,7 @@ const L = {
  *   signer_desc_output: () => number,
  *   signer_init: (testnet: number) => number,
  *   signer_seed_from_mnemonic: (mnLen: number, passLen: number) => number,
+ *   signer_seed_from_seedqr: (qrLen: number, passLen: number) => number,
  *   signer_load_seed: () => number,
  *   signer_unload: () => void,
  *   signer_fingerprint: () => number,
@@ -167,6 +168,35 @@ export class Signer {
       }
     } finally {
       if (mnemonic instanceof Uint8Array) mnemonic.fill(0);
+      if (passphrase instanceof Uint8Array) passphrase.fill(0);
+    }
+    return this;
+  }
+
+  /** Derives the key from a SeedQR: the Standard digits as ASCII bytes, or the CompactSeedQR's raw
+   *  bytes. The words stay inside the module, so confirm what was loaded by its fingerprint. Both
+   *  arrays are zeroed before this returns. */
+  /**
+   * @param {Uint8Array} payload
+   * @param {Uint8Array} [passphrase]
+   */
+  seedFromSeedQR(payload, passphrase = new Uint8Array(0)) {
+    try {
+      if (!(payload instanceof Uint8Array) || !(passphrase instanceof Uint8Array)) {
+        throw new TypeError("payload and passphrase are Uint8Array, so that they can be cleared");
+      }
+      const cap = this.#e.signer_input_cap();
+      if (payload.length + passphrase.length > cap) {
+        throw new RangeError(`payload and passphrase are ${payload.length + passphrase.length} bytes, cap is ${cap}`);
+      }
+      const at = this.#e.signer_input();
+      this.#mem.set(payload, at);
+      this.#mem.set(passphrase, at + payload.length);
+      if (!this.#e.signer_seed_from_seedqr(payload.length, passphrase.length)) {
+        throw new Error("seed_from_seedqr failed");
+      }
+    } finally {
+      if (payload instanceof Uint8Array) payload.fill(0);
       if (passphrase instanceof Uint8Array) passphrase.fill(0);
     }
     return this;

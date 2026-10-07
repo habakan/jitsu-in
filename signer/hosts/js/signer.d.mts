@@ -87,6 +87,14 @@ export class Signer {
      * @param {Uint8Array} [passphrase]
      */
     seedFromMnemonic(mnemonic: Uint8Array, passphrase?: Uint8Array): this;
+    /** Derives the key from a SeedQR: the Standard digits as ASCII bytes, or the CompactSeedQR's raw
+     *  bytes. The words stay inside the module, so confirm what was loaded by its fingerprint. Both
+     *  arrays are zeroed before this returns. */
+    /**
+     * @param {Uint8Array} payload
+     * @param {Uint8Array} [passphrase]
+     */
+    seedFromSeedQR(payload: Uint8Array, passphrase?: Uint8Array): this;
     /** For a seed you already have. 64 bytes. */
     /** @param {Uint8Array} seed */
     loadSeed(seed: Uint8Array): this;
@@ -157,6 +165,7 @@ export type SignerExports = {
     signer_desc_output: () => number;
     signer_init: (testnet: number) => number;
     signer_seed_from_mnemonic: (mnLen: number, passLen: number) => number;
+    signer_seed_from_seedqr: (qrLen: number, passLen: number) => number;
     signer_load_seed: () => number;
     signer_unload: () => void;
     signer_fingerprint: () => number;

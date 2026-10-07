@@ -65,8 +65,9 @@ WasmKit is a Swift package, so this is a package dependency and nothing more —
 bitcode, no per-architecture build. The module's bytes ship in the app bundle, and pinning its
 SHA-256 means a replaced resource is refused rather than run.
 
-`seedFromMnemonic` takes `inout [UInt8]` so it can be cleared. A `String` from a `TextField` cannot
-be, so copy out of it into a mutable array and clear that; the array you pass is zeroed here.
+`seedFromMnemonic` and `seedFromSeedQR` take `inout [UInt8]` so they can be cleared. A `String` from
+a `TextField` cannot be, so copy out of it into a mutable array and clear that; the array you pass is
+zeroed here.
 
 ## Agreeing with the other hosts
 
