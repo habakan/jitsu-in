@@ -253,6 +253,15 @@ public final class Signer {
         }
     }
 
+    /// The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+    /// show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed.
+    public func bip85Mnemonic(words: UInt32 = 24, index: UInt32 = 0) throws -> [UInt8] {
+        var none: [UInt8] = []
+        return try generate(&none, "bip85_mnemonic") {
+            try self.call("signer_bip85_mnemonic", [.i32(words), .i32(index)])
+        }
+    }
+
     private func generate(_ input: inout [UInt8], _ name: String, _ make: () throws -> Int32) throws -> [UInt8] {
         defer { for i in input.indices { input[i] = 0 } }
         let cap = inputCapacity

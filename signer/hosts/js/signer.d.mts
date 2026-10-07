@@ -106,6 +106,13 @@ export class Signer {
      * @param {12 | 24} [words]
      */
     mnemonicFromDice(rolls: Uint8Array, words?: 12 | 24): Uint8Array<ArrayBuffer>;
+    /** The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+     *  show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed. */
+    /** @param {{ words?: 12 | 18 | 24, index?: number }} [opts] */
+    bip85Mnemonic({ words, index }?: {
+        words?: 12 | 18 | 24;
+        index?: number;
+    }): Uint8Array<ArrayBuffer>;
     /** For a seed you already have. 64 bytes. */
     /** @param {Uint8Array} seed */
     loadSeed(seed: Uint8Array): this;
@@ -188,6 +195,7 @@ export type SignerExports = {
     signer_mnemonic_output: () => number;
     signer_mnemonic_from_entropy: (len: number) => number;
     signer_mnemonic_from_dice: (len: number, words: number) => number;
+    signer_bip85_mnemonic: (words: number, index: number) => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.

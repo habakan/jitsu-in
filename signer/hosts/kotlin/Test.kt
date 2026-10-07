@@ -177,6 +177,19 @@ fun main(args: Array<String>) {
         g.unload()
     }
 
+    // --- BIP85: the child the JavaScript host checks against its own derivation
+    run {
+        val b = Signer(signerWasm).init().seedFromMnemonic(mnemonic.copyOf())
+        check("BIP85 12 words, index 0", String(b.bip85Mnemonic(words = 12)), "prosper short ramp prepare exchange stove life snack client enough purpose fold")
+        try {
+            b.bip85Mnemonic(words = 15)
+            ok("BIP85 with 15 words is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("BIP85 with 15 words is refused", e.message == "bip85_mnemonic failed")
+        }
+        b.unload()
+    }
+
     // --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
     val typed = "abandon ".repeat(11) + "about"
     for ((what, bad) in listOf("a bad checksum" to "abandon ".repeat(11) + "abandon",

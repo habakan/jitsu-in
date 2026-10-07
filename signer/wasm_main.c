@@ -168,3 +168,10 @@ int EXPORT(signer_mnemonic_from_dice)(unsigned len, unsigned words) {
     wipe(in, sizeof(in));
     return n;
 }
+
+/* The BIP85 child mnemonic of the loaded seed, into signer_mnemonic_output(). Returns its length, or 0 */
+int EXPORT(signer_bip85_mnemonic)(unsigned words, unsigned index) {
+    int n = core_bip85_mnemonic(words, index, mnemonic, sizeof(mnemonic));
+    if (!n) wipe(mnemonic, sizeof(mnemonic));
+    return n;
+}

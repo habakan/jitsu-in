@@ -2,6 +2,7 @@
 #include <string.h>
 #include "wipe.h"
 #include "bip32.h"
+#include "bip85.h"
 #include "hash.h"
 #include "address.h"
 #include "sighash.h"
@@ -339,6 +340,10 @@ int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS],
     }
     reviewed = 0;
     return CORE_OK;
+}
+
+int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap) {
+    return seed_loaded ? bip85_bip39(ctx, &master, words, index, out, cap) : 0;
 }
 
 /* The account xpub (m/84'/coin'/0') and an output descriptor built from it. Hand these to the PC and

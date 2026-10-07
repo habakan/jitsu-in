@@ -45,6 +45,7 @@ const L = {
  *   signer_mnemonic_output: () => number,
  *   signer_mnemonic_from_entropy: (len: number) => number,
  *   signer_mnemonic_from_dice: (len: number, words: number) => number,
+ *   signer_bip85_mnemonic: (words: number, index: number) => number,
  * }} SignerExports
  */
 
@@ -220,6 +221,13 @@ export class Signer {
    */
   mnemonicFromDice(rolls, words = 24) {
     return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice");
+  }
+
+  /** The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+   *  show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed. */
+  /** @param {{ words?: 12 | 18 | 24, index?: number }} [opts] */
+  bip85Mnemonic({ words = 24, index = 0 } = {}) {
+    return this.#generate(new Uint8Array(0), () => this.#e.signer_bip85_mnemonic(words, index), "bip85_mnemonic");
   }
 
   /**

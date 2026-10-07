@@ -74,6 +74,10 @@ void core_format_btc(uint64_t sats, char out[21]);
 /* The account xpub (m/84'/coin'/0') and an output descriptor, so the PC side can be watch-only */
 #define CORE_XPUB_MAX 120
 #define CORE_DESC_MAX 180
+/* The BIP85 child mnemonic (English, 12, 18 or 24 words, index below 2^31) of the loaded seed. Returns
+ * its length, NUL-terminated in out, or 0 */
+int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap);
+
 int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);
 
 #endif
