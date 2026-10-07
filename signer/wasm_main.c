@@ -19,6 +19,7 @@
  *   init / seed / seedqr / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
  *   review / display / xpub               CORE_OK (0) on success, CORE_ERR_* otherwise
  *   sign                                  the number of signatures, or -CORE_ERR_*
+ *   find_address                          the index, or -CORE_ERR_*
  * Buffer accessors return a pointer, fingerprint returns the value, unload returns nothing. */
 
 /* Where the host writes. All static: this module never allocates */
@@ -144,4 +145,11 @@ int EXPORT(signer_sign)(void) {
  * predicate, so the sense is flipped here rather than at every call site */
 int EXPORT(signer_xpub)(void) {
     return core_account_xpub(xpub, desc) ? CORE_OK : CORE_ERR_NO_SEED;
+}
+
+/* in holds the address. Nothing secret, but cleared like every other use of in */
+int EXPORT(signer_find_address)(unsigned len, unsigned account, unsigned chain, unsigned count) {
+    int rc = len <= sizeof(in) ? core_find_address((const char *)in, len, account, chain, count) : -CORE_ERR_FORMAT;
+    wipe(in, sizeof(in));
+    return rc;
 }

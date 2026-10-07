@@ -39,6 +39,8 @@ for (const o of d.outputs) {
 for (const s of S.sign()) {
   console.log(`sig ${s.input} ` + [...s.sig].map((b) => b.toString(16).padStart(2, "0")).join(""));
 }
+const found = S.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", { count: 20 });
+console.log(`found ${found.chain} ${found.index}`);
 S.unload();
 S.init().seedFromSeedQR(Uint8Array.from(Buffer.from("5bbd9d71a8ec7990831aff359d426545", "hex")));
 console.log(`seedqr fingerprint ${S.fingerprint}`);

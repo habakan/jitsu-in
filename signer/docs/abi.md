@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 74,220 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 74,983 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,9 +12,9 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 44 checks in [test.mjs](../hosts/js/test.mjs) |
-| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 36 checks in [Test.kt](../hosts/kotlin/Test.kt) |
-| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 33 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 54 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 41 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 38 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 
@@ -58,7 +58,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 
 | | what goes in it |
 |---|---|
-| `signer_input() -> ptr` | the mnemonic or a SeedQR payload followed by the passphrase, or a 64-byte seed |
+| `signer_input() -> ptr` | the mnemonic or a SeedQR payload followed by the passphrase, a 64-byte seed, or an address to find |
 | `signer_input_cap() -> u32` | how many bytes that is (512); check before writing |
 | `signer_plan() -> ptr` | the `plan_t`, 5016 bytes, copied verbatim from `parser_plan()` |
 | `signer_prevtx() -> ptr` | the `non_witness_utxo` bytes, laid out however you like within 32768 |
@@ -81,8 +81,21 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | `signer_display()` | 0 on success |
 | `signer_sign()` | the number of signatures, or the negated error |
 | `signer_xpub()` | 0 on success |
+| `signer_find_address(len, account, chain, count)` | the index of the address in `signer_input()` on m/purpose'/coin'/account'/chain, searching 0 to `count`-1, or the negated error; `NOT_FOUND` when it is not there. See below |
 | `signer_fingerprint()` | the master fingerprint, or 0 when no seed is loaded |
 | `signer_unload()` | nothing. Zeroes the key, the plan, the signatures and the display |
+
+## Finding our addresses
+
+`signer_find_address` answers "is this address mine?" before someone sends to it. The purpose follows
+from the address: `bc1q`/`tb1q` is BIP84, `bc1p`/`tb1p` is BIP86. Anything else, an address for the
+other network, or mixed case is `FORMAT`; all upper case is accepted, since that is what a QR's
+alphanumeric mode carries. `count` is 1 to 100,000. Searching receive and change is two calls, and the
+host libraries' `findAddress` makes them and strips a `bitcoin:` URI.
+
+Each index is a derivation, and an address that is not ours costs all of them. 2 x 1000 took 0.3 s
+(P2WPKH) and 0.5 s (P2TR) in V8, and 15 s and 32 s in WAMR's classic interpreter, on an M-series Mac.
+Chicory and WasmKit are slower still, which is why their tests pass a count of 20.
 
 ## Errors
 
@@ -99,6 +112,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | 9 | `FEE` | the fee does not add up, or overflows |
 | 10 | `NOT_REVIEWED` | the plan is not the one review passed, or the approval was already used |
 | 11 | `CRYPTO` | a libsecp256k1 call failed, or the signature did not verify |
+| 12 | `NOT_FOUND` | `signer_find_address`: none of the addresses searched is this one |
 
 ## Structures
 
