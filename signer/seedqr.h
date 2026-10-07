@@ -15,4 +15,12 @@ int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap);
  * holds. Other wordlists are refused, so a typo cannot pass as a mnemonic in another language */
 int bip39_mnemonic_ok(const uint8_t *mn, size_t len);
 
+/* The mnemonic for 16, 20, 24, 28 or 32 bytes of entropy, written NUL-terminated to out. Returns its
+ * length, or 0 for another length or too small a buffer */
+int bip39_mnemonic_from_entropy(const uint8_t *ent, size_t len, char *out, size_t cap);
+
+/* Dice rolls as the characters 1 to 6, at least 50 for 12 words and 99 for 24 so that the rolls carry
+ * the entropy they stand for. The entropy is SHA-256 of the rolls, cut to 16 bytes for 12 words */
+int bip39_mnemonic_from_dice(const uint8_t *rolls, size_t len, unsigned words, char *out, size_t cap);
+
 #endif

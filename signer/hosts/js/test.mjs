@@ -160,6 +160,45 @@ for (const tamper of [false, true]) {
   S3.unload();
 }
 
+// --- making a new mnemonic, from entropy and from dice, against BIP39's and the dice vectors
+{
+  const G = await Signer.load(signerWasm);
+  G.init();
+  const dec = (b) => new TextDecoder().decode(b);
+  const ent = Uint8Array.from(Buffer.from("9e885d952ad362caeb4efe34a8e91bd2", "hex"));
+  const mn = G.mnemonicFromEntropy(ent);
+  check("BIP39's 9e885d95... vector", dec(mn),
+        "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic");
+  ok("the entropy passed in is zeroed", ent.every((b) => b === 0));
+  check("the generated words load", G.seedFromMnemonic(mn).fingerprint.length, 8);
+  ok("the words returned are cleared by loading them", mn.every((b) => b === 0));
+  const enc = (t) => new TextEncoder().encode(t);
+  check("50 dice rolls", dec(G.mnemonicFromDice(enc("1".repeat(50)), 12)),
+        "diet glad hat rural panther lawsuit act drop gallery urge where fit");
+  check("99 dice rolls", dec(G.mnemonicFromDice(enc("2".repeat(45) + "5".repeat(53) + "6"))),
+        "lizard broken love tired depend eyebrow excess lonely advance father various cram ignore panic feed plunge miss regret boring unique galaxy fan detail fly");
+  for (const [what, call] of [["15 bytes of entropy", () => G.mnemonicFromEntropy(new Uint8Array(15))],
+                              ["98 rolls for 24 words", () => G.mnemonicFromDice(enc("1".repeat(98)))],
+                              ["a 7 among the rolls", () => G.mnemonicFromDice(enc("7" + "1".repeat(49)), 12)]]) {
+    try {
+      call();
+      ok(`${what} is refused`, false);
+    } catch (e) {
+      ok(`${what} is refused`, /failed/.test(e.message));
+    }
+  }
+  // the words never stay in the module's output buffer once the library has read them
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  E.signer_init(0);
+  new Uint8Array(E.memory.buffer).set(Buffer.from("9e885d952ad362caeb4efe34a8e91bd2", "hex"), E.signer_input());
+  const n = E.signer_mnemonic_from_entropy(16);
+  check("the raw ABI writes the words", new TextDecoder().decode(new Uint8Array(E.memory.buffer, E.signer_mnemonic_output(), n)),
+        "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic");
+  E.signer_unload();
+  ok("unload clears the words", Buffer.from(E.memory.buffer).indexOf(Buffer.from("ozone drill")) < 0);
+  G.unload();
+}
+
 // --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
 for (const [what, bad] of [["a bad checksum", "abandon ".repeat(11) + "abandon"], ["a double space", MNEMONIC.replace(" ", "  ")],
                            ["capitals", "A" + MNEMONIC.slice(1)]]) {

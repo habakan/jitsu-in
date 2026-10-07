@@ -42,6 +42,9 @@ const L = {
  *   signer_display: () => number,
  *   signer_sign: () => number,
  *   signer_xpub: () => number,
+ *   signer_mnemonic_output: () => number,
+ *   signer_mnemonic_from_entropy: (len: number) => number,
+ *   signer_mnemonic_from_dice: (len: number, words: number) => number,
  * }} SignerExports
  */
 
@@ -200,6 +203,44 @@ export class Signer {
       if (passphrase instanceof Uint8Array) passphrase.fill(0);
     }
     return this;
+  }
+
+  /** A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), as UTF-8 bytes to show and then
+   *  clear. Nothing is loaded. `entropy` is zeroed, and so is the module's copy of the words. */
+  /** @param {Uint8Array} entropy */
+  mnemonicFromEntropy(entropy) {
+    return this.#generate(entropy, () => this.#e.signer_mnemonic_from_entropy(entropy.length), "mnemonic_from_entropy");
+  }
+
+  /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. The
+   *  entropy is SHA-256 of the rolls. `rolls` is zeroed. */
+  /**
+   * @param {Uint8Array} rolls
+   * @param {12 | 24} [words]
+   */
+  mnemonicFromDice(rolls, words = 24) {
+    return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice");
+  }
+
+  /**
+   * @param {Uint8Array} input
+   * @param {() => number} make
+   * @param {string} name
+   */
+  #generate(input, make, name) {
+    try {
+      const cap = this.#e.signer_input_cap();
+      if (input.length > cap) throw new RangeError(`${input.length} bytes, cap is ${cap}`);
+      this.#mem.set(input, this.#e.signer_input());
+      const n = make();
+      if (!n) throw new Error(`${name} failed`);
+      const at = this.#e.signer_mnemonic_output();
+      const out = this.#mem.slice(at, at + n);
+      this.#mem.fill(0, at, at + n);
+      return out;
+    } finally {
+      input.fill(0);
+    }
   }
 
   /** For a seed you already have. 64 bytes. */

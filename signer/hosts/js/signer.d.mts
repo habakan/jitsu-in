@@ -95,6 +95,17 @@ export class Signer {
      * @param {Uint8Array} [passphrase]
      */
     seedFromSeedQR(payload: Uint8Array, passphrase?: Uint8Array): this;
+    /** A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), as UTF-8 bytes to show and then
+     *  clear. Nothing is loaded. `entropy` is zeroed, and so is the module's copy of the words. */
+    /** @param {Uint8Array} entropy */
+    mnemonicFromEntropy(entropy: Uint8Array): Uint8Array<ArrayBuffer>;
+    /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. The
+     *  entropy is SHA-256 of the rolls. `rolls` is zeroed. */
+    /**
+     * @param {Uint8Array} rolls
+     * @param {12 | 24} [words]
+     */
+    mnemonicFromDice(rolls: Uint8Array, words?: 12 | 24): Uint8Array<ArrayBuffer>;
     /** For a seed you already have. 64 bytes. */
     /** @param {Uint8Array} seed */
     loadSeed(seed: Uint8Array): this;
@@ -174,6 +185,9 @@ export type SignerExports = {
     signer_display: () => number;
     signer_sign: () => number;
     signer_xpub: () => number;
+    signer_mnemonic_output: () => number;
+    signer_mnemonic_from_entropy: (len: number) => number;
+    signer_mnemonic_from_dice: (len: number, words: number) => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.

@@ -191,6 +191,32 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         }
     }
 
+    /**
+     * A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), to show and then clear. Nothing
+     * is loaded. The entropy is zeroed, and so is the module's copy of the words.
+     */
+    fun mnemonicFromEntropy(entropy: ByteArray): CharArray =
+        generate(entropy, "mnemonic_from_entropy") { call("signer_mnemonic_from_entropy", entropy.size.toLong()) }
+
+    /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. */
+    fun mnemonicFromDice(rolls: ByteArray, words: Int = 24): CharArray =
+        generate(rolls, "mnemonic_from_dice") { call("signer_mnemonic_from_dice", rolls.size.toLong(), words.toLong()) }
+
+    private fun generate(input: ByteArray, name: String, make: () -> Int): CharArray {
+        try {
+            require(input.size <= inputCapacity) { "${input.size} bytes does not fit in $inputCapacity" }
+            memory.write(call("signer_input"), input)
+            val n = make()
+            require(n > 0) { "$name failed" }
+            val at = call("signer_mnemonic_output")
+            val raw = bytes(at, n)
+            memory.write(at, ByteArray(n))
+            return CharArray(n) { raw[it].toInt().toChar() }.also { raw.fill(0) }
+        } finally {
+            input.fill(0)
+        }
+    }
+
     /** For a seed you already have. 64 bytes. */
     fun loadSeed(seed: ByteArray): Signer {
         require(seed.size == 64) { "a seed is 64 bytes, got ${seed.size}" }
