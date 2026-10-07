@@ -214,6 +214,28 @@ public final class Signer {
         return self
     }
 
+    /// Derives the key from a SeedQR: the Standard digits as ASCII bytes, or the CompactSeedQR's raw
+    /// bytes. The words stay inside the module, so confirm what was loaded by its fingerprint. Both
+    /// arrays are zeroed here.
+    @discardableResult
+    public func seedFromSeedQR(_ payload: inout [UInt8], passphrase: inout [UInt8]) throws -> Signer {
+        defer {
+            for i in payload.indices { payload[i] = 0 }
+            for i in passphrase.indices { passphrase[i] = 0 }
+        }
+        let cap = inputCapacity
+        guard payload.count + passphrase.count <= cap else {
+            throw SignerError.tooLarge(size: payload.count + passphrase.count, capacity: cap)
+        }
+        let at = Int(try call("signer_input"))
+        try write(payload, at: at)
+        try write(passphrase, at: at + payload.count)
+        let rc = try call("signer_seed_from_seedqr",
+                          [.i32(UInt32(payload.count)), .i32(UInt32(passphrase.count))])
+        guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_seedqr failed") }
+        return self
+    }
+
     /// For a seed you already have. 64 bytes.
     @discardableResult
     public func loadSeed(_ seed: [UInt8]) throws -> Signer {

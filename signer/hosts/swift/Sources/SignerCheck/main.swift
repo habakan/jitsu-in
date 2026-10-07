@@ -84,6 +84,10 @@ if dumpOnly {
     }
     for sig in try s.sign() { print("sig \(sig.input) \(hex(sig.sig))") }
     s.unload()
+    var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
+    var none: [UInt8] = []
+    print("seedqr fingerprint \(try s.initialise().seedFromSeedQR(&qr, passphrase: &none).fingerprint)")
+    s.unload()
     exit(0)
 }
 
@@ -177,6 +181,47 @@ do {
     ok("an oversized mnemonic is refused", false)
 } catch {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
+}
+
+// --- SeedQR, against SeedSigner's vector 4: the fingerprint has to equal the one from typing the words
+do {
+    let words = "forum undo fragile fade shy sign arrest garment culture tube off merit"
+    let digits = "073318950739065415961602009907670428187212261116"
+    let compact: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
+    let q = try Signer(signerWasm: signerWasm)
+    func typed(_ p: String) throws -> String {
+        var w = [UInt8](words.utf8), pw = [UInt8](p.utf8)
+        return try q.initialise().seedFromMnemonic(&w, passphrase: &pw).fingerprint
+    }
+    func scanned(_ payload: [UInt8], _ p: String = "") throws -> String {
+        var b = payload, pw = [UInt8](p.utf8)
+        return try q.initialise().seedFromSeedQR(&b, passphrase: &pw).fingerprint
+    }
+    let want = try typed(""), wantPass = try typed("TREZOR")
+    var qr = [UInt8](digits.utf8), none: [UInt8] = []
+    check("SeedQR digits give the typed words' fingerprint",
+          try q.initialise().seedFromSeedQR(&qr, passphrase: &none).fingerprint, want)
+    ok("the SeedQR payload is zeroed", qr.allSatisfy { $0 == 0 })
+    check("CompactSeedQR gives the same", try scanned(compact), want)
+    check("SeedQR with a passphrase", try scanned([UInt8](digits.utf8), "TREZOR"), wantPass)
+    for (what, bad) in [("a bad checksum", String(digits.dropLast()) + "7"), ("47 digits", String(digits.dropFirst())),
+                        ("a non-digit", "x" + digits.dropFirst())] {
+        q.unload()
+        do {
+            _ = try scanned([UInt8](bad.utf8))
+            ok("SeedQR with \(what) is refused", false)
+        } catch {
+            ok("SeedQR with \(what) is refused", "\(error)".contains("seed_from_seedqr failed") && q.fingerprint == "00000000")
+        }
+    }
+    do {
+        var big = [UInt8](repeating: 0, count: 400), pw = [UInt8](repeating: 0x78, count: 200)
+        try q.seedFromSeedQR(&big, passphrase: &pw)
+        ok("an oversized SeedQR is refused", false)
+    } catch {
+        ok("an oversized SeedQR is refused", "\(error)".contains("does not fit"))
+    }
+    q.unload()
 }
 
 // --- unload clears the key

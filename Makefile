@@ -36,10 +36,11 @@ WAMR_NODE_LINK := -shared -fPIC
 endif
 
 SIGNER_SRC := signer/wasm_main.c signer/core.c signer/address.c signer/bip32.c signer/sighash.c \
-  signer/ripemd160.c signer/sha512.c signer/secp_callbacks.c signer/secp256k1_unity.c \
+  signer/seedqr.c signer/ripemd160.c signer/sha512.c signer/secp_callbacks.c signer/secp256k1_unity.c \
   parser/c/src/tx.c parser/c/src/sha256.c
 PARSER_C_SRC := $(wildcard parser/c/src/*.c)
-C_FORMAT_FILES := $(PARSER_C_SRC) parser/tools/wamr_node.c $(wildcard parser/c/include/*.h parser/tests/*.c signer/*.c signer/*.h signer/tests/*.c)
+C_FORMAT_FILES := $(PARSER_C_SRC) parser/tools/wamr_node.c $(wildcard parser/c/include/*.h parser/tests/*.c signer/*.c signer/tests/*.c) \
+  $(filter-out signer/bip39_words.h,$(wildcard signer/*.h))
 
 all: build/parser.wasm build/signer.wasm
 .PHONY: all
@@ -156,6 +157,16 @@ check-c-tidy:
 check-parser: build/parser.wasm
 	$(MAKE) -C parser test $(TOOLS)
 .PHONY: check-parser
+
+# The signer's C, built natively and checked against the published SeedQR and BIP32 vectors
+SIGNER_C_SRC := $(filter-out signer/wasm_main.c,$(SIGNER_SRC))
+build/test_%: signer/tests/test_%.c $(SIGNER_C_SRC) signer/*.h signer/tests/*.h | check-deps
+	@mkdir -p build
+	$(CC) -O1 -Isigner -Iparser/c/include -I$(SECP)/include -I$(SECP)/src $(SECP_DEFS) -o $@ $< $(SIGNER_C_SRC)
+
+check-signer-c: build/test_seedqr build/test_xpub
+	build/test_seedqr && build/test_xpub
+.PHONY: check-signer-c
 
 check-signer-js: build/signer.wasm build/parser.wasm
 	node signer/hosts/js/test.mjs
@@ -338,7 +349,7 @@ viewer: build/parser.wasm $(VIEWER)/build/address.wasm $(VIEWER)/build/qr.wasm
 	uv run -q $(VIEWER)/build_viewer.py build/viewer.html
 .PHONY: viewer
 
-test: check-types check-layout check-parser check-signer-js check-hosts-agree
+test: check-types check-layout check-parser check-signer-c check-signer-js check-hosts-agree
 	@echo
 	@echo "both modules, the vectors, and the JavaScript hosts passed."
 	@echo "the JVM and Swift hosts need kotlinc and Swift 6.3+: make check-signer-kotlin check-signer-swift"

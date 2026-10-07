@@ -40,3 +40,6 @@ for (const s of S.sign()) {
   console.log(`sig ${s.input} ` + [...s.sig].map((b) => b.toString(16).padStart(2, "0")).join(""));
 }
 S.unload();
+S.init().seedFromSeedQR(Uint8Array.from(Buffer.from("5bbd9d71a8ec7990831aff359d426545", "hex")));
+console.log(`seedqr fingerprint ${S.fingerprint}`);
+S.unload();

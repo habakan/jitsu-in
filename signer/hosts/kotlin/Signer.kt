@@ -153,6 +153,31 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         return this
     }
 
+    /**
+     * Derives the key from a SeedQR: the Standard digits as ASCII bytes, or the CompactSeedQR's raw
+     * bytes. The words stay inside the module, so confirm what was loaded by its fingerprint. The
+     * payload and the passphrase are zeroed before returning.
+     */
+    fun seedFromSeedQR(payload: ByteArray, passphrase: CharArray = charArrayOf()): Signer {
+        var pass = ByteArray(0)
+        try {
+            pass = utf8(passphrase)
+            require(payload.size + pass.size <= inputCapacity) {
+                "${payload.size + pass.size} bytes of SeedQR and passphrase does not fit in $inputCapacity"
+            }
+            val at = call("signer_input")
+            memory.write(at, payload)
+            memory.write(at + payload.size, pass)
+            require(call("signer_seed_from_seedqr", payload.size.toLong(), pass.size.toLong()) == 1) {
+                "seed_from_seedqr failed"
+            }
+        } finally {
+            pass.fill(0)
+            payload.fill(0); passphrase.fill('\u0000')
+        }
+        return this
+    }
+
     /** UTF-8 without going through a String, which could not be cleared */
     private fun utf8(chars: CharArray): ByteArray {
         val buf = java.nio.ByteBuffer.allocate(chars.size * 3) // UTF-8 needs at most 3 bytes per UTF-16 unit

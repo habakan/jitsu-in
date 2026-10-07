@@ -37,8 +37,8 @@ static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t ca
     }
 
     for (unsigned i = 0; ok && i < n; i++) {
-        size_t w = strlen(bip39_words[idx[i]]);
-        if (len + w + 1 >= cap) return wipe(ent, sizeof(ent)), 0;
+        size_t w = strnlen(bip39_words[idx[i]], 8);
+        if (len + w + 1 >= cap) return wipe(ent, sizeof(ent)), wipe(hash, sizeof(hash)), 0;
         if (i) out[len++] = ' ';
         memcpy(out + len, bip39_words[idx[i]], w);
         len += w;

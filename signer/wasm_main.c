@@ -3,6 +3,7 @@
  * to the host, laid out the way parser.wasm's ABI is */
 #include <string.h>
 #include "core.h"
+#include "seedqr.h"
 #include "sha512.h"
 #include "wipe.h"
 
@@ -15,7 +16,7 @@
 #define PREVTX_MAX 32768
 
 /* Three return conventions, and which one a function uses follows from what it does:
- *   init / seed / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
+ *   init / seed / seedqr / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
  *   review / display / xpub               CORE_OK (0) on success, CORE_ERR_* otherwise
  *   sign                                  the number of signatures, or -CORE_ERR_*
  * Buffer accessors return a pointer, fingerprint returns the value, unload returns nothing. */
@@ -66,17 +67,32 @@ int EXPORT(signer_init)(int testnet) {
 
 /* Build the key from the mnemonic and passphrase written to in. PBKDF2 2048 rounds takes about half
  * a second, in a browser as on the device */
-int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
+static int seed_from(const uint8_t *mn, size_t mn_len, const uint8_t *pass, size_t pass_len) {
     uint8_t salt[8 + sizeof(in)], seed[64];
-    int ok = 0;
-    if (mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len) {
-        memcpy(salt, "mnemonic", 8);
-        memcpy(salt + 8, in + mn_len, pass_len);
-        pbkdf2_hmac_sha512(in, mn_len, salt, 8 + pass_len, 2048, seed);
-        ok = core_load_seed(seed);
-    }
+    int ok;
+    memcpy(salt, "mnemonic", 8);
+    memcpy(salt + 8, pass, pass_len);
+    pbkdf2_hmac_sha512(mn, mn_len, salt, 8 + pass_len, 2048, seed);
+    ok = core_load_seed(seed);
     wipe(salt, sizeof(salt));
     wipe(seed, sizeof(seed));
+    return ok;
+}
+
+int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
+    int ok = mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len && seed_from(in, mn_len, in + mn_len, pass_len);
+    wipe(in, sizeof(in));
+    return ok;
+}
+
+/* in holds the SeedQR payload, then the passphrase. The words are rebuilt here and never returned:
+ * the host confirms what it loaded by showing the fingerprint */
+int EXPORT(signer_seed_from_seedqr)(unsigned qr_len, unsigned pass_len) {
+    char mn[256];
+    int n = 0, ok = 0;
+    if (qr_len <= sizeof(in) && pass_len <= sizeof(in) - qr_len) n = seedqr_decode(in, qr_len, mn, sizeof(mn));
+    if (n > 0) ok = seed_from((const uint8_t *)mn, (size_t)n, in + qr_len, pass_len);
+    wipe(mn, sizeof(mn));
     wipe(in, sizeof(in));
     return ok;
 }

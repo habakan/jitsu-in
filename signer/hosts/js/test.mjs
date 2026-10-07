@@ -160,6 +160,49 @@ for (const tamper of [false, true]) {
   S3.unload();
 }
 
+// --- SeedQR, against SeedSigner's vector 4: the words never leave the module, so the fingerprint
+// has to equal the one from typing them
+{
+  const words = "forum undo fragile fade shy sign arrest garment culture tube off merit";
+  const digits = "073318950739065415961602009907670428187212261116";
+  const compact = Buffer.from("5bbd9d71a8ec7990831aff359d426545", "hex");
+  const enc = (t) => new TextEncoder().encode(t);
+  const Q = await Signer.load(signerWasm);
+  const fp = (pass) => Q.init().seedFromMnemonic(enc(words), enc(pass)).fingerprint;
+  const want = fp(""), wantPass = fp("TREZOR");
+  const qr = enc(digits);
+  check("SeedQR digits give the typed words' fingerprint", Q.init().seedFromSeedQR(qr).fingerprint, want);
+  ok("the SeedQR payload is zeroed", qr.every((b) => b === 0));
+  check("CompactSeedQR gives the same", Q.init().seedFromSeedQR(Uint8Array.from(compact)).fingerprint, want);
+  check("SeedQR with a passphrase", Q.init().seedFromSeedQR(enc(digits), enc("TREZOR")).fingerprint, wantPass);
+  for (const [what, bad] of [["a bad checksum", digits.slice(0, 47) + "7"], ["47 digits", digits.slice(1)],
+                             ["a non-digit", "x" + digits.slice(1)]]) {
+    Q.unload();
+    try {
+      Q.init().seedFromSeedQR(enc(bad));
+      ok(`SeedQR with ${what} is refused`, false);
+    } catch (e) {
+      ok(`SeedQR with ${what} is refused`, /seed_from_seedqr failed/.test(e.message) && Q.fingerprint === "00000000");
+    }
+  }
+  try {
+    Q.seedFromSeedQR(new Uint8Array(400), new Uint8Array(200));
+    ok("an oversized SeedQR is refused", false);
+  } catch (e) {
+    ok("an oversized SeedQR is refused", e instanceof RangeError);
+  }
+  Q.unload();
+  // nothing of the words or the entropy is left once it is unloaded
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  E.signer_init(0);
+  new Uint8Array(E.memory.buffer).set(compact, E.signer_input());
+  check("the raw ABI loads a CompactSeedQR", E.signer_seed_from_seedqr(compact.length, 0), 1);
+  E.signer_unload();
+  const m = Buffer.from(E.memory.buffer);
+  ok("no words or entropy left after SeedQR", m.indexOf(Buffer.from(words)) < 0 && m.indexOf(Buffer.from("forum undo")) < 0 &&
+     m.indexOf(compact.subarray(0, 8)) < 0);
+}
+
 // --- a seed that does not fit is rejected before anything is written
 try {
   S.seedFromMnemonic(new Uint8Array(600).fill(0x78));

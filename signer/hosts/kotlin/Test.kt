@@ -159,6 +159,39 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
     }
 
+    // --- SeedQR, against SeedSigner's vector 4: the fingerprint has to equal the one from typing the words
+    run {
+        val words = "forum undo fragile fade shy sign arrest garment culture tube off merit"
+        val digits = "073318950739065415961602009907670428187212261116"
+        val compact = "5bbd9d71a8ec7990831aff359d426545".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val q = Signer(signerWasm)
+        val want = q.init().seedFromMnemonic(words.toCharArray()).fingerprint
+        val wantPass = q.init().seedFromMnemonic(words.toCharArray(), "TREZOR".toCharArray()).fingerprint
+        val qr = digits.toByteArray()
+        check("SeedQR digits give the typed words' fingerprint", q.init().seedFromSeedQR(qr).fingerprint, want)
+        ok("the SeedQR payload is zeroed", qr.all { it == 0.toByte() })
+        check("CompactSeedQR gives the same", q.init().seedFromSeedQR(compact.copyOf()).fingerprint, want)
+        check("SeedQR with a passphrase",
+              q.init().seedFromSeedQR(digits.toByteArray(), "TREZOR".toCharArray()).fingerprint, wantPass)
+        for ((what, bad) in listOf("a bad checksum" to digits.dropLast(1) + "7", "47 digits" to digits.drop(1),
+                                   "a non-digit" to "x" + digits.drop(1))) {
+            q.unload()
+            try {
+                q.init().seedFromSeedQR(bad.toByteArray())
+                ok("SeedQR with $what is refused", false)
+            } catch (e: IllegalArgumentException) {
+                ok("SeedQR with $what is refused", e.message == "seed_from_seedqr failed" && q.fingerprint == "00000000")
+            }
+        }
+        try {
+            q.seedFromSeedQR(ByteArray(400), CharArray(200) { 'x' })
+            ok("an oversized SeedQR is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("an oversized SeedQR is refused", e.message!!.contains("does not fit"))
+        }
+        q.unload()
+    }
+
     // --- unload clears the key
     s.unload()
     s.init()
