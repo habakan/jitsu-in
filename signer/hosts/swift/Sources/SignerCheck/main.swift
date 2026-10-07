@@ -159,12 +159,13 @@ ok("the xpub is an xpub", x.xpub.hasPrefix("xpub"))
 let tr = try s.xpub(purpose: 86)
 check("BIP86's account 0", tr.xpub, "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ")
 check("the tr() descriptor", tr.descriptor, "tr([73c5da0a/86h/0h/0h]\(tr.xpub)/<0;1>/*)")
+check("the BIP49 descriptor", String(try s.xpub(purpose: 49).descriptor.prefix(32)), "sh(wpkh([73c5da0a/49h/0h/0h]xpub")
 ok("account 1 is named", try s.xpub(account: 1).descriptor.hasPrefix("wpkh([73c5da0a/84h/0h/1h]xpub"))
 do {
-    _ = try s.xpub(purpose: 49)
-    ok("xpub for BIP49 is refused", false)
+    _ = try s.xpub(purpose: 44)
+    ok("xpub for BIP44 is refused", false)
 } catch {
-    ok("xpub for BIP49 is refused", "\(error)".contains("xpub: FORMAT"))
+    ok("xpub for BIP44 is refused", "\(error)".contains("xpub: FORMAT"))
 }
 
 // --- signing without a review is refused

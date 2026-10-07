@@ -1,0 +1,50 @@
+{
+ "fingerprint": 1942346250,
+ "tx_version": 2,
+ "locktime": 0,
+ "inputs": [
+  {
+   "prev_txid": "3f042981dfc8e2b5578fe484a8c076fbc0994c18cdc37a958019466c06ee279f",
+   "prev_vout": 0,
+   "sequence": 4294967293,
+   "amount": 100000,
+   "spk": "a9143fb6e95812e57bb4691f9a4a628862a61a4f769b87",
+   "key": {
+    "fingerprint": 1942346250,
+    "path": [
+     2147483697,
+     2147483648,
+     2147483648,
+     0,
+     0
+    ]
+   },
+   "sighash_type": 1,
+   "has_prevtx": false
+  }
+ ],
+ "outputs": [
+  {
+   "amount": 60000,
+   "spk": "0014a5a739ef69cf8c068e94456322671139dab876ea",
+   "key": null
+  },
+  {
+   "amount": 39000,
+   "spk": "a9141cc1e09a63d1ae795a7130e099b28a0b1d8e4fae87",
+   "key": {
+    "fingerprint": 1942346250,
+    "path": [
+     2147483697,
+     2147483648,
+     2147483648,
+     1,
+     0
+    ]
+   }
+  }
+ ],
+ "pubkeys": [
+  "039b3b694b8fc5b5e07fb069c783cac754f5d38c3e08bed1960e31fdb1dda35c24"
+ ]
+}

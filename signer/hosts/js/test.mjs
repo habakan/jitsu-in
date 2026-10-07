@@ -145,13 +145,41 @@ check("the tr() descriptor", tr.descriptor, `tr([73c5da0a/86h/0h/0h]${tr.xpub}/<
     ok(`m/${purpose}'/0'/${account}' descriptor`, got.descriptor.includes(`/${purpose}h/0h/${account}h]${got.xpub}/`));
   }
 }
-for (const [what, opts] of [["BIP49", { purpose: 49 }], ["a hardened account", { account: 0x80000000 }]]) {
+for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", { account: 0x80000000 }]]) {
   try {
     S.xpub(opts);
     ok(`xpub for ${what} is refused`, false);
   } catch (e) {
     ok(`xpub for ${what} is refused`, e instanceof SignerError && /FORMAT/.test(e.message));
   }
+}
+
+// --- BIP49: P2SH-P2WPKH inputs and change, beside P2WPKH (Core signs the same PSBTs: check-core-diff)
+{
+  const P2 = await Signer.load(signerWasm);
+  P2.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  for (const name of ["own_p2sh_p2wpkh_1in", "own_mixed_p2sh_nwu"]) {
+    const v = planFor(`${root}parser/build/vectors/${name}.psbt`, parseInt("73c5da0a", 16));
+    const rv = P2.setPlan(v.plan).setPrevTxs(v.prevTxs).review();
+    check(`${name}: every input of ours is signed`, rv.nSign, name.includes("mixed") ? 2 : 1);
+    const dv = P2.display();
+    ok(`${name}: the change is a P2SH address, and marked as change`,
+       dv.outputs.some((o) => o.owner === OWNER.CHANGE && o.text.startsWith("3")));
+    const sv = P2.sign();
+    ok(`${name}: ECDSA with a compressed key for each`, sv.every((s) => s.sig[0] === 0x30 && (s.pubkey[0] === 2 || s.pubkey[0] === 3)));
+  }
+  // a P2SH that is not P2SH(P2WPKH(our key)), whatever the PSBT says, is refused
+  const v = planFor(`${root}parser/build/vectors/own_p2sh_p2wpkh_1in.psbt`, parseInt("73c5da0a", 16));
+  v.plan[24 + 52 + 10] ^= 1;  // a byte of the first input's script hash
+  try {
+    P2.setPlan(v.plan).setPrevTxs(v.prevTxs).review();
+    ok("a P2SH hiding another script is refused", false);
+  } catch (e) {
+    ok("a P2SH hiding another script is refused", /NOT_OURS/.test(e.message));
+  }
+  const x49 = P2.xpub({ purpose: 49 });
+  check("the BIP49 descriptor", x49.descriptor, `sh(wpkh([73c5da0a/49h/0h/0h]${x49.xpub}/<0;1>/*))`);
+  P2.unload();
 }
 
 // --- the module refuses to sign a plan it was not shown

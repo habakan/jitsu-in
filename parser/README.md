@@ -117,7 +117,8 @@ The same JavaScript vector suite runs `build/parser.wasm` under Node/V8 and WAMR
 - Bitcoin Core's `test/functional/data/rpc_psbt.json`: no traps; every invalid vector is rejected except 15 whose
   only defect is in MuSig2 fields this parser does not interpret; valid vectors are accepted or rejected only as
   PSBT v2 (unsupported), missing UTXO data, or a transaction with no inputs;
-- PSBTs built with [embit](https://github.com/diybitcoinhardware/embit) (P2WPKH, P2TR, mixed, a foreign input):
+- PSBTs built with [embit](https://github.com/diybitcoinhardware/embit) (P2WPKH, P2SH-P2WPKH, P2TR, mixed, a
+  foreign input):
   every plan field matches the values the PSBT was built from, and a different fingerprint selects no keys;
 - signature insertion: the signed PSBT parses with embit, the transaction is unchanged, the signatures are in the
   right inputs, and invalid signature lists are rejected;

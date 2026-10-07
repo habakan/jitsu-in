@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 74,416 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 74,631 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,9 +12,9 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 56 checks in [test.mjs](../hosts/js/test.mjs) |
-| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 40 checks in [Test.kt](../hosts/kotlin/Test.kt) |
-| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 37 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 64 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 41 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 38 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 
@@ -80,7 +80,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | `signer_review()` | 0 on success, otherwise one of the errors below |
 | `signer_display()` | 0 on success |
 | `signer_sign()` | the number of signatures, or the negated error |
-| `signer_xpub(purpose, account)` | 0 on success. m/purpose'/coin'/account' with `purpose` 84 (`wpkh()`) or 86 (`tr()`) and `account` below 2^31, otherwise `FORMAT` |
+| `signer_xpub(purpose, account)` | 0 on success. m/purpose'/coin'/account' with `purpose` 49 (`sh(wpkh())`), 84 (`wpkh()`) or 86 (`tr()`) and `account` below 2^31, otherwise `FORMAT` |
 | `signer_fingerprint()` | the master fingerprint, or 0 when no seed is loaded |
 | `signer_unload()` | nothing. Zeroes the key, the plan, the signatures and the display |
 
@@ -93,7 +93,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | 3 | `NOT_OURS` | an input claims our fingerprint, but its key does not produce its script |
 | 4 | `NOTHING_TO_SIGN` | no input in the plan is ours |
 | 5 | `SIGHASH` | a sighash type this signer does not allow |
-| 6 | `SCRIPT` | an input to be signed is neither P2WPKH nor P2TR |
+| 6 | `SCRIPT` | an input to be signed is not P2WPKH, P2SH-P2WPKH or P2TR |
 | 7 | `PREVTX_MISSING` | two or more inputs including SegWit v0, and no previous transaction |
 | 8 | `PREVTX_MISMATCH` | the previous transaction disagrees with the claimed amount, txid or vout |
 | 9 | `FEE` | the fee does not add up, or overflows |
@@ -143,7 +143,7 @@ PSBT chose, which is why it is safe to put in front of a person.
 | offset | size | field |
 |---:|---:|---|
 | 0 | 1 | `input`, which input this signs |
-| 1 | 33 | `pubkey`: compressed for P2WPKH, `0x00` then the x-only output key for P2TR |
+| 1 | 33 | `pubkey`: compressed for P2WPKH and P2SH-P2WPKH, `0x00` then the x-only output key for P2TR |
 | 34 | 1 | `sig_len` |
 | 35 | 73 | `sig`: DER plus the sighash byte for ECDSA, 64 or 65 bytes for Schnorr |
 
@@ -162,6 +162,6 @@ says deterministic nonces are unsafe.
 
 ## What this module does not do
 
-Single-signature P2WPKH (BIP84) and P2TR key path (BIP86), `SIGHASH_ALL` and Taproot's
+Single-signature P2WPKH (BIP84), P2SH-P2WPKH (BIP49) and P2TR key path (BIP86), `SIGHASH_ALL` and Taproot's
 `SIGHASH_DEFAULT`. No multisig, no script trees, no legacy P2PKH signing. The full list is in
 jitsu-in-pico's `docs/limitations.md`.

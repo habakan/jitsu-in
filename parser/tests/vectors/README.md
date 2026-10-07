@@ -1,7 +1,8 @@
 # The vectors we built ourselves
 
-These five PSBTs exercise the cases Bitcoin Core's own `rpc_psbt.json` does not: inputs that belong
-to a known key, P2TR alongside P2WPKH, a foreign input, and a `non_witness_utxo` present or missing.
+These PSBTs exercise the cases Bitcoin Core's own `rpc_psbt.json` does not: inputs that belong
+to a known key, P2TR and P2SH-P2WPKH alongside P2WPKH, a foreign input, and a `non_witness_utxo`
+present or missing.
 Each `.psbt` has a `.json` beside it holding the plan the parser is expected to produce.
 
 They are **committed rather than generated**, because generating them needs a Bitcoin library to
@@ -18,6 +19,8 @@ The seed is BIP39's published all-zero test vector (`abandon` x11 + `about`), fi
 | `own_p2wpkh_2in_nwu` | two P2WPKH inputs, both with their previous transaction |
 | `own_p2tr_2in` | two P2TR key-path inputs |
 | `own_mixed_nwu` | P2WPKH and P2TR in one transaction |
+| `own_p2sh_p2wpkh_1in` | one BIP49 P2SH-P2WPKH input, paying out plus P2SH change |
+| `own_mixed_p2sh_nwu` | P2WPKH and P2SH-P2WPKH in one transaction |
 | `own_with_foreign_input` | one input ours, one someone else's |
 
 ## Regenerating them

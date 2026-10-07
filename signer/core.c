@@ -23,10 +23,11 @@ static int seed_loaded;
 static uint8_t reviewed_hash[32];
 static int reviewed;
 
-enum { SPK_OTHER, SPK_P2WPKH, SPK_P2TR };
+enum { SPK_OTHER, SPK_P2WPKH, SPK_P2SH_P2WPKH, SPK_P2TR };
 
 static int spk_type(const plan_script_t *s) {
     if (s->len == 22 && s->bytes[0] == 0x00 && s->bytes[1] == 20) return SPK_P2WPKH;
+    if (s->len == 23 && s->bytes[0] == 0xa9 && s->bytes[1] == 20 && s->bytes[22] == 0x87) return SPK_P2SH_P2WPKH;
     if (s->len == 34 && s->bytes[0] == 0x51 && s->bytes[1] == 32) return SPK_P2TR;
     return SPK_OTHER;
 }
@@ -53,6 +54,12 @@ static int owns(const plan_keypath_t *key, const plan_script_t *spk, bip32_node_
     if (key->fingerprint != master_fp || !bip32_derive(ctx, &master, key->path, key->depth, node)) return 0;
     if (type == SPK_P2WPKH && bip32_pubkey(ctx, node->key, pub)) {
         hash160(pub, 33, h);
+        ok = !memcmp(h, spk->bytes + 2, 20);
+    } else if (type == SPK_P2SH_P2WPKH && bip32_pubkey(ctx, node->key, pub)) {
+        /* BIP49: the script hash has to be that of the P2WPKH redeem script, 0014{HASH160(pubkey)} */
+        uint8_t redeem[22] = {0x00, 20};
+        hash160(pub, 33, redeem + 2);
+        hash160(redeem, sizeof(redeem), h);
         ok = !memcmp(h, spk->bytes + 2, 20);
     } else if (type == SPK_P2TR && taproot_tweak(node->key, xonly, &kp)) {
         ok = !memcmp(xonly, spk->bytes + 2, 32);
@@ -129,7 +136,10 @@ static int output_owner(const plan_t *p, const core_review_t *r, const plan_outp
     const plan_keypath_t *k = &o->key;
     int type = spk_type(&o->spk);
     bip32_node_t node;
-    uint32_t purpose = type == SPK_P2WPKH ? (84 | H) : type == SPK_P2TR ? (86 | H) : 0;
+    uint32_t purpose = type == SPK_P2WPKH        ? (84 | H)
+                       : type == SPK_P2SH_P2WPKH ? (49 | H)
+                       : type == SPK_P2TR        ? (86 | H)
+                                                 : 0;
 
     if (!purpose || k->depth != 5 || k->path[0] != purpose || k->path[1] != ((uint32_t)network | H) ||
         !(k->path[2] & H) || k->path[3] > 1 || k->path[4] >= MAX_ADDRESS_INDEX)
@@ -192,12 +202,12 @@ int core_review(const plan_t *p, const core_prevtx_t prev[PLAN_MAX_INPUTS], core
         if (r->total_in > MAX_MONEY) return CORE_ERR_FORMAT;
         if (in->key.depth == 0 || in->key.fingerprint != master_fp) continue;
         if (type == SPK_OTHER) return CORE_ERR_SCRIPT;
-        if (type == SPK_P2WPKH ? in->sighash_type != 0x01 : in->sighash_type > 0x01) return CORE_ERR_SIGHASH;
+        if (type != SPK_P2TR ? in->sighash_type != 0x01 : in->sighash_type > 0x01) return CORE_ERR_SIGHASH;
         if (!owns(&in->key, &in->spk, &node)) return CORE_ERR_NOT_OURS;
         wipe(&node, sizeof(node));
         r->will_sign[i] = 1;
         r->n_sign++;
-        has_v0 |= type == SPK_P2WPKH;
+        has_v0 |= type != SPK_P2TR;
     }
     if (!r->n_sign) return CORE_ERR_NOTHING_TO_SIGN;
 
@@ -280,11 +290,13 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
     int ok = owns(&in->key, &in->spk, &node);
 
     s->input = (uint8_t)i;
-    if (ok && spk_type(&in->spk) == SPK_P2WPKH) {
+    if (ok && spk_type(&in->spk) != SPK_P2TR) {
         /* low-R grinding, as Bitcoin Core does it: retry with a counter as RFC6979 extra data until R < 0x80 */
-        uint8_t extra[32] = {0}, compact[64];
+        uint8_t extra[32] = {0}, compact[64], pkh[20];
         uint32_t counter = 0;
-        ok = sighash_bip143_p2wpkh(p, i, digest);
+        ok = bip32_pubkey(ctx, node.key, s->pubkey);
+        hash160(s->pubkey, 33, pkh);
+        ok = ok && sighash_bip143_p2wpkh(p, i, pkh, digest);
         do {
             ok = ok && secp256k1_ecdsa_sign(ctx, &sig, digest, node.key, NULL, counter ? extra : NULL) &&
                  secp256k1_ecdsa_signature_serialize_compact(ctx, compact, &sig);
@@ -293,7 +305,7 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
         } while (ok && compact[0] >= 0x80);
         /* Verify before letting it out: collecting a glitched signature next to a good one can recover the key */
         ok = ok && secp256k1_ec_pubkey_create(ctx, &pub, node.key) && secp256k1_ecdsa_verify(ctx, &sig, digest, &pub) &&
-             secp256k1_ecdsa_signature_serialize_der(ctx, s->sig, &len, &sig) && bip32_pubkey(ctx, node.key, s->pubkey);
+             secp256k1_ecdsa_signature_serialize_der(ctx, s->sig, &len, &sig);
         s->sig[len] = 0x01;
         s->sig_len = (uint8_t)(len + 1);
     } else if (ok) {
@@ -352,7 +364,7 @@ int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX
     int rc = CORE_ERR_CRYPTO;
 
     if (!master_fp) return CORE_ERR_NO_SEED;
-    if ((purpose != 84 && purpose != 86) || account >= H) return CORE_ERR_FORMAT;
+    if ((purpose != 49 && purpose != 84 && purpose != 86) || account >= H) return CORE_ERR_FORMAT;
     /* Derived in two steps because the serialization needs the parent's (m/purpose'/coin') fingerprint */
     if (!bip32_derive(ctx, &master, path, 2, &parent) || !bip32_pubkey(ctx, parent.key, pub)) goto done;
     hash160(pub, sizeof(pub), h);
@@ -385,15 +397,19 @@ int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX
     /* An output descriptor Sparrow and others read as is; <0;1> covers receive and change in one line.
      * Built by hand because snprintf drags the whole of stdio into the wasm build */
     {
-        const char *parts[] = {purpose == 86 ? "tr([" : "wpkh([",
+        const char *parts[] = {purpose == 86   ? "tr(["
+                               : purpose == 49 ? "sh(wpkh(["
+                                               : "wpkh([",
                                fp,
-                               purpose == 86 ? "/86h/" : "/84h/",
+                               purpose == 86   ? "/86h/"
+                               : purpose == 49 ? "/49h/"
+                                               : "/84h/",
                                coin ? "1" : "0",
                                "h/",
                                acct,
                                "h]",
                                out,
-                               "/<0;1>/*)"};
+                               purpose == 49 ? "/<0;1>/*))" : "/<0;1>/*)"};
         size_t o = 0;
         for (unsigned k = 0; k < sizeof(parts) / sizeof(*parts); k++) {
             size_t n = strlen(parts[k]);

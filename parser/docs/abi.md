@@ -219,7 +219,7 @@ A host **must** check `magic == 0x4e4c5042` and `version == 1` before trusting t
 ```c
 typedef struct {
     uint8_t input;      /* index into plan.inputs */
-    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH; 0x00 + x-only output key for P2TR */
+    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH and P2SH-P2WPKH; 0x00 + x-only output key for P2TR */
     uint8_t sig_len;
     uint8_t sig[73];    /* DER + sighash byte for ECDSA; 64 or 65 bytes for Schnorr */
 } plan_sig_t;           /* 108 */
@@ -270,8 +270,10 @@ should be represented, so `plan_t` is this project's own shape. What BIP174 *doe
 
 This module does the first two: a `non_witness_utxo` whose txid or output does not match the unsigned
 transaction is rejected with `P_ERR_UTXO`, and amounts come only from the PSBT's own UTXO data.
-The third does not arise yet — `witnessScript` and `redeemScript` inputs are out of scope
-(single-signature P2WPKH and P2TR key-path only).
+The third falls to the signer. The only `redeemScript` in scope is BIP49's P2SH-P2WPKH, and this
+module does not read it: it passes a P2SH input's derivation through, and `signer.wasm` derives the
+redeem script from its own key and refuses the input unless its hash is the UTXO's. `witnessScript`
+inputs remain out of scope.
 
 BIP174 also says "The Signer may choose to fail to sign a segwit input if a non-witness UTXO is not
 provided." The host decides that, not this module; the reference host requires one when a SegWit v0

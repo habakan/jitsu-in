@@ -53,7 +53,7 @@ typedef struct {
 /* A signature made by the signer. The host writes it to parser.wasm's signature buffer and parser.wasm inserts it */
 typedef struct {
     uint8_t input;
-    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH; 0x00 + x-only output key for P2TR */
+    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH and P2SH-P2WPKH; 0x00 + x-only output key for P2TR */
     uint8_t sig_len;
     uint8_t sig[73]; /* DER + sighash byte for ECDSA; 64 or 65 bytes for Schnorr */
 } plan_sig_t;

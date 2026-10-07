@@ -456,7 +456,7 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
 
     // Only a P2WPKH with our derivation and no signature yet, or a P2TR key-path spend with no
     // script tree and no signature yet, is one this signer will sign
-    let chosen = if in_.spk.is_p2wpkh() && bip32.found && !signed_by_cand {
+    let chosen = if in_.spk.is_wpkh() && bip32.found && !signed_by_cand {
         in_.sighash_type = if sighash == 0xffff_ffff { 0x01 } else { sighash as u8 };
         Some(bip32)
     } else if in_.spk.is_p2tr() && tap.found && !has_merkle && !has_tapsig {
@@ -522,7 +522,7 @@ fn parse_output(r: &mut Reader, idx: usize, fp: u32, out: &mut Parsed) -> Res {
     }
 
     let o = &mut out.plan.outputs[idx];
-    let chosen = if o.spk.is_p2wpkh() && bip32.found {
+    let chosen = if o.spk.is_wpkh() && bip32.found {
         Some(bip32)
     } else if o.spk.is_p2tr() && tap.found && !has_tree {
         Some(tap)
