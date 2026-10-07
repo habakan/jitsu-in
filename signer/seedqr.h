@@ -11,4 +11,8 @@
  * checksum does not hold */
 int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap);
 
+/* 1 if mn is 12, 15, 18, 21 or 24 English BIP39 words, lower case, one space apart, whose checksum
+ * holds. Other wordlists are refused, so a typo cannot pass as a mnemonic in another language */
+int bip39_mnemonic_ok(const uint8_t *mn, size_t len);
+
 #endif

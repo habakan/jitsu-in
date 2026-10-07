@@ -160,6 +160,18 @@ for (const tamper of [false, true]) {
   S3.unload();
 }
 
+// --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
+for (const [what, bad] of [["a bad checksum", "abandon ".repeat(11) + "abandon"], ["a double space", MNEMONIC.replace(" ", "  ")],
+                           ["capitals", "A" + MNEMONIC.slice(1)]]) {
+  const B = await Signer.load(signerWasm);
+  try {
+    B.init().seedFromMnemonic(new TextEncoder().encode(bad));
+    ok(`a mnemonic with ${what} is refused`, false);
+  } catch (e) {
+    ok(`a mnemonic with ${what} is refused`, /seed_from_mnemonic failed/.test(e.message) && B.fingerprint === "00000000");
+  }
+}
+
 // --- SeedQR, against the published vector 4: the words never leave the module, so the fingerprint
 // has to equal the one from typing them
 {

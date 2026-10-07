@@ -159,6 +159,19 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
     }
 
+    // --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
+    val typed = "abandon ".repeat(11) + "about"
+    for ((what, bad) in listOf("a bad checksum" to "abandon ".repeat(11) + "abandon",
+                               "a double space" to typed.replaceFirst(" ", "  "), "capitals" to "A" + typed.drop(1))) {
+        val b = Signer(signerWasm).init()
+        try {
+            b.seedFromMnemonic(bad.toCharArray())
+            ok("a mnemonic with $what is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("a mnemonic with $what is refused", e.message == "seed_from_mnemonic failed" && b.fingerprint == "00000000")
+        }
+    }
+
     // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words
     run {
         val words = "forum undo fragile fade shy sign arrest garment culture tube off merit"
