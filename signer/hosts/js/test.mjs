@@ -160,7 +160,7 @@ for (const tamper of [false, true]) {
   S3.unload();
 }
 
-// --- SeedQR, against SeedSigner's vector 4: the words never leave the module, so the fingerprint
+// --- SeedQR, against the published vector 4: the words never leave the module, so the fingerprint
 // has to equal the one from typing them
 {
   const words = "forum undo fragile fade shy sign arrest garment culture tube off merit";

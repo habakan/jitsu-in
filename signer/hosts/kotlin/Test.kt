@@ -159,7 +159,7 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
     }
 
-    // --- SeedQR, against SeedSigner's vector 4: the fingerprint has to equal the one from typing the words
+    // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words
     run {
         val words = "forum undo fragile fade shy sign arrest garment culture tube off merit"
         val digits = "073318950739065415961602009907670428187212261116"

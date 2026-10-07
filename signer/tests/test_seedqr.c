@@ -60,9 +60,9 @@ int main(void) {
     for (unsigned i = 0; i < sizeof(seedqr_vectors) / sizeof(seedqr_vectors[0]); i++) {
         const char *d = seedqr_vectors[i].digits, *m = seedqr_vectors[i].mnemonic;
         CHECK(seedqr_decode((const uint8_t *)d, strlen(d), out, sizeof(out)) > 0 && !strcmp(out, m),
-              "SeedSigner vector %u from digits", i + 1);
+              "published vector %u from digits", i + 1);
         CHECK(seedqr_decode(seedqr_vectors[i].compact, seedqr_vectors[i].len, out, sizeof(out)) > 0 && !strcmp(out, m),
-              "SeedSigner vector %u from compact", i + 1);
+              "published vector %u from compact", i + 1);
     }
 
     printf("%d/%d checks passed\n", checks - failures, checks);

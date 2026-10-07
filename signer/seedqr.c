@@ -1,4 +1,4 @@
-/* Reads a SeedQR (SeedSigner's format) back into a mnemonic. This carries the secret itself, so it is
+/* Reads a SeedQR back into a mnemonic. This carries the secret itself, so it is
  * handled natively and never goes through the parser. The BIP39 checksum is always verified and
  * anything that fails it is refused.
  *

@@ -183,7 +183,7 @@ do {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
 }
 
-// --- SeedQR, against SeedSigner's vector 4: the fingerprint has to equal the one from typing the words
+// --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words
 do {
     let words = "forum undo fragile fade shy sign arrest garment culture tube off merit"
     let digits = "073318950739065415961602009907670428187212261116"
