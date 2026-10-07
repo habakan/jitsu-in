@@ -17,15 +17,21 @@ static void sha256_of(const uint8_t *p, size_t n, uint8_t out[32]) {
     sha256_final(&c, out);
 }
 
-/* Take 11 bits per word index back into entropy and checksum, then verify it with SHA-256 */
+/* Take 11 bits per word index back into entropy. Returns its length in bytes */
+static unsigned indices_entropy(const uint16_t *idx, unsigned n, uint8_t ent[32]) {
+    unsigned ent_bits = n * 11 - n / 3;
+    memset(ent, 0, 32);
+    for (unsigned i = 0; i < ent_bits; i++) ent[i / 8] |= (uint8_t)((idx[i / 11] >> (10 - i % 11) & 1) << (7 - i % 8));
+    return ent_bits / 8;
+}
+
+/* The checksum bits after the entropy, against SHA-256 of it */
 static int checksum_ok(const uint16_t *idx, unsigned n) {
     uint8_t ent[32], hash[32];
     unsigned ent_bits = n * 11 - n / 3, cs_bits = n / 3;
     int ok = 1;
 
-    memset(ent, 0, sizeof(ent));
-    for (unsigned i = 0; i < ent_bits; i++) ent[i / 8] |= (uint8_t)((idx[i / 11] >> (10 - i % 11) & 1) << (7 - i % 8));
-    sha256_of(ent, ent_bits / 8, hash);
+    sha256_of(ent, indices_entropy(idx, n, ent), hash);
     for (unsigned i = 0; i < cs_bits; i++) {
         unsigned want = hash[0] >> (7 - i) & 1, got = idx[n - 1] >> (10 - (ent_bits % 11 + i)) & 1;
         ok &= want == got;
@@ -69,23 +75,44 @@ static int word_index(const uint8_t *w, size_t len) {
     return -1;
 }
 
-int bip39_mnemonic_ok(const uint8_t *mn, size_t len) {
-    uint16_t idx[24];
+/* The word indices of a valid mnemonic, and how many there are; 0 if it is not one */
+static unsigned parse_mnemonic(const uint8_t *mn, size_t len, uint16_t idx[24]) {
     unsigned n = 0;
     size_t start = 0;
-    int ok = 0;
-
     for (size_t i = 0; i <= len; i++) {
         if (i < len && mn[i] != ' ') continue;
         int v = n < 24 ? word_index(mn + start, i - start) : -1;
-        if (v < 0) goto done;
+        if (v < 0) return 0;
         idx[n++] = (uint16_t)v;
         start = i + 1;
     }
-    ok = n % 3 == 0 && n >= 12 && checksum_ok(idx, n);
-done:
+    return n % 3 == 0 && n >= 12 && checksum_ok(idx, n) ? n : 0;
+}
+
+int bip39_mnemonic_ok(const uint8_t *mn, size_t len) {
+    uint16_t idx[24];
+    int ok = parse_mnemonic(mn, len, idx) != 0;
     wipe(idx, sizeof(idx));
     return ok;
+}
+
+int seedqr_encode(const uint8_t *mn, size_t len, int compact, uint8_t *out, size_t cap) {
+    uint16_t idx[24];
+    uint8_t ent[32];
+    unsigned n = parse_mnemonic(mn, len, idx);
+    int r = 0;
+
+    if ((n == 12 || n == 24) && !compact && cap >= n * 4) {
+        for (unsigned i = 0; i < n; i++)
+            for (unsigned k = 0, v = idx[i]; k < 4; k++, v /= 10) out[i * 4 + 3 - k] = (uint8_t)('0' + v % 10);
+        r = (int)n * 4;
+    } else if ((n == 12 || n == 24) && compact && cap >= n * 4 / 3) {
+        r = (int)indices_entropy(idx, n, ent);
+        memcpy(out, ent, (size_t)r);
+    }
+    wipe(idx, sizeof(idx));
+    wipe(ent, sizeof(ent));
+    return r;
 }
 
 /* Entropy and its SHA-256 checksum, cut into 11-bit word indices. Returns how many words */

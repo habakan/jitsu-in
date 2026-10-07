@@ -45,6 +45,8 @@ const L = {
  *   signer_mnemonic_output: () => number,
  *   signer_mnemonic_from_entropy: (len: number) => number,
  *   signer_mnemonic_from_dice: (len: number, words: number) => number,
+ *   signer_seedqr_output: () => number,
+ *   signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number,
  * }} SignerExports
  */
 
@@ -209,7 +211,8 @@ export class Signer {
    *  clear. Nothing is loaded. `entropy` is zeroed, and so is the module's copy of the words. */
   /** @param {Uint8Array} entropy */
   mnemonicFromEntropy(entropy) {
-    return this.#generate(entropy, () => this.#e.signer_mnemonic_from_entropy(entropy.length), "mnemonic_from_entropy");
+    return this.#generate(entropy, () => this.#e.signer_mnemonic_from_entropy(entropy.length), "mnemonic_from_entropy",
+                          this.#e.signer_mnemonic_output());
   }
 
   /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. The
@@ -219,22 +222,35 @@ export class Signer {
    * @param {12 | 24} [words]
    */
   mnemonicFromDice(rolls, words = 24) {
-    return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice");
+    return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice",
+                          this.#e.signer_mnemonic_output());
+  }
+
+  /** The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+   *  numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+   *  so clear it once shown. `mnemonic` is zeroed, and so is the module's copy. */
+  /**
+   * @param {Uint8Array} mnemonic
+   * @param {{ compact?: boolean }} [opts]
+   */
+  seedQRFromMnemonic(mnemonic, { compact = false } = {}) {
+    return this.#generate(mnemonic, () => this.#e.signer_seedqr_from_mnemonic(mnemonic.length, compact ? 1 : 0),
+                          "seedqr_from_mnemonic", this.#e.signer_seedqr_output());
   }
 
   /**
    * @param {Uint8Array} input
    * @param {() => number} make
    * @param {string} name
+   * @param {number} at where the module writes what it made
    */
-  #generate(input, make, name) {
+  #generate(input, make, name, at) {
     try {
       const cap = this.#e.signer_input_cap();
       if (input.length > cap) throw new RangeError(`${input.length} bytes, cap is ${cap}`);
       this.#mem.set(input, this.#e.signer_input());
       const n = make();
       if (!n) throw new Error(`${name} failed`);
-      const at = this.#e.signer_mnemonic_output();
       const out = this.#mem.slice(at, at + n);
       this.#mem.fill(0, at, at + n);
       return out;

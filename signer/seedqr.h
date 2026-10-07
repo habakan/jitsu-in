@@ -15,6 +15,10 @@ int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap);
  * holds. Other wordlists are refused, so a typo cannot pass as a mnemonic in another language */
 int bip39_mnemonic_ok(const uint8_t *mn, size_t len);
 
+/* The SeedQR for a 12 or 24 word mnemonic: the Standard digits (48 or 96 ASCII bytes), or with compact
+ * the CompactSeedQR's raw entropy (16 or 32 bytes). Returns its length, or 0 */
+int seedqr_encode(const uint8_t *mn, size_t len, int compact, uint8_t *out, size_t cap);
+
 /* The mnemonic for 16, 20, 24, 28 or 32 bytes of entropy, written NUL-terminated to out. Returns its
  * length, or 0 for another length or too small a buffer */
 int bip39_mnemonic_from_entropy(const uint8_t *ent, size_t len, char *out, size_t cap);

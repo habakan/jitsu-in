@@ -34,6 +34,7 @@ fun main(args: Array<String>) {
     for (o in d.outputs) println("out ${o.amount} ${o.owner} ${o.textKind} ${o.text}")
     for (sig in s.sign()) println("sig ${sig.input} ${sig.sig.joinToString("") { "%02x".format(it) }}")
     println("dice ${String(s.mnemonicFromDice("3".repeat(99).toByteArray()))}")
+    println("seedqr ${String(s.seedQRFromMnemonic(("abandon ".repeat(11) + "about").toCharArray()))}")
     s.unload()
     s.init().seedFromSeedQR("5bbd9d71a8ec7990831aff359d426545".chunked(2).map { it.toInt(16).toByte() }.toByteArray())
     println("seedqr fingerprint ${s.fingerprint}")

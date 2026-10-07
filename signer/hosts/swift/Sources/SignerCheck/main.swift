@@ -85,6 +85,8 @@ if dumpOnly {
     for sig in try s.sign() { print("sig \(sig.input) \(hex(sig.sig))") }
     var rolls = [UInt8](String(repeating: "3", count: 99).utf8)
     print("dice \(String(decoding: try s.mnemonicFromDice(&rolls), as: UTF8.self))")
+    var abandon = [UInt8](mnemonicText.utf8)
+    print("seedqr \(String(decoding: try s.seedQRFromMnemonic(&abandon), as: UTF8.self))")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
     var none: [UInt8] = []
@@ -205,6 +207,23 @@ do {
         ok("98 rolls for 24 words are refused", "\(error)" == "mnemonic_from_dice failed")
     }
     g.unload()
+}
+
+// --- making a SeedQR from the words, against the published vector 4, and reading it back
+do {
+    let q = try Signer(signerWasm: signerWasm)
+    try q.initialise()
+    var words = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8)
+    check("Standard SeedQR digits", String(decoding: try q.seedQRFromMnemonic(&words), as: UTF8.self), "073318950739065415961602009907670428187212261116")
+    ok("the words passed in are zeroed", words.allSatisfy { $0 == 0 })
+    var again = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8), none: [UInt8] = []
+    var compact = try q.seedQRFromMnemonic(&again, compact: true)
+    check("CompactSeedQR bytes", hex(compact), "5bbd9d71a8ec7990831aff359d426545")
+    var typed = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8)
+    let want = try q.seedFromMnemonic(&typed, passphrase: &none).fingerprint
+    check("the CompactSeedQR made here loads the same key",
+          try q.initialise().seedFromSeedQR(&compact, passphrase: &none).fingerprint, want)
+    q.unload()
 }
 
 // --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing

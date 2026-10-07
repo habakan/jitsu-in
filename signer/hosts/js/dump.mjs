@@ -40,6 +40,7 @@ for (const s of S.sign()) {
   console.log(`sig ${s.input} ` + [...s.sig].map((b) => b.toString(16).padStart(2, "0")).join(""));
 }
 console.log(`dice ${new TextDecoder().decode(S.mnemonicFromDice(new TextEncoder().encode("3".repeat(99))))}`);
+console.log(`seedqr ${new TextDecoder().decode(S.seedQRFromMnemonic(new TextEncoder().encode("abandon ".repeat(11) + "about")))}`);
 S.unload();
 S.init().seedFromSeedQR(Uint8Array.from(Buffer.from("5bbd9d71a8ec7990831aff359d426545", "hex")));
 console.log(`seedqr fingerprint ${S.fingerprint}`);
