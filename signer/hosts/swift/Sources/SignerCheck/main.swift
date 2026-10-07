@@ -83,6 +83,7 @@ if dumpOnly {
         print("out \(o.amount) \(owner[Int(o.owner.rawValue)]) \(kind[Int(o.textKind.rawValue)]) \(o.text)")
     }
     for sig in try s.sign() { print("sig \(sig.input) \(hex(sig.sig))") }
+    print("desc \(try s.xpub(purpose: 86, account: 1).descriptor)")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
     var none: [UInt8] = []
@@ -155,6 +156,16 @@ let x = try s.xpub()
 ok("the descriptor names the account", x.descriptor.hasPrefix("wpkh([73c5da0a/84h/0h/0h]"))
 ok("the descriptor covers receive and change", x.descriptor.contains("<0;1>/*"))
 ok("the xpub is an xpub", x.xpub.hasPrefix("xpub"))
+let tr = try s.xpub(purpose: 86)
+check("BIP86's account 0", tr.xpub, "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ")
+check("the tr() descriptor", tr.descriptor, "tr([73c5da0a/86h/0h/0h]\(tr.xpub)/<0;1>/*)")
+ok("account 1 is named", try s.xpub(account: 1).descriptor.hasPrefix("wpkh([73c5da0a/84h/0h/1h]xpub"))
+do {
+    _ = try s.xpub(purpose: 49)
+    ok("xpub for BIP49 is refused", false)
+} catch {
+    ok("xpub for BIP49 is refused", "\(error)".contains("xpub: FORMAT"))
+}
 
 // --- signing without a review is refused
 do {

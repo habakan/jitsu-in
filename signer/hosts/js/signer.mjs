@@ -41,7 +41,7 @@ const L = {
  *   signer_review: () => number,
  *   signer_display: () => number,
  *   signer_sign: () => number,
- *   signer_xpub: () => number,
+ *   signer_xpub: (purpose: number, account: number) => number,
  * }} SignerExports
  */
 
@@ -329,9 +329,10 @@ export class Signer {
     return out;
   }
 
-  /** The account xpub and an output descriptor, for making a watch-only wallet elsewhere. */
-  xpub() {
-    const rc = this.#e.signer_xpub();
+  /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+   *  wallet elsewhere. `account` is below 2^31. */
+  xpub({ purpose = 84, account = 0 } = {}) {
+    const rc = this.#e.signer_xpub(purpose, account);
     if (rc !== 0) throw new SignerError("xpub", rc);
     const dec = new TextDecoder();
     const read = (/** @type {number} */ at, /** @type {number} */ cap) => {
