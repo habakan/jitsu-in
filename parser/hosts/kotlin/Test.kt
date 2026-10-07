@@ -56,9 +56,14 @@ fun main(args: Array<String>) {
 
     // a derivation prints the way a human reads it, and matches the JavaScript host
     run {
-        val plan = Parser(parserWasm).parse(File(vectorDir, "own_p2wpkh_1in.psbt").readBytes(), fp)
+        val parser = Parser(parserWasm)
+        val plan = parser.parse(File(vectorDir, "own_p2wpkh_1in.psbt").readBytes(), fp)
         check(plan.inputs[0].key.toString() == "73c5da0a/84h/0h/0h/0/0", "keypath prints as ${plan.inputs[0].key}")
         check(plan.inputs[0].key!!.fingerprint == fp, "fingerprint is kept as a number")
+        val raw = parser.rawPlan()
+        check(raw.size == 5016, "raw plan is ${raw.size} bytes")
+        check(raw.sliceArray(0..3).contentEquals(byteArrayOf(0x42, 0x50, 0x4c, 0x4e)), "raw plan has BPLN magic")
+        check(raw[16].toInt() == plan.inputs.size && raw[17].toInt() == plan.outputs.size, "raw plan counts match")
     }
 
     // a fingerprint that matches nothing claims nothing
@@ -70,7 +75,9 @@ fun main(args: Array<String>) {
     // errors arrive as names, not numbers
     run {
         val p = Parser(parserWasm)
+        throws("parse() must succeed", "raw plan before parse") { p.rawPlan() }
         throws("P_ERR_MAGIC", "not a PSBT") { p.parse(byteArrayOf(1, 2, 3, 4, 5), 0) }
+        throws("parse() must succeed", "raw plan after failed parse") { p.rawPlan() }
         throws("does not fit", "too large for the buffer") { p.parse(ByteArray(p.inputCapacity + 1), 0) }
         throws("UR_ERR_SCHEME", "not a UR") { p.urReceive("not a ur") }
     }
