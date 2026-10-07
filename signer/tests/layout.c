@@ -53,6 +53,13 @@ int main(void) {
     F(plan_sig_t, sig);
     printf("  \"_end\": 0\n },\n");
 
+    printf(" \"core_message_t\": {\n");
+    printf("  \"size\": %zu,\n", sizeof(core_message_t));
+    F(core_message_t, address);
+    F(core_message_t, text_kind);
+    F(core_message_t, text);
+    printf("  \"text_cap\": %d\n },\n", 2 * CORE_MESSAGE_MAX + 1);
+
     printf(" \"limits\": {\n");
     printf("  \"max_inputs\": %d,\n", PLAN_MAX_INPUTS);
     printf("  \"max_outputs\": %d,\n", PLAN_MAX_OUTPUTS);

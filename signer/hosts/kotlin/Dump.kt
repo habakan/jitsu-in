@@ -34,6 +34,8 @@ fun main(args: Array<String>) {
     for (o in d.outputs) println("out ${o.amount} ${o.owner} ${o.textKind} ${o.text}")
     for (sig in s.sign()) println("sig ${sig.input} ${sig.sig.joinToString("") { "%02x".format(it) }}")
     println("desc ${s.xpub(purpose = 86, account = 1).descriptor}")
+    val shown = s.messageReview("dump\n".toByteArray(), purpose = 49, chain = 1, index = 2)
+    println("message ${shown.address} ${shown.text} ${java.util.Base64.getEncoder().encodeToString(s.messageSign())}")
     s.unload()
     s.init().seedFromSeedQR("5bbd9d71a8ec7990831aff359d426545".chunked(2).map { it.toInt(16).toByte() }.toByteArray())
     println("seedqr fingerprint ${s.fingerprint}")

@@ -40,6 +40,8 @@ for (const s of S.sign()) {
   console.log(`sig ${s.input} ` + [...s.sig].map((b) => b.toString(16).padStart(2, "0")).join(""));
 }
 console.log(`desc ${S.xpub({ purpose: 86, account: 1 }).descriptor}`);
+const shown = S.messageReview(new TextEncoder().encode("dump\n"), { purpose: 49, chain: 1, index: 2 });
+console.log(`message ${shown.address} ${shown.text} ${Buffer.from(S.messageSign()).toString("base64")}`);
 S.unload();
 S.init().seedFromSeedQR(Uint8Array.from(Buffer.from("5bbd9d71a8ec7990831aff359d426545", "hex")));
 console.log(`seedqr fingerprint ${S.fingerprint}`);

@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "plan.h"
+#include "address.h"
 
 enum {
     CORE_OK = 0,
@@ -75,6 +76,21 @@ void core_format_btc(uint64_t sats, char out[21]);
  * side can be watch-only. purpose is 49, 84 or 86 and account below 2^31; CORE_OK, or _FORMAT / _NO_SEED */
 #define CORE_XPUB_MAX 120
 #define CORE_DESC_MAX 180
+/* BIP137 message signing. Review shows the address of m/purpose'/coin'/account'/chain/index (purpose 49
+ * or 84; P2TR is not BIP137) and the message: as it is if it is printable ASCII, otherwise in hex, since
+ * other bytes could render as something else. Sign then signs only that message with that key, once */
+#define CORE_MESSAGE_MAX 512
+enum { CORE_TEXT_MESSAGE = 0, CORE_TEXT_HEX };
+typedef struct {
+    char address[ADDRESS_MAX];
+    uint8_t text_kind;
+    char text[2 * CORE_MESSAGE_MAX + 1];
+} core_message_t;
+int core_message_review(const uint8_t *msg, size_t len, unsigned purpose, uint32_t account, uint32_t chain,
+                        uint32_t index, core_message_t *out);
+/* 65 bytes: the BIP137 header (35-38 P2SH-P2WPKH, 39-42 P2WPKH), then r and s */
+int core_message_sign(uint8_t sig[65]);
+
 int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);
 
 #endif

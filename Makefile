@@ -20,7 +20,7 @@ LIME_FLAGS := -mcpu=lime1 -Xlinker --features=$(LIME1)
 SECP      := third_party/secp256k1
 SECP_REV  := 46db787112beabdb5e17e0dc35680716f1057e7b
 COMB      ?= -DCOMB_BLOCKS=2 -DCOMB_TEETH=5
-SECP_DEFS := -DENABLE_MODULE_EXTRAKEYS=1 -DENABLE_MODULE_SCHNORRSIG=1 -DECMULT_WINDOW_SIZE=2 \
+SECP_DEFS := -DENABLE_MODULE_EXTRAKEYS=1 -DENABLE_MODULE_SCHNORRSIG=1 -DENABLE_MODULE_RECOVERY=1 -DECMULT_WINDOW_SIZE=2 \
              -DUSE_EXTERNAL_DEFAULT_CALLBACKS=1 $(COMB)
 WAMR_REV := 25bd7eb63e828e4bd242cc9b38d260b4b31c6605
 WAMR_ROOT ?= third_party/wasm-micro-runtime
@@ -164,8 +164,8 @@ build/test_%: signer/tests/test_%.c $(SIGNER_C_SRC) signer/*.h signer/tests/*.h 
 	@mkdir -p build
 	$(CC) -O1 -Isigner -Iparser/c/include -I$(SECP)/include -I$(SECP)/src $(SECP_DEFS) -o $@ $< $(SIGNER_C_SRC)
 
-check-signer-c: build/test_seedqr build/test_xpub
-	build/test_seedqr && build/test_xpub
+check-signer-c: build/test_seedqr build/test_xpub build/test_message
+	build/test_seedqr && build/test_xpub && build/test_message
 .PHONY: check-signer-c
 
 check-signer-js: build/signer.wasm build/parser.wasm
