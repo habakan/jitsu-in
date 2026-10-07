@@ -9,6 +9,7 @@ const parserWasm = await fetch("parser.wasm").then(r => r.arrayBuffer());
 const parser = await Parser.load(parserWasm);
 
 const plan = parser.parse(psbt, 0x73c5da0a);   // fingerprint of your master key; not a secret
+const rawPlan = parser.rawPlan();              // 5,016-byte plan_t for a matching signer.wasm
 
 console.log(plan.inputs.length, "in /", plan.outputs.length, "out");
 for (const out of plan.outputs) {
@@ -28,6 +29,9 @@ You load `parser.wasm` once and keep the `parser`; `parse` is called per transac
 `key`, `sighashType`, and `prevtx` (the `non_witness_utxo`, or `null`).
 
 `plan.outputs[i]` — `amount`, `spk`, `key`.
+
+`parser.rawPlan()` returns a copy of the 5,016-byte ABI-v1 `plan_t`, for passing to a matching
+`signer.wasm`. Call it after a successful `parse()`; the next `parse()`, `urReceive()`, or `urEncode()` invalidates it.
 
 `key` is a `KeyOrigin?` — BIP380's name for this. It prints as `73c5da0a/84h/0h/0h/0/0`. **It is a claim**: the module
 read it out of the PSBT. Derive the key yourself and check it produces `spk` before you call an

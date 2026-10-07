@@ -7,6 +7,7 @@
 
 const MAGIC = 0x4e4c5042; // "BPLN"
 const ABI_VERSION = 1;
+const PLAN_SIZE = 5016;
 
 /**
  * The exports parser.wasm provides. Declared so that a typo in a name is a type error rather than a
@@ -94,6 +95,7 @@ export class KeyOrigin {
 }
 
 export class Parser {
+  #planAvailable = false;
   /**
    * @param {BufferSource} parserWasm the contents of parser.wasm
    * @param {{ sha256?: string }} [opts] when given, the module must hash to exactly this, or it is
@@ -217,10 +219,19 @@ export class Parser {
    * @returns {Plan}
    */
   parse(psbt, fingerprint) {
+    this.#planAvailable = false;
     this.#writeInput(psbt);
     const rc = this.exports.parser_parse(psbt.length, fingerprint >>> 0);
     if (rc !== 0) throw new ParserError(rc);
-    return this.#readPlan();
+    const plan = this.#readPlan();
+    this.#planAvailable = true;
+    return plan;
+  }
+
+  /** Copy the current ABI-v1 plan_t bytes for a matching signer.wasm module. */
+  rawPlan() {
+    if (!this.#planAvailable) throw new Error("parse() must succeed before rawPlan()");
+    return this.#bytes(this.exports.parser_plan(), PLAN_SIZE);
   }
 
   #readPlan() {
@@ -269,6 +280,7 @@ export class Parser {
    * @param {string|Uint8Array} part one QR payload
    */
   urReceive(part) {
+    this.#planAvailable = false;
     const bytes = typeof part === "string" ? new TextEncoder().encode(part) : part;
     this.#writeInput(bytes);
     const rc = this.exports.parser_ur_receive(bytes.length);
@@ -289,6 +301,7 @@ export class Parser {
    * @param {number} [fragmentLen]
    */
   urEncode(psbtLen, fragmentLen = 100) {
+    this.#planAvailable = false;
     const seqLen = this.exports.parser_ur_encode_start(psbtLen, fragmentLen);
     if (seqLen < 0) throw new ParserError(seqLen, "UR_ERR");
     return {

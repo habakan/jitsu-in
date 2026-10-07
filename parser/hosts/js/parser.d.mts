@@ -57,6 +57,8 @@ export class Parser {
      * @returns {Plan}
      */
     parse(psbt: Uint8Array, fingerprint: number): Plan;
+    /** Copy the current ABI-v1 plan_t bytes for a matching signer.wasm module. */
+    rawPlan(): Uint8Array<ArrayBuffer>;
     /** Drop decoder state before a new animated QR. */
     urReset(): void;
     /**

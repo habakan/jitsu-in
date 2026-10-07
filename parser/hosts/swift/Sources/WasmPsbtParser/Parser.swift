@@ -17,6 +17,7 @@ private let abiVersion: UInt32 = 1
 private enum L {
     static let magic = 0, version = 4, txVersion = 8, locktime = 12, nInputs = 16, nOutputs = 17
     static let inputs = 24, inputSize = 176, outputs = 2840, outputSize = 136
+    static let planSize = 5016
     static let inPrevTxid = 0, inPrevVout = 32, inSequence = 36
     static let inAmount = 40, inSpk = 48, inKey = 132, inSighash = 172
     static let outAmount = 0, outSpk = 8, outKey = 92
@@ -40,6 +41,8 @@ public enum ParserError: Error, CustomStringConvertible {
     case tooLarge(size: Int, capacity: Int)
     /// A signature that does not fit the module's fixed-size slot.
     case badSignature(String)
+    /// No successfully parsed plan is available.
+    case planUnavailable
 
     public var description: String {
         switch self {
@@ -49,6 +52,7 @@ public enum ParserError: Error, CustomStringConvertible {
         case .unexpectedModule(let s): return s
         case .tooLarge(let s, let c): return "\(s) bytes does not fit in \(c)"
         case .badSignature(let s): return s
+        case .planUnavailable: return "parse() must succeed before rawPlan()"
         }
     }
 }
@@ -107,6 +111,7 @@ public struct UrEncoder {
 public final class Parser {
     private let instance: Instance
     private let memory: Memory
+    private var planAvailable = false
 
     /// - Parameters:
     ///   - parserWasm: the contents of parser.wasm
@@ -180,10 +185,19 @@ public final class Parser {
     /// Parse a PSBT.
     /// - Parameter fingerprint: master fingerprint, big-endian (0x73c5da0a). Not a secret.
     public func parse(_ psbt: [UInt8], fingerprint: UInt32) throws -> Plan {
+        planAvailable = false
         try writeInput(psbt)
         let rc = try call("parser_parse", [.i32(UInt32(psbt.count)), .i32(fingerprint)])
         if rc != 0 { throw ParserError.parse(code: rc) }
-        return try readPlan()
+        let plan = try readPlan()
+        planAvailable = true
+        return plan
+    }
+
+    /// Copy the current ABI-v1 plan_t bytes for a matching signer.wasm module.
+    public func rawPlan() throws -> [UInt8] {
+        guard planAvailable else { throw ParserError.planUnavailable }
+        return try bytes(Int(call("parser_plan")), L.planSize)
     }
 
     private func readPlan() throws -> Plan {
@@ -226,6 +240,7 @@ public final class Parser {
 
     /// Feed one UR part. Returns the PSBT once the message is complete, otherwise nil.
     public func urReceive(_ part: String) throws -> [UInt8]? {
+        planAvailable = false
         let raw = Array(part.utf8)
         try writeInput(raw)
         let rc = try call("parser_ur_receive", [.i32(UInt32(raw.count))])
@@ -239,6 +254,7 @@ public final class Parser {
 
     /// Encode the PSBT currently in the output buffer (what `finalize` produced) as QR payloads.
     public func urEncode(psbtLen: Int, fragmentLen: Int = 100) throws -> UrEncoder {
+        planAvailable = false
         let seqLen = try call("parser_ur_encode_start", [.i32(UInt32(psbtLen)), .i32(UInt32(fragmentLen))])
         if seqLen < 0 { throw ParserError.ur(code: seqLen) }
         return UrEncoder(seqLen: Int(seqLen)) { [self] in
