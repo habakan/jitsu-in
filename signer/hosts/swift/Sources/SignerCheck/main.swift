@@ -183,10 +183,16 @@ do {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
 }
 
-// --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
+// --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
+do {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](("  " + mnemonicText.uppercased() + "\n").utf8), none: [UInt8] = []
+    check("whitespace and capitals load the same wallet", try b.seedFromMnemonic(&w, passphrase: &none).fingerprint,
+          "73c5da0a")
+}
 for (what, bad) in [("a bad checksum", String(repeating: "abandon ", count: 11) + "abandon"),
-                    ("a double space", mnemonicText.replacingOccurrences(of: "abandon abandon", with: "abandon  abandon")),
-                    ("capitals", "A" + mnemonicText.dropFirst())] {
+                    ("a word not in the list", mnemonicText.replacingOccurrences(of: "about", with: "abaut"))] {
     let b = try Signer(signerWasm: signerWasm)
     try b.initialise()
     var w = [UInt8](bad.utf8), none: [UInt8] = []

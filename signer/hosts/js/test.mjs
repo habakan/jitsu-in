@@ -160,9 +160,14 @@ for (const tamper of [false, true]) {
   S3.unload();
 }
 
-// --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
-for (const [what, bad] of [["a bad checksum", "abandon ".repeat(11) + "abandon"], ["a double space", MNEMONIC.replace(" ", "  ")],
-                           ["capitals", "A" + MNEMONIC.slice(1)]]) {
+// --- what a keyboard adds loads the same wallet; a mnemonic whose BIP39 checksum fails, or a word
+// that is not English BIP39, loads nothing
+for (const typed of [" " + MNEMONIC.replace(" ", "  ").toUpperCase() + "\n", "Abandon" + MNEMONIC.slice(7)]) {
+  const B = await Signer.load(signerWasm);
+  check(`${JSON.stringify(typed.slice(0, 18))}... loads the same wallet`,
+        B.init().seedFromMnemonic(new TextEncoder().encode(typed)).fingerprint, "73c5da0a");
+}
+for (const [what, bad] of [["a bad checksum", "abandon ".repeat(11) + "abandon"], ["a word not in the list", MNEMONIC.replace("about", "abaut")]]) {
   const B = await Signer.load(signerWasm);
   try {
     B.init().seedFromMnemonic(new TextEncoder().encode(bad));

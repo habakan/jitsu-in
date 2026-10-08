@@ -54,19 +54,34 @@ static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t ca
  * sorted. Only a-z is let through, so a word padded with NUL cannot match a shorter one */
 static int word_index(const uint8_t *w, size_t len) {
     char key[8] = {0};
-    int lo = 0, hi = 2047;
-    if (len == 0 || len > 8) return -1;
-    for (size_t i = 0; i < len; i++) {
-        if (w[i] < 'a' || w[i] > 'z') return -1;
+    int lo = 0, hi = 2047, found = -1;
+    for (size_t i = 0; i < len && len <= 8; i++) {
+        if (w[i] < 'a' || w[i] > 'z') hi = -1;
         key[i] = (char)w[i];
     }
-    while (lo <= hi) {
+    while (len && len <= 8 && found < 0 && lo <= hi) {
         int mid = (lo + hi) / 2, c = memcmp(key, bip39_words[mid], 8);
-        if (!c) return mid;
-        if (c < 0) hi = mid - 1;
+        if (!c) found = mid;
+        else if (c < 0) hi = mid - 1;
         else lo = mid + 1;
     }
-    return -1;
+    wipe(key, sizeof(key));
+    return found;
+}
+
+size_t bip39_normalize(const uint8_t *in, size_t len, uint8_t *out) {
+    size_t n = 0;
+    int gap = 0;
+    for (size_t i = 0; i < len; i++) {
+        uint8_t c = in[i];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            gap = n > 0;
+            continue;
+        }
+        if (gap) out[n++] = ' ', gap = 0;
+        out[n++] = c >= 'A' && c <= 'Z' ? (uint8_t)(c + 32) : c;
+    }
+    return n;
 }
 
 int bip39_mnemonic_ok(const uint8_t *mn, size_t len) {

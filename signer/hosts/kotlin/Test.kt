@@ -159,10 +159,13 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
     }
 
-    // --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
+    // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
     val typed = "abandon ".repeat(11) + "about"
+    check("whitespace and capitals load the same wallet",
+          Signer(signerWasm).init().seedFromMnemonic((" " + typed.replaceFirst(" ", "  ").uppercase() + "\n").toCharArray())
+              .fingerprint, "73c5da0a")
     for ((what, bad) in listOf("a bad checksum" to "abandon ".repeat(11) + "abandon",
-                               "a double space" to typed.replaceFirst(" ", "  "), "capitals" to "A" + typed.drop(1))) {
+                               "a word not in the list" to typed.replace("about", "abaut"))) {
         val b = Signer(signerWasm).init()
         try {
             b.seedFromMnemonic(bad.toCharArray())

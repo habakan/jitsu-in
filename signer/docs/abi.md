@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 74,532 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 74,724 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,7 +12,7 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 47 checks in [test.mjs](../hosts/js/test.mjs) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 48 checks in [test.mjs](../hosts/js/test.mjs) |
 | Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 39 checks in [Test.kt](../hosts/kotlin/Test.kt) |
 | Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 36 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
@@ -73,7 +73,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | | returns |
 |---|---|
 | `signer_init(testnet: i32)` | 1 on success. `testnet` covers signet too |
-| `signer_seed_from_mnemonic(mn_len, pass_len)` | 1 on success. English BIP39 words, lower case, one space apart, checksum checked; PBKDF2 2048 rounds, about half a second |
+| `signer_seed_from_mnemonic(mn_len, pass_len)` | 1 on success. English BIP39 words with a valid checksum; surrounding and repeated whitespace and capitals are normalised first, the passphrase is used as given. PBKDF2 2048 rounds, about half a second |
 | `signer_seed_from_seedqr(qr_len, pass_len)` | 1 on success. Standard (48 or 96 digits) or Compact (16 or 32 bytes); 0 if the BIP39 checksum fails |
 | `signer_load_seed()` | 1 on success, using the first 64 bytes of the input buffer |
 | `signer_set_prevtx(i, off, len)` | 1 on success. `len` of 0 means that input has no previous transaction |
