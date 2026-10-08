@@ -200,8 +200,10 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         generate(entropy, "mnemonic_from_entropy") { call("signer_mnemonic_from_entropy", entropy.size.toLong()) }
 
     /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. */
-    fun mnemonicFromDice(rolls: ByteArray, words: Int = 24): CharArray =
-        generate(rolls, "mnemonic_from_dice") { call("signer_mnemonic_from_dice", rolls.size.toLong(), words.toLong()) }
+    fun mnemonicFromDice(rolls: ByteArray, words: Int = 24): CharArray {
+        require(words == 12 || words == 24) { "dice make 12 or 24 words, not $words" }
+        return generate(rolls, "mnemonic_from_dice") { call("signer_mnemonic_from_dice", rolls.size.toLong(), words.toLong()) }
+    }
 
     private fun generate(input: ByteArray, name: String, make: () -> Int): CharArray {
         try {

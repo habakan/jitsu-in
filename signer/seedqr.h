@@ -23,8 +23,8 @@ size_t bip39_normalize(const uint8_t *in, size_t len, uint8_t *out);
  * length, or 0 for another length or too small a buffer */
 int bip39_mnemonic_from_entropy(const uint8_t *ent, size_t len, char *out, size_t cap);
 
-/* Dice rolls as the characters 1 to 6, at least 50 for 12 words and 99 for 24 so that the rolls carry
- * the entropy they stand for. The entropy is SHA-256 of the rolls, cut to 16 bytes for 12 words */
+/* Dice rolls as the characters 1 to 6, at least 50 for 12 words (129 bits) and 99 for 24 (255.9 bits, the
+ * usual count). The entropy is SHA-256 of the rolls, cut to 16 bytes for 12 words */
 int bip39_mnemonic_from_dice(const uint8_t *rolls, size_t len, unsigned words, char *out, size_t cap);
 
 #endif

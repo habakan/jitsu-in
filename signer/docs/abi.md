@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 76,735 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 76,763 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,9 +12,9 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 89 checks in [test.mjs](../hosts/js/test.mjs) |
-| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 55 checks in [Test.kt](../hosts/kotlin/Test.kt) |
-| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 52 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 92 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 57 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 54 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 

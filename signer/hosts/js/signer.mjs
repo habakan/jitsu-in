@@ -223,6 +223,7 @@ export class Signer {
    * @param {12 | 24} [words]
    */
   mnemonicFromDice(rolls, words = 24) {
+    if (words !== 12 && words !== 24) throw new RangeError(`dice make 12 or 24 words, not ${words}`);
     return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice");
   }
 
@@ -232,6 +233,7 @@ export class Signer {
    * @param {string} name
    */
   #generate(input, make, name) {
+    if (!(input instanceof Uint8Array)) throw new TypeError(`${name} takes a Uint8Array, so that it can be cleared`);
     try {
       const cap = this.#e.signer_input_cap();
       if (input.length > cap) throw new RangeError(`${input.length} bytes, cap is ${cap}`);

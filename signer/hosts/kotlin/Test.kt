@@ -208,6 +208,19 @@ fun main(args: Array<String>) {
         } catch (e: IllegalArgumentException) {
             ok("98 rolls for 24 words are refused", e.message == "mnemonic_from_dice failed")
         }
+        try {
+            g.mnemonicFromEntropy(ByteArray(15))
+            ok("15 bytes of entropy are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("15 bytes of entropy are refused", e.message == "mnemonic_from_entropy failed")
+        }
+        val kept = "1".repeat(99).toByteArray()
+        try {
+            g.mnemonicFromDice(kept, 18)
+            ok("18 words from dice is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == '1'.code.toByte())
+        }
         g.unload()
     }
 

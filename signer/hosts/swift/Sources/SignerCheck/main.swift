@@ -241,6 +241,20 @@ do {
     } catch {
         ok("98 rolls for 24 words are refused", "\(error)" == "mnemonic_from_dice failed")
     }
+    do {
+        var short = [UInt8](repeating: 0, count: 15)
+        _ = try g.mnemonicFromEntropy(&short)
+        ok("15 bytes of entropy are refused", false)
+    } catch {
+        ok("15 bytes of entropy are refused", "\(error)" == "mnemonic_from_entropy failed")
+    }
+    var kept = [UInt8](String(repeating: "1", count: 99).utf8)
+    do {
+        _ = try g.mnemonicFromDice(&kept, words: 18)
+        ok("18 words from dice is refused", false)
+    } catch {
+        ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == 0x31)
+    }
     g.unload()
 }
 

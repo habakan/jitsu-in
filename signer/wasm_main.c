@@ -29,7 +29,7 @@ static core_prevtx_t prevtx[PLAN_MAX_INPUTS];
 static core_review_t review;
 static core_display_t display;
 static core_sig_t sigs[PLAN_MAX_INPUTS];
-static uint8_t in[512]; /* mnemonic || passphrase, or a 64-byte seed */
+static uint8_t in[512]; /* a mnemonic or SeedQR || passphrase, a seed, entropy or dice; always wiped after */
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 static char mnemonic[256]; /* a newly made mnemonic, until the host has read it */
 
@@ -168,14 +168,18 @@ int EXPORT(signer_find_address)(unsigned len, unsigned account, unsigned count) 
 /* A new mnemonic from the entropy in in, or from dice rolls (1 to 6) in in. Returns its length in
  * signer_mnemonic_output(), or 0. Nothing is loaded: the words are to be written down first */
 int EXPORT(signer_mnemonic_from_entropy)(unsigned len) {
-    int n = len <= sizeof(in) ? bip39_mnemonic_from_entropy(in, len, mnemonic, sizeof(mnemonic)) : 0;
+    int n;
+    wipe(mnemonic, sizeof(mnemonic));
+    n = len <= sizeof(in) ? bip39_mnemonic_from_entropy(in, len, mnemonic, sizeof(mnemonic)) : 0;
     if (!n) wipe(mnemonic, sizeof(mnemonic));
     wipe(in, sizeof(in));
     return n;
 }
 
 int EXPORT(signer_mnemonic_from_dice)(unsigned len, unsigned words) {
-    int n = len <= sizeof(in) ? bip39_mnemonic_from_dice(in, len, words, mnemonic, sizeof(mnemonic)) : 0;
+    int n;
+    wipe(mnemonic, sizeof(mnemonic));
+    n = len <= sizeof(in) ? bip39_mnemonic_from_dice(in, len, words, mnemonic, sizeof(mnemonic)) : 0;
     if (!n) wipe(mnemonic, sizeof(mnemonic));
     wipe(in, sizeof(in));
     return n;

@@ -255,6 +255,7 @@ public final class Signer {
 
     /// A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24.
     public func mnemonicFromDice(_ rolls: inout [UInt8], words: UInt32 = 24) throws -> [UInt8] {
+        guard words == 12 || words == 24 else { throw SignerError.invalidInput("dice make 12 or 24 words, not \(words)") }
         let n = UInt32(rolls.count)
         return try generate(&rolls, "mnemonic_from_dice") {
             try self.call("signer_mnemonic_from_dice", [.i32(n), .i32(words)])

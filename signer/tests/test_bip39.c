@@ -102,7 +102,13 @@ int main(void) {
         CHECK(!bip39_mnemonic_from_entropy(zero, 0, out, sizeof(out)), "no entropy refused");
         CHECK(!bip39_mnemonic_from_entropy(zero, 15, out, sizeof(out)), "15 bytes refused");
         CHECK(!bip39_mnemonic_from_entropy(zero, 33, out, sizeof(out)), "33 bytes refused");
+        memset(out, 0x55, sizeof(out));
         CHECK(!bip39_mnemonic_from_entropy(zero, 32, out, 100), "a small buffer refused");
+        {
+            int clean = 1;
+            for (unsigned k = 0; k < 100; k++) clean &= out[k] == 0 || out[k] == 0x55; /* cleared, or never written */
+            CHECK(clean, "and none of the words written before it ran out are left");
+        }
         CHECK(sizeof(rolls) - 1 == 99, "99 rolls");
         CHECK(bip39_mnemonic_from_dice((const uint8_t *)rolls, 99, 24, out, sizeof(out)) > 0, "99 rolls, 24 words");
         CHECK(!bip39_mnemonic_from_dice((const uint8_t *)rolls, 98, 24, out, sizeof(out)), "98 rolls for 24 refused");
