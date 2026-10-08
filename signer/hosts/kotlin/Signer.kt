@@ -295,9 +295,10 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         }
     }
 
-    /** The account xpub and an output descriptor, for making a watch-only wallet elsewhere. */
-    fun xpub(): AccountKey {
-        val rc = call("signer_xpub")
+    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+     *  wallet elsewhere. `account` is below 2^31. */
+    fun xpub(purpose: Int = 84, account: Int = 0): AccountKey {
+        val rc = call("signer_xpub", purpose.toLong(), account.toLong())
         if (rc != 0) throw SignerException("xpub", rc)
         return AccountKey(
             xpub = cstr(call("signer_xpub_output"), L.XPUB_MAX),

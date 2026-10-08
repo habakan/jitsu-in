@@ -145,8 +145,9 @@ int EXPORT(signer_sign)(void) {
     return rc ? -rc : (int)n;
 }
 
-/* 0 on success and CORE_ERR_* otherwise, like review and display. core_account_xpub itself is a
- * predicate, so the sense is flipped here rather than at every call site */
-int EXPORT(signer_xpub)(void) {
-    return core_account_xpub(xpub, desc) ? CORE_OK : CORE_ERR_NO_SEED;
+/* On a refusal nothing from an earlier call is left to be read as this one's */
+int EXPORT(signer_xpub)(unsigned purpose, unsigned account) {
+    int rc = core_account_xpub(purpose, account, xpub, desc);
+    if (rc) wipe(xpub, sizeof(xpub)), wipe(desc, sizeof(desc));
+    return rc;
 }

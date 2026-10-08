@@ -33,6 +33,7 @@ fun main(args: Array<String>) {
     println("fee ${d.fee} spend ${d.spend}")
     for (o in d.outputs) println("out ${o.amount} ${o.owner} ${o.textKind} ${o.text}")
     for (sig in s.sign()) println("sig ${sig.input} ${sig.sig.joinToString("") { "%02x".format(it) }}")
+    println("desc ${s.xpub(purpose = 86, account = 1).descriptor}")
     s.unload()
     s.init().seedFromSeedQR("5bbd9d71a8ec7990831aff359d426545".chunked(2).map { it.toInt(16).toByte() }.toByteArray())
     println("seedqr fingerprint ${s.fingerprint}")

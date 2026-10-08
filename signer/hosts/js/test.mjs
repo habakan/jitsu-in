@@ -104,11 +104,75 @@ S.review();
 const again = S.sign();
 check("signing the same plan again is byte-identical", hex(again[0].sig), hex(sigs[0].sig));
 
-// --- xpub, against BIP84's published vector
+// --- xpub, against BIP84's and BIP86's published vectors, and against a derivation done here
 const x = S.xpub();
+check("xpub() is BIP84's account 0", x.xpub,
+      "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V");
 ok("the descriptor names the account", /^wpkh\(\[73c5da0a\/84h\/0h\/0h\]/.test(x.descriptor));
-ok("the descriptor covers receive and change", x.descriptor.includes("<0;1>/*"));
-ok("the xpub is an xpub", x.xpub.startsWith("xpub"));
+ok("the descriptor covers receive and change", x.descriptor.endsWith("/<0;1>/*)"));
+const tr = S.xpub({ purpose: 86 });
+check("BIP86's account 0", tr.xpub,
+      "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ");
+check("the tr() descriptor", tr.descriptor, `tr([73c5da0a/86h/0h/0h]${tr.xpub}/<0;1>/*)`);
+{
+  const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+  const big = (b) => BigInt("0x" + Buffer.from(b).toString("hex"));
+  const pub = (k) => { const e = createECDH("secp256k1"); e.setPrivateKey(k); return e.getPublicKey(null, "compressed"); };
+  const b58 = (data) => {
+    const p = Buffer.concat([data, createHash("sha256").update(createHash("sha256").update(data).digest()).digest().subarray(0, 4)]);
+    let n = big(p), s = "";
+    for (; n > 0n; n /= 58n) s = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"[Number(n % 58n)] + s;
+    return s;
+  };
+  const xpubAt = (purpose, account) => {
+    const I = createHmac("sha512", "Bitcoin seed").update(pbkdf2Sync(MNEMONIC, "mnemonic", 2048, 64, "sha512")).digest();
+    let k = I.subarray(0, 32), c = I.subarray(32), parent;
+    for (const i of [purpose, 0, account].map((v) => (v | 0x80000000) >>> 0)) {
+      parent = pub(k);
+      const J = createHmac("sha512", c).update(Buffer.concat([Buffer.alloc(1), k, Buffer.from([i >>> 24, (i >> 16) & 255, (i >> 8) & 255, i & 255])])).digest();
+      k = Buffer.from(((big(J.subarray(0, 32)) + big(k)) % N).toString(16).padStart(64, "0"), "hex");
+      c = J.subarray(32);
+    }
+    const fp = createHash("ripemd160").update(createHash("sha256").update(parent).digest()).digest().subarray(0, 4);
+    const child = Buffer.alloc(4);
+    child.writeUInt32BE((account | 0x80000000) >>> 0);
+    return b58(Buffer.concat([Buffer.from("0488b21e03", "hex"), fp, child, c, pub(k)]));
+  };
+  check("this test's own derivation agrees with BIP84", xpubAt(84, 0), x.xpub);
+  for (const [purpose, account] of [[84, 1], [86, 1], [86, 0x7fffffff]]) {
+    const got = S.xpub({ purpose, account });
+    check(`m/${purpose}'/0'/${account}'`, got.xpub, xpubAt(purpose, account));
+    ok(`m/${purpose}'/0'/${account}' descriptor`, got.descriptor.includes(`/${purpose}h/0h/${account}h]${got.xpub}/`));
+  }
+}
+// a refusal leaves nothing of the previous xpub to be read as its own
+{
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mn = new TextEncoder().encode(MNEMONIC), mem = () => new Uint8Array(E.memory.buffer);
+  E.signer_init(0);
+  mem().set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  check("the raw ABI exports an xpub", E.signer_xpub(84, 0), 0);
+  check("then refuses BIP49", E.signer_xpub(49, 0), 1);
+  ok("and the xpub and descriptor buffers are empty", mem()[E.signer_xpub_output()] === 0 && mem()[E.signer_desc_output()] === 0);
+}
+// JavaScript would wrap these into a valid i32, so the library refuses them before the module sees them
+for (const [what, opts] of [["2^32 + 1", { account: 2 ** 32 + 1 }], ["1.5", { account: 1.5 }], ["-1", { account: -1 }]]) {
+  try {
+    S.xpub(opts);
+    ok(`xpub for account ${what} is refused`, false);
+  } catch (e) {
+    ok(`xpub for account ${what} is refused`, e instanceof RangeError);
+  }
+}
+for (const [what, opts] of [["BIP49", { purpose: 49 }], ["a hardened account", { account: 0x80000000 }]]) {
+  try {
+    S.xpub(opts);
+    ok(`xpub for ${what} is refused`, false);
+  } catch (e) {
+    ok(`xpub for ${what} is refused`, e instanceof SignerError && /FORMAT/.test(e.message));
+  }
+}
 
 // --- the module refuses to sign a plan it was not shown
 {
@@ -249,7 +313,7 @@ check("fingerprint after unload", S.fingerprint, "00000000");
 // as native u64 words, so each secret is also searched for with every 8 bytes reversed
 {
   const mn = new TextEncoder().encode(MNEMONIC);
-  // every HMAC-SHA512 from the mnemonic to each key. Chain codes below m/84h/0h/0h are in the xpub
+  // every HMAC-SHA512 from the mnemonic to each key. Chain codes below m/84h/0h/0h and m/86h/0h/0h are in the xpubs
   const secrets = [["mnemonic", Buffer.from(mn)]];
   const hmac = (name, key, msg) => {
     const ipad = Buffer.alloc(128, 0x36);
@@ -258,7 +322,7 @@ check("fingerprint after unload", S.fingerprint, "00000000");
     if (msg[0] === 0) secrets.push([`${name} input`, msg]);  // hardened: 0x00 || parent key
     secrets.push([`${name} inner hash`, createHash("sha512").update(ipad).update(msg).digest()],
                  [`${name} tweak`, out.subarray(0, 32)]);
-    if (!name.startsWith("m/84h/0h/0h")) secrets.push([`${name} chain code`, out.subarray(32)]);
+    if (!/^m\/8[46]h\/0h\/0h/.test(name)) secrets.push([`${name} chain code`, out.subarray(32)]);
     return out;
   };
   const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
@@ -303,7 +367,7 @@ check("fingerprint after unload", S.fingerprint, "00000000");
         used += raw.length;
       });
       ok("the leak check signs a real plan", E.signer_review() === 0 && E.signer_sign() > 0);
-      E.signer_xpub();
+      ok("the leak check exports both xpubs", E.signer_xpub(84, 0) === 0 && E.signer_xpub(86, 0) === 0);
     }
     E.signer_unload();
     const m = Buffer.from(mem());

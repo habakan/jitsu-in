@@ -6,6 +6,7 @@
 //   the parse       decodepsbt            against the plan parser.wasm built
 //   the fee         decodepsbt's fee      against what signer.wasm's review computed
 //   the signatures  walletprocesspsbt     against signer.wasm's, byte for byte
+//   the descriptors deriveaddresses       signer.wasm's wpkh() and tr() against Core's own keys
 //
 // The last is only possible because signing is deterministic on both sides: Core and this signer
 // both grind for a low R in ECDSA and both pass a zero aux_rand for Schnorr, so one key over one
@@ -16,6 +17,7 @@
 //
 //   node tools/check_against_core.mjs "bitcoin-cli -datadir=... -regtest" <parser.wasm> <signer.wasm> <psbt>...
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import { Signer } from "../signer/hosts/js/signer.mjs";
 
@@ -98,14 +100,48 @@ const signerWasm = readFileSync(signerPath);
     console.error(`the committed fingerprint is ${FINGERPRINT}, signer.wasm derives ${s.fingerprint}`);
     process.exit(1);
   }
-  const got = s.xpub().xpub;
-  const want = ACCOUNTS.find((a) => a.purpose === 84).xpub;
-  if (got !== want) {
-    console.error(`the committed m/84'/0'/0' xpub is not the one signer.wasm derives:\n  committed ${want}\n  derived   ${got}`);
-    process.exit(1);
+  for (const a of ACCOUNTS) {
+    const got = s.xpub({ purpose: a.purpose }).xpub;
+    if (got !== a.xpub) {
+      console.error(`the committed m/${a.purpose}'/0'/0' xpub is not the one signer.wasm derives:\n  committed ${a.xpub}\n  derived   ${got}`);
+      process.exit(1);
+    }
   }
   s.unload();
   console.log(`the committed keys are the ones signer.wasm derives (${FINGERPRINT})`);
+}
+
+// --- the descriptors signer.wasm exports give Core the addresses of the keys it signs with. The
+// committed keys are coin 0 with testnet version bytes, so the mainnet xpub is re-versioned to match
+{
+  const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const toTpub = (xpub) => {
+    let n = 0n;
+    for (const ch of xpub) n = n * 58n + BigInt(B58.indexOf(ch));
+    const raw = Buffer.from(n.toString(16).padStart(164, "0"), "hex").subarray(0, 78);
+    raw.writeUInt32BE(0x043587cf, 0);
+    const p = Buffer.concat([raw, createHash("sha256").update(createHash("sha256").update(raw).digest()).digest().subarray(0, 4)]);
+    let m = BigInt("0x" + p.toString("hex")), out = "";
+    for (; m > 0n; m /= 58n) out = B58[Number(m % 58n)] + out;
+    return out;
+  };
+  const derive = (desc) =>
+    cli("deriveaddresses", `${desc}#${JSON.parse(cli("getdescriptorinfo", desc)).checksum}`, "[0,4]");
+  const s = await Signer.load(signerWasm);
+  s.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  for (const a of ACCOUNTS) {
+    const { xpub, descriptor } = s.xpub({ purpose: a.purpose });
+    for (const chain of [0, 1]) {
+      const ours = derive(descriptor.replace(xpub, toTpub(xpub)).replace("/<0;1>/*)", `/${chain}/*)`));
+      const core = derive(`${a.kind}([${FINGERPRINT}/${a.purpose}h/0h/0h]${a.tprv}/${chain}/*)`);
+      if (ours !== core) {
+        console.error(`${descriptor} gives other addresses than Core's key on chain ${chain}:\n  ${ours}\n  ${core}`);
+        process.exit(1);
+      }
+    }
+  }
+  s.unload();
+  console.log("the exported wpkh() and tr() descriptors give the addresses Core derives from the keys");
 }
 
 // --- parser.wasm, driven directly: no native host and no WAMR needed

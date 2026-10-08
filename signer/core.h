@@ -71,9 +71,10 @@ int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS],
 /* BTC with eight decimals (60000 -> "0.00060000") */
 void core_format_btc(uint64_t sats, char out[21]);
 
-/* The account xpub (m/84'/coin'/0') and an output descriptor, so the PC side can be watch-only */
+/* The account xpub (m/purpose'/coin'/account') and its wpkh() or tr() descriptor, so the PC side can be
+ * watch-only. purpose is 84 or 86 and account below 2^31; CORE_OK, or CORE_ERR_FORMAT / _NO_SEED */
 #define CORE_XPUB_MAX 120
 #define CORE_DESC_MAX 180
-int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);
+int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);
 
 #endif

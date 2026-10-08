@@ -116,6 +116,24 @@ fun main(args: Array<String>) {
     ok("the descriptor names the account", x.descriptor.startsWith("wpkh([73c5da0a/84h/0h/0h]"))
     ok("the descriptor covers receive and change", x.descriptor.contains("<0;1>/*"))
     ok("the xpub is an xpub", x.xpub.startsWith("xpub"))
+    val tr = s.xpub(purpose = 86)
+    check("BIP86's account 0", tr.xpub, "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ")
+    check("the tr() descriptor", tr.descriptor, "tr([73c5da0a/86h/0h/0h]${tr.xpub}/<0;1>/*)")
+    val a1 = s.xpub(account = 1)
+    check("account 1, as the JavaScript host derives it independently", a1.xpub, "xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyicJgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn")
+    ok("account 1 is named", a1.descriptor.startsWith("wpkh([73c5da0a/84h/0h/1h]xpub"))
+    try {
+        s.xpub(account = -1)
+        ok("xpub for a hardened account is refused", false)
+    } catch (e: SignerException) {
+        ok("xpub for a hardened account is refused", e.message == "xpub: FORMAT")
+    }
+    try {
+        s.xpub(purpose = 49)
+        ok("xpub for BIP49 is refused", false)
+    } catch (e: SignerException) {
+        ok("xpub for BIP49 is refused", e.message!!.contains("FORMAT"))
+    }
 
     // --- signing without a review is refused by this library, and by the module
     run {

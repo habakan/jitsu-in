@@ -141,8 +141,12 @@ export class Signer {
         sig: Uint8Array<ArrayBuffer>;
         raw: Uint8Array<ArrayBuffer>;
     }[];
-    /** The account xpub and an output descriptor, for making a watch-only wallet elsewhere. */
-    xpub(): {
+    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+     *  wallet elsewhere. `account` is below 2^31. */
+    xpub({ purpose, account }?: {
+        purpose?: number | undefined;
+        account?: number | undefined;
+    }): {
         xpub: string;
         descriptor: string;
     };
@@ -173,7 +177,7 @@ export type SignerExports = {
     signer_review: () => number;
     signer_display: () => number;
     signer_sign: () => number;
-    signer_xpub: () => number;
+    signer_xpub: (purpose: number, account: number) => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.
