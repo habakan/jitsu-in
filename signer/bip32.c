@@ -50,3 +50,21 @@ int bip32_derive(const secp256k1_context *ctx, const bip32_node_t *from, const u
     if (!ok) wipe(out, sizeof(*out));
     return ok;
 }
+
+int bip32_child(const bip32_node_t *parent, const uint8_t parent_pub[33], uint32_t i, bip32_node_t *out) {
+    uint8_t data[37], I[64];
+    hmac_sha512_ctx h;
+    int ok;
+    memcpy(data, parent_pub, 33);
+    for (int k = 0; k < 4; k++) data[33 + k] = (uint8_t)(i >> (24 - 8 * k));
+    hmac_sha512_init(&h, parent->chain, 32);
+    sha512_update(&h.inner, data, 37);
+    hmac_sha512_final(&h, I);
+    memcpy(out->key, parent->key, 32);
+    memcpy(out->chain, I + 32, 32);
+    ok = !(i & 0x80000000u) && secp256k1_ec_seckey_tweak_add(secp256k1_context_static, out->key, I);
+    wipe(I, sizeof(I));
+    wipe(&h, sizeof(h));
+    if (!ok) wipe(out, sizeof(*out));
+    return ok;
+}

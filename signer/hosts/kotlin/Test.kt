@@ -2,6 +2,7 @@
 // produced. The signatures are deterministic, so "the same" means byte-identical, not merely valid.
 //
 //   java -cp "test.jar:$CP" TestKt <signer.wasm> <parser.wasm> <psbt> <natively-signed-psbt>
+import wasmsigner.AddressPath
 import wasmsigner.Owner
 import wasmsigner.Signer
 import wasmsigner.SignerException
@@ -116,6 +117,39 @@ fun main(args: Array<String>) {
     ok("the descriptor names the account", x.descriptor.startsWith("wpkh([73c5da0a/84h/0h/0h]"))
     ok("the descriptor covers receive and change", x.descriptor.contains("<0;1>/*"))
     ok("the xpub is an xpub", x.xpub.startsWith("xpub"))
+    val tr = s.xpub(purpose = 86)
+    check("BIP86's account 0", tr.xpub, "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ")
+    check("the tr() descriptor", tr.descriptor, "tr([73c5da0a/86h/0h/0h]${tr.xpub}/<0;1>/*)")
+    val a1 = s.xpub(account = 1)
+    check("account 1, as the JavaScript host derives it independently", a1.xpub, "xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyicJgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn")
+    ok("account 1 is named", a1.descriptor.startsWith("wpkh([73c5da0a/84h/0h/1h]xpub"))
+    try {
+        s.xpub(account = -1)
+        ok("xpub for a hardened account is refused", false)
+    } catch (e: SignerException) {
+        ok("xpub for a hardened account is refused", e.message == "xpub: FORMAT")
+    }
+    try {
+        s.xpub(purpose = 49)
+        ok("xpub for BIP49 is refused", false)
+    } catch (e: SignerException) {
+        ok("xpub for BIP49 is refused", e.message!!.contains("FORMAT"))
+    }
+
+    // --- which of our addresses an address is, against BIP84's and BIP86's vectors. A count of 20,
+    // because Chicory interprets every derivation and 1000 of them take minutes
+    val find = { a: String -> s.findAddress(a, count = 20) }
+    check("BIP84 0/1", find("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), AddressPath(0, 1))
+    check("BIP86 change 1/0", find("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7"), AddressPath(1, 0))
+    check("a BIP21 URI in upper case", find("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"),
+          AddressPath(0, 1))
+    check("not ours", find("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), null)
+    try {
+        find("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
+        ok("findAddress refuses base58", false)
+    } catch (e: SignerException) {
+        ok("findAddress refuses base58", e.message == "findAddress: FORMAT")
+    }
 
     // --- signing without a review is refused by this library, and by the module
     run {
@@ -177,10 +211,13 @@ fun main(args: Array<String>) {
         g.unload()
     }
 
-    // --- a mnemonic whose BIP39 checksum fails, or that is not English, loads nothing
+    // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
     val typed = "abandon ".repeat(11) + "about"
+    check("whitespace and capitals load the same wallet",
+          Signer(signerWasm).init().seedFromMnemonic((" " + typed.replaceFirst(" ", "  ").uppercase() + "\n").toCharArray())
+              .fingerprint, "73c5da0a")
     for ((what, bad) in listOf("a bad checksum" to "abandon ".repeat(11) + "abandon",
-                               "a double space" to typed.replaceFirst(" ", "  "), "capitals" to "A" + typed.drop(1))) {
+                               "a word not in the list" to typed.replace("about", "abaut"))) {
         val b = Signer(signerWasm).init()
         try {
             b.seedFromMnemonic(bad.toCharArray())

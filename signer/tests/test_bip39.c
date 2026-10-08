@@ -60,6 +60,20 @@ int main(void) {
     CHECK(!ok("\xe3\x81\x82\xe3\x81\x84\xe3\x81\x93\xe3\x81\x8f\xe3\x81\x97\xe3\x82\x93"),
           "a non-English word refused");
 
+    /* what a keyboard adds: surrounding and repeated whitespace, and capitals, are normalised away */
+    {
+        static const char typed[] = " \tAbandon abandon  abandon abandon abandon abandon abandon abandon\nabandon "
+                                    "abandon abandon ABOUT\r\n";
+        const char *want = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon "
+                           "about";
+        uint8_t out[sizeof(typed)];
+        size_t n = bip39_normalize((const uint8_t *)typed, sizeof(typed) - 1, out);
+        CHECK(n == strlen(want) && !memcmp(out, want, n), "normalised to the canonical form");
+        CHECK(bip39_normalize((const uint8_t *)" \n ", 3, out) == 0, "only whitespace is empty");
+        CHECK(bip39_normalize((const uint8_t *)"caf\xc3\xa9", 5, out) == 5 && !memcmp(out, "caf\xc3\xa9", 5),
+              "bytes above ASCII are left alone");
+    }
+
     /* generating: entropy to words, against the same vectors, and dice rolls to words */
     for (unsigned i = 0; i < sizeof(bip39_vectors) / sizeof(bip39_vectors[0]); i++) {
         uint8_t ent[32];

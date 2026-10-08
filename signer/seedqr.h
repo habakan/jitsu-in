@@ -15,6 +15,10 @@ int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap);
  * holds. Other wordlists are refused, so a typo cannot pass as a mnemonic in another language */
 int bip39_mnemonic_ok(const uint8_t *mn, size_t len);
 
+/* Leading, trailing and repeated whitespace dropped and A-Z lowered, as keyboards add them. Writes at
+ * most len bytes to out, which may be in, and returns how many */
+size_t bip39_normalize(const uint8_t *in, size_t len, uint8_t *out);
+
 /* The mnemonic for 16, 20, 24, 28 or 32 bytes of entropy, written NUL-terminated to out. Returns its
  * length, or 0 for another length or too small a buffer */
 int bip39_mnemonic_from_entropy(const uint8_t *ent, size_t len, char *out, size_t cap);

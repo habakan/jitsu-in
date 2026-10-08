@@ -152,8 +152,26 @@ export class Signer {
         sig: Uint8Array<ArrayBuffer>;
         raw: Uint8Array<ArrayBuffer>;
     }[];
-    /** The account xpub and an output descriptor, for making a watch-only wallet elsewhere. */
-    xpub(): {
+    /** Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1. Takes
+     *  a bare address or a BIP21 URI; P2WPKH and P2TR only. Returns null when it is not found. */
+    /**
+     * @param {string} address
+     * @param {{ account?: number, count?: number }} [opts]
+     * @returns {{ chain: number, index: number } | null}
+     */
+    findAddress(address: string, { account, count }?: {
+        account?: number;
+        count?: number;
+    }): {
+        chain: number;
+        index: number;
+    } | null;
+    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+     *  wallet elsewhere. `account` is below 2^31. */
+    xpub({ purpose, account }?: {
+        purpose?: number | undefined;
+        account?: number | undefined;
+    }): {
         xpub: string;
         descriptor: string;
     };
@@ -184,7 +202,8 @@ export type SignerExports = {
     signer_review: () => number;
     signer_display: () => number;
     signer_sign: () => number;
-    signer_xpub: () => number;
+    signer_xpub: (purpose: number, account: number) => number;
+    signer_find_address: (len: number, account: number, count: number) => number;
     signer_mnemonic_output: () => number;
     signer_mnemonic_from_entropy: (len: number) => number;
     signer_mnemonic_from_dice: (len: number, words: number) => number;
