@@ -41,7 +41,7 @@ static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t ca
     if (!checksum_ok(idx, n)) return 0;
     for (unsigned i = 0; i < n; i++) {
         size_t w = strnlen(bip39_words[idx[i]], 8);
-        if (len + w + 1 >= cap) return 0;
+        if (len + w + 1 >= cap) return wipe(out, len), 0;
         if (i) out[len++] = ' ';
         memcpy(out + len, bip39_words[idx[i]], w);
         len += w;
@@ -103,6 +103,23 @@ done:
     return ok;
 }
 
+/* Entropy and its SHA-256 checksum, cut into 11-bit word indices. Returns how many words */
+static unsigned entropy_indices(const uint8_t *ent, size_t len, uint16_t idx[24]) {
+    uint8_t hash[32];
+    unsigned ent_bits = (unsigned)len * 8, n = ent_bits / 32 * 3;
+    sha256_of(ent, len, hash);
+    for (unsigned i = 0; i < n; i++) {
+        unsigned v = 0;
+        for (unsigned k = 0; k < 11; k++) {
+            unsigned b = i * 11 + k;
+            v = v << 1 | (b < ent_bits ? ent[b / 8] >> (7 - b % 8) & 1 : hash[0] >> (7 - (b - ent_bits)) & 1);
+        }
+        idx[i] = (uint16_t)v;
+    }
+    wipe(hash, sizeof(hash));
+    return n;
+}
+
 int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap) {
     uint16_t idx[24];
     unsigned n;
@@ -121,24 +138,32 @@ int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap) {
             idx[i] = (uint16_t)v;
         }
     } else if (len == 16 || len == 32) { /* CompactSeedQR: the raw entropy */
-        uint8_t hash[32];
-        unsigned ent_bits = (unsigned)len * 8;
-        n = ent_bits / 32 * 3;
-        sha256_of(payload, len, hash);
-        for (unsigned i = 0; i < n; i++) {
-            unsigned v = 0;
-            for (unsigned k = 0; k < 11; k++) {
-                unsigned b = i * 11 + k;
-                unsigned bit = b < ent_bits ? payload[b / 8] >> (7 - b % 8) & 1 : hash[0] >> (7 - (b - ent_bits)) & 1;
-                v = v << 1 | bit;
-            }
-            idx[i] = (uint16_t)v;
-        }
-        wipe(hash, sizeof(hash));
+        n = entropy_indices(payload, len, idx);
     } else {
         return 0;
     }
     r = check_and_build(idx, n, out, cap);
     wipe(idx, sizeof(idx));
+    return r;
+}
+
+int bip39_mnemonic_from_entropy(const uint8_t *ent, size_t len, char *out, size_t cap) {
+    uint16_t idx[24];
+    int r;
+    if (len < 16 || len > 32 || len % 4) return 0;
+    r = check_and_build(idx, entropy_indices(ent, len, idx), out, cap);
+    wipe(idx, sizeof(idx));
+    return r;
+}
+
+int bip39_mnemonic_from_dice(const uint8_t *rolls, size_t len, unsigned words, char *out, size_t cap) {
+    uint8_t hash[32];
+    int r;
+    if ((words != 12 || len < 50) && (words != 24 || len < 99)) return 0;
+    for (size_t i = 0; i < len; i++)
+        if (rolls[i] < '1' || rolls[i] > '6') return 0;
+    sha256_of(rolls, len, hash);
+    r = bip39_mnemonic_from_entropy(hash, words == 12 ? 16 : 32, out, cap);
+    wipe(hash, sizeof(hash));
     return r;
 }

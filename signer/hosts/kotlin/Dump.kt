@@ -36,6 +36,7 @@ fun main(args: Array<String>) {
     val found = s.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", count = 20)!!
     println("found ${found.chain} ${found.index}")
     println("desc ${s.xpub(purpose = 86, account = 1).descriptor}")
+    println("dice ${String(s.mnemonicFromDice("3".repeat(99).toByteArray()))}")
     s.unload()
     s.init().seedFromSeedQR("5bbd9d71a8ec7990831aff359d426545".chunked(2).map { it.toInt(16).toByte() }.toByteArray())
     println("seedqr fingerprint ${s.fingerprint}")

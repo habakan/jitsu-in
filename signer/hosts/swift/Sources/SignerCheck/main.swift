@@ -86,6 +86,8 @@ if dumpOnly {
     let found = try s.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", count: 20)!
     print("found \(found.chain) \(found.index)")
     print("desc \(try s.xpub(purpose: 86, account: 1).descriptor)")
+    var rolls = [UInt8](String(repeating: "3", count: 99).utf8)
+    print("dice \(String(decoding: try s.mnemonicFromDice(&rolls), as: UTF8.self))")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
     var none: [UInt8] = []
@@ -218,6 +220,42 @@ do {
     ok("an oversized mnemonic is refused", false)
 } catch {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
+}
+
+// --- making a new mnemonic, from entropy and from dice, against BIP39's and the dice vectors
+do {
+    let g = try Signer(signerWasm: signerWasm)
+    try g.initialise()
+    var ent: [UInt8] = [0x9e, 0x88, 0x5d, 0x95, 0x2a, 0xd3, 0x62, 0xca, 0xeb, 0x4e, 0xfe, 0x34, 0xa8, 0xe9, 0x1b, 0xd2]
+    var mn = try g.mnemonicFromEntropy(&ent)
+    check("BIP39's 9e885d95... vector", String(decoding: mn, as: UTF8.self), "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic")
+    ok("the entropy passed in is zeroed", ent.allSatisfy { $0 == 0 })
+    var none: [UInt8] = []
+    check("the generated words load", try g.seedFromMnemonic(&mn, passphrase: &none).fingerprint.count, 8)
+    var rolls = [UInt8](String(repeating: "1", count: 50).utf8)
+    check("50 dice rolls", String(decoding: try g.mnemonicFromDice(&rolls, words: 12), as: UTF8.self), "diet glad hat rural panther lawsuit act drop gallery urge where fit")
+    do {
+        var short = [UInt8](String(repeating: "1", count: 98).utf8)
+        _ = try g.mnemonicFromDice(&short)
+        ok("98 rolls for 24 words are refused", false)
+    } catch {
+        ok("98 rolls for 24 words are refused", "\(error)" == "mnemonic_from_dice failed")
+    }
+    do {
+        var short = [UInt8](repeating: 0, count: 15)
+        _ = try g.mnemonicFromEntropy(&short)
+        ok("15 bytes of entropy are refused", false)
+    } catch {
+        ok("15 bytes of entropy are refused", "\(error)" == "mnemonic_from_entropy failed")
+    }
+    var kept = [UInt8](String(repeating: "1", count: 99).utf8)
+    do {
+        _ = try g.mnemonicFromDice(&kept, words: 18)
+        ok("18 words from dice is refused", false)
+    } catch {
+        ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == 0x31)
+    }
+    g.unload()
 }
 
 // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing

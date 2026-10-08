@@ -193,6 +193,37 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
     }
 
+    // --- making a new mnemonic, from entropy and from dice, against BIP39's and the dice vectors
+    run {
+        val g = Signer(signerWasm).init()
+        val ent = "9e885d952ad362caeb4efe34a8e91bd2".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val mn = g.mnemonicFromEntropy(ent)
+        check("BIP39's 9e885d95... vector", String(mn), "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic")
+        ok("the entropy passed in is zeroed", ent.all { it == 0.toByte() })
+        check("the generated words load", g.seedFromMnemonic(mn).fingerprint.length, 8)
+        check("50 dice rolls", String(g.mnemonicFromDice("1".repeat(50).toByteArray(), 12)), "diet glad hat rural panther lawsuit act drop gallery urge where fit")
+        try {
+            g.mnemonicFromDice("1".repeat(98).toByteArray())
+            ok("98 rolls for 24 words are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("98 rolls for 24 words are refused", e.message == "mnemonic_from_dice failed")
+        }
+        try {
+            g.mnemonicFromEntropy(ByteArray(15))
+            ok("15 bytes of entropy are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("15 bytes of entropy are refused", e.message == "mnemonic_from_entropy failed")
+        }
+        val kept = "1".repeat(99).toByteArray()
+        try {
+            g.mnemonicFromDice(kept, 18)
+            ok("18 words from dice is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == '1'.code.toByte())
+        }
+        g.unload()
+    }
+
     // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
     val typed = "abandon ".repeat(11) + "about"
     check("whitespace and capitals load the same wallet",
