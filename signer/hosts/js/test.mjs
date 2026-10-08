@@ -145,6 +145,26 @@ check("the tr() descriptor", tr.descriptor, `tr([73c5da0a/86h/0h/0h]${tr.xpub}/<
     ok(`m/${purpose}'/0'/${account}' descriptor`, got.descriptor.includes(`/${purpose}h/0h/${account}h]${got.xpub}/`));
   }
 }
+// a refusal leaves nothing of the previous xpub to be read as its own
+{
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mn = new TextEncoder().encode(MNEMONIC), mem = () => new Uint8Array(E.memory.buffer);
+  E.signer_init(0);
+  mem().set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  check("the raw ABI exports an xpub", E.signer_xpub(84, 0), 0);
+  check("then refuses BIP49", E.signer_xpub(49, 0), 1);
+  ok("and the xpub and descriptor buffers are empty", mem()[E.signer_xpub_output()] === 0 && mem()[E.signer_desc_output()] === 0);
+}
+// JavaScript would wrap these into a valid i32, so the library refuses them before the module sees them
+for (const [what, opts] of [["2^32 + 1", { account: 2 ** 32 + 1 }], ["1.5", { account: 1.5 }], ["-1", { account: -1 }]]) {
+  try {
+    S.xpub(opts);
+    ok(`xpub for account ${what} is refused`, false);
+  } catch (e) {
+    ok(`xpub for account ${what} is refused`, e instanceof RangeError);
+  }
+}
 for (const [what, opts] of [["BIP49", { purpose: 49 }], ["a hardened account", { account: 0x80000000 }]]) {
   try {
     S.xpub(opts);

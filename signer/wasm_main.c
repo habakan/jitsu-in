@@ -140,6 +140,9 @@ int EXPORT(signer_sign)(void) {
     return rc ? -rc : (int)n;
 }
 
+/* On a refusal nothing from an earlier call is left to be read as this one's */
 int EXPORT(signer_xpub)(unsigned purpose, unsigned account) {
-    return core_account_xpub(purpose, account, xpub, desc);
+    int rc = core_account_xpub(purpose, account, xpub, desc);
+    if (rc) wipe(xpub, sizeof(xpub)), wipe(desc, sizeof(desc));
+    return rc;
 }

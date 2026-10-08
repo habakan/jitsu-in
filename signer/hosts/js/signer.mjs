@@ -332,6 +332,9 @@ export class Signer {
   /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
    *  wallet elsewhere. `account` is below 2^31. */
   xpub({ purpose = 84, account = 0 } = {}) {
+    if (!Number.isInteger(purpose) || !Number.isInteger(account) || purpose < 0 || account < 0 || account >= 2 ** 32) {
+      throw new RangeError(`purpose ${purpose} and account ${account} have to be integers in range`);
+    }
     const rc = this.#e.signer_xpub(purpose, account);
     if (rc !== 0) throw new SignerError("xpub", rc);
     const dec = new TextDecoder();

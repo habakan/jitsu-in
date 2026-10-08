@@ -17,7 +17,7 @@ against what it claims to be, and 実印 itself, the mark that commits you.</sub
 | | bytes | imports | what it does |
 |---|---:|---:|---|
 | [`parser.wasm`](parser/README.md) | 15,579 | **0** | animated QR (UR) reassembly, PSBT v0 parsing, building a fixed-layout plan, taking signatures back, UR encoding |
-| [`signer.wasm`](signer/docs/abi.md) | 74,416 | **0** | keys, SeedQR, BIP32 derivation, re-checking that plan, building what to display, sighash, signing, xpub export |
+| [`signer.wasm`](signer/docs/abi.md) | 74,439 | **0** | keys, SeedQR, BIP32 derivation, re-checking that plan, building what to display, sighash, signing, xpub export |
 
 <img src="docs/everywhere.svg" alt="The same bytes run everywhere: jitsu-in at the centre, six places it has been run" width="940">
 
