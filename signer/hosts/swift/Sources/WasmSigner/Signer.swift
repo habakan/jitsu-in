@@ -34,7 +34,7 @@ private enum L {
 
 private let coreErr = [
     "OK", "FORMAT", "NO_SEED", "NOT_OURS", "NOTHING_TO_SIGN", "SIGHASH", "SCRIPT",
-    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO",
+    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND",
 ]
 
 public enum SignerError: Error, CustomStringConvertible {
@@ -105,6 +105,12 @@ public struct Signature {
 public struct AccountKey {
     public let xpub: String
     public let descriptor: String
+}
+
+public struct AddressPath: Equatable {
+    public let chain: Int
+    public let index: Int
+    public init(chain: Int, index: Int) { self.chain = chain; self.index = index }
 }
 
 public final class Signer {
@@ -348,6 +354,21 @@ public final class Signer {
                 raw: try bytes(at, L.sigSize)
             )
         }
+    }
+
+    /// Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1.
+    /// Takes a bare address or a BIP21 URI; P2WPKH and P2TR only. Nil when it is not found.
+    public func findAddress(_ address: String, account: UInt32 = 0, count: UInt32 = 1000) throws -> AddressPath? {
+        var a = Substring(address.trimmingCharacters(in: .whitespacesAndNewlines))
+        if a.lowercased().hasPrefix("bitcoin:") { a = a.dropFirst(8) }
+        let bytes = [UInt8](a.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)[0].utf8)
+        let cap = inputCapacity
+        guard bytes.count <= cap else { throw SignerError.tooLarge(size: bytes.count, capacity: cap) }
+        try write(bytes, at: Int(try call("signer_input")))
+        let rc = try call("signer_find_address", [.i32(UInt32(bytes.count)), .i32(account), .i32(count)])
+        if rc >= 0 { return AddressPath(chain: Int(rc >> 20), index: Int(rc & 0xfffff)) }
+        if rc != -Int32(coreErr.firstIndex(of: "NOT_FOUND")!) { throw SignerError.refused(stage: "findAddress", code: -rc) }
+        return nil
     }
 
     /// The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only

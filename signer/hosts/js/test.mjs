@@ -174,6 +174,31 @@ for (const [what, opts] of [["BIP49", { purpose: 49 }], ["a hardened account", {
   }
 }
 
+// --- which of our addresses an address is, against BIP84's and BIP86's vectors
+{
+  const found = (a, o) => JSON.stringify(S.findAddress(a, o));
+  check("BIP84 0/1", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), '{"chain":0,"index":1}');
+  check("BIP84 change 1/0", found("bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"), '{"chain":1,"index":0}');
+  check("BIP86 0/1", found("bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh"), '{"chain":0,"index":1}');
+  check("a BIP21 URI in upper case, as a QR carries it",
+        found("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"), '{"chain":0,"index":1}');
+  check("not ours", found("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), "null");
+  check("beyond count", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { count: 1 }), "null");
+  check("another account", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { account: 1, count: 20 }), "null");
+  for (const [what, a, err, opts] of [["a testnet address", "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl", SignerError],
+                                ["base58", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", SignerError],
+                                ["an oversized string", "bc1q" + "q".repeat(600), RangeError],
+                                ["a NUL inside", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g\0junk", SignerError],
+                                ["a count JavaScript would wrap", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", RangeError, { count: 2 ** 32 + 5 }]]) {
+    try {
+      S.findAddress(a, opts);
+      ok(`findAddress refuses ${what}`, false);
+    } catch (e) {
+      ok(`findAddress refuses ${what}`, e instanceof err);
+    }
+  }
+}
+
 // --- the module refuses to sign a plan it was not shown
 {
   const S2 = await Signer.load(signerWasm);

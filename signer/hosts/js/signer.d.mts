@@ -141,6 +141,20 @@ export class Signer {
         sig: Uint8Array<ArrayBuffer>;
         raw: Uint8Array<ArrayBuffer>;
     }[];
+    /** Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1. Takes
+     *  a bare address or a BIP21 URI; P2WPKH and P2TR only. Returns null when it is not found. */
+    /**
+     * @param {string} address
+     * @param {{ account?: number, count?: number }} [opts]
+     * @returns {{ chain: number, index: number } | null}
+     */
+    findAddress(address: string, { account, count }?: {
+        account?: number;
+        count?: number;
+    }): {
+        chain: number;
+        index: number;
+    } | null;
     /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     xpub({ purpose, account }?: {
@@ -178,6 +192,7 @@ export type SignerExports = {
     signer_display: () => number;
     signer_sign: () => number;
     signer_xpub: (purpose: number, account: number) => number;
+    signer_find_address: (len: number, account: number, count: number) => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.

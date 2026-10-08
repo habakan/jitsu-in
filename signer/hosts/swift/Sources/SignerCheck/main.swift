@@ -83,6 +83,8 @@ if dumpOnly {
         print("out \(o.amount) \(owner[Int(o.owner.rawValue)]) \(kind[Int(o.textKind.rawValue)]) \(o.text)")
     }
     for sig in try s.sign() { print("sig \(sig.input) \(hex(sig.sig))") }
+    let found = try s.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", count: 20)!
+    print("found \(found.chain) \(found.index)")
     print("desc \(try s.xpub(purpose: 86, account: 1).descriptor)")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
@@ -173,6 +175,22 @@ do {
     ok("xpub for BIP49 is refused", false)
 } catch {
     ok("xpub for BIP49 is refused", "\(error)".contains("xpub: FORMAT"))
+}
+
+// --- which of our addresses an address is, against BIP84's and BIP86's vectors. A count of 20,
+// because WasmKit interprets every derivation and 1000 of them take minutes
+func find(_ a: String) throws -> AddressPath? { try s.findAddress(a, count: 20) }
+check("BIP84 0/1", try find("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), AddressPath(chain: 0, index: 1))
+check("BIP86 change 1/0", try find("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7"),
+      AddressPath(chain: 1, index: 0))
+check("a BIP21 URI in upper case", try find("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"),
+      AddressPath(chain: 0, index: 1))
+check("not ours", try find("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), nil)
+do {
+    _ = try find("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
+    ok("findAddress refuses base58", false)
+} catch {
+    ok("findAddress refuses base58", "\(error)" == "findAddress: FORMAT")
 }
 
 // --- signing without a review is refused
