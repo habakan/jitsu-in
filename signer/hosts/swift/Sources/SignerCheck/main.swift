@@ -85,6 +85,7 @@ if dumpOnly {
     for sig in try s.sign() { print("sig \(sig.input) \(hex(sig.sig))") }
     let found = try s.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", count: 20)!
     print("found \(found.chain) \(found.index)")
+    print("desc \(try s.xpub(purpose: 86, account: 1).descriptor)")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
     var none: [UInt8] = []
@@ -157,6 +158,24 @@ let x = try s.xpub()
 ok("the descriptor names the account", x.descriptor.hasPrefix("wpkh([73c5da0a/84h/0h/0h]"))
 ok("the descriptor covers receive and change", x.descriptor.contains("<0;1>/*"))
 ok("the xpub is an xpub", x.xpub.hasPrefix("xpub"))
+let tr = try s.xpub(purpose: 86)
+check("BIP86's account 0", tr.xpub, "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ")
+check("the tr() descriptor", tr.descriptor, "tr([73c5da0a/86h/0h/0h]\(tr.xpub)/<0;1>/*)")
+let a1 = try s.xpub(account: 1)
+check("account 1, as the JavaScript host derives it independently", a1.xpub, "xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyicJgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn")
+ok("account 1 is named", a1.descriptor.hasPrefix("wpkh([73c5da0a/84h/0h/1h]xpub"))
+do {
+    _ = try s.xpub(account: 0x8000_0000)
+    ok("xpub for a hardened account is refused", false)
+} catch {
+    ok("xpub for a hardened account is refused", "\(error)" == "xpub: FORMAT")
+}
+do {
+    _ = try s.xpub(purpose: 49)
+    ok("xpub for BIP49 is refused", false)
+} catch {
+    ok("xpub for BIP49 is refused", "\(error)".contains("xpub: FORMAT"))
+}
 
 // --- which of our addresses an address is, against BIP84's and BIP86's vectors. A count of 20,
 // because WasmKit interprets every derivation and 1000 of them take minutes
@@ -199,6 +218,27 @@ do {
     ok("an oversized mnemonic is refused", false)
 } catch {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
+}
+
+// --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
+do {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](("  " + mnemonicText.uppercased() + "\n").utf8), none: [UInt8] = []
+    check("whitespace and capitals load the same wallet", try b.seedFromMnemonic(&w, passphrase: &none).fingerprint,
+          "73c5da0a")
+}
+for (what, bad) in [("a bad checksum", String(repeating: "abandon ", count: 11) + "abandon"),
+                    ("a word not in the list", mnemonicText.replacingOccurrences(of: "about", with: "abaut"))] {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](bad.utf8), none: [UInt8] = []
+    do {
+        try b.seedFromMnemonic(&w, passphrase: &none)
+        ok("a mnemonic with \(what) is refused", false)
+    } catch {
+        ok("a mnemonic with \(what) is refused", "\(error)".contains("seed_from_mnemonic failed") && b.fingerprint == "00000000")
+    }
 }
 
 // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words

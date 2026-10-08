@@ -158,14 +158,14 @@ check-parser: build/parser.wasm
 	$(MAKE) -C parser test $(TOOLS)
 .PHONY: check-parser
 
-# The signer's C, built natively and checked against the published SeedQR and BIP32 vectors
+# The signer's C, built natively and checked against the published SeedQR, BIP39 and BIP32 vectors
 SIGNER_C_SRC := $(filter-out signer/wasm_main.c,$(SIGNER_SRC))
 build/test_%: signer/tests/test_%.c $(SIGNER_C_SRC) signer/*.h signer/tests/*.h | check-deps
 	@mkdir -p build
 	$(CC) -O1 -Isigner -Iparser/c/include -I$(SECP)/include -I$(SECP)/src $(SECP_DEFS) -o $@ $< $(SIGNER_C_SRC)
 
-check-signer-c: build/test_seedqr build/test_xpub build/test_find
-	build/test_seedqr && build/test_xpub && build/test_find
+check-signer-c: build/test_seedqr build/test_bip39 build/test_xpub build/test_find
+	build/test_seedqr && build/test_bip39 && build/test_xpub && build/test_find
 .PHONY: check-signer-c
 
 check-signer-js: build/signer.wasm build/parser.wasm

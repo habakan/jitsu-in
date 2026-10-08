@@ -392,18 +392,19 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
     return rc;
 }
 
-/* The account xpub (m/84'/coin'/0') and an output descriptor built from it. Hand these to the PC and
- * it can watch the wallet without ever holding a key */
-int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
+/* The account xpub (m/purpose'/coin'/account') and an output descriptor built from it. Hand these to
+ * the PC and it can watch the wallet without ever holding a key */
+int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
     const uint32_t coin = network == CORE_TESTNET ? 1u : 0u;
-    uint32_t path[3] = {84u | H, coin | H, 0u | H};
+    uint32_t path[3] = {purpose | H, coin | H, account | H};
     bip32_node_t parent, node;
     uint8_t pub[33], h[20], ser[78];
-    char fp[9];
-    int ok = 0;
+    char fp[9], acct[11];
+    int rc = CORE_ERR_CRYPTO;
 
-    if (!master_fp) return 0;
-    /* Derived in two steps because the serialization needs the parent's (m/84'/coin') fingerprint */
+    if (!master_fp) return CORE_ERR_NO_SEED;
+    if ((purpose != 84 && purpose != 86) || account >= H) return CORE_ERR_FORMAT;
+    /* Derived in two steps because the serialization needs the parent's (m/purpose'/coin') fingerprint */
     if (!bip32_derive(ctx, &master, path, 2, &parent) || !bip32_pubkey(ctx, parent.key, pub)) goto done;
     hash160(pub, sizeof(pub), h);
     if (!bip32_derive(ctx, &parent, path + 2, 1, &node) || !bip32_pubkey(ctx, node.key, pub)) goto done;
@@ -423,10 +424,27 @@ int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
 
     for (int i = 0; i < 8; i++) fp[i] = "0123456789abcdef"[master_fp >> (28 - 4 * i) & 15];
     fp[8] = 0;
+    {
+        unsigned n = 0;
+        char rev[10];
+        uint32_t a = account;
+        do rev[n++] = (char)('0' + a % 10), a /= 10;
+        while (a);
+        for (unsigned i = 0; i < n; i++) acct[i] = rev[n - 1 - i];
+        acct[n] = 0;
+    }
     /* An output descriptor Sparrow and others read as is; <0;1> covers receive and change in one line.
      * Built by hand because snprintf drags the whole of stdio into the wasm build */
     {
-        const char *parts[] = {"wpkh([", fp, "/84h/", coin ? "1" : "0", "h/0h]", out, "/<0;1>/*)"};
+        const char *parts[] = {purpose == 86 ? "tr([" : "wpkh([",
+                               fp,
+                               purpose == 86 ? "/86h/" : "/84h/",
+                               coin ? "1" : "0",
+                               "h/",
+                               acct,
+                               "h]",
+                               out,
+                               "/<0;1>/*)"};
         size_t o = 0;
         for (unsigned k = 0; k < sizeof(parts) / sizeof(*parts); k++) {
             size_t n = strlen(parts[k]);
@@ -436,9 +454,9 @@ int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
         }
         desc[o] = 0;
     }
-    ok = 1;
+    rc = CORE_OK;
 done:
     wipe(&parent, sizeof(parent));
     wipe(&node, sizeof(node));
-    return ok;
+    return rc;
 }

@@ -44,6 +44,8 @@ public enum SignerError: Error, CustomStringConvertible {
     case outOfBounds(offset: Int, count: Int)
     /// Not a signer.wasm, or it speaks an ABI this host does not.
     case unexpectedModule(String)
+    /// The module refused what was given: a mnemonic or SeedQR that is not valid BIP39, for instance.
+    case invalidInput(String)
     /// More bytes than the module's buffer takes.
     case tooLarge(size: Int, capacity: Int)
     /// sign() before review() passed. One approval permits one signing.
@@ -55,7 +57,7 @@ public enum SignerError: Error, CustomStringConvertible {
             return "\(s): " + (coreErr.indices.contains(Int(c)) ? coreErr[Int(c)] : "unknown(\(c))")
         case .outOfBounds(let o, let n):
             return "the module returned an offset outside its memory: \(o)+\(n)"
-        case .unexpectedModule(let s): return s
+        case .unexpectedModule(let s), .invalidInput(let s): return s
         case .tooLarge(let s, let c): return "\(s) bytes does not fit in \(c)"
         case .notReviewed: return "review() has to pass first; one approval permits one signing"
         }
@@ -216,7 +218,7 @@ public final class Signer {
         try write(passphrase, at: at + mnemonic.count)
         let rc = try call("signer_seed_from_mnemonic",
                           [.i32(UInt32(mnemonic.count)), .i32(UInt32(passphrase.count))])
-        guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_mnemonic failed") }
+        guard rc == 1 else { throw SignerError.invalidInput("seed_from_mnemonic failed") }
         return self
     }
 
@@ -238,7 +240,7 @@ public final class Signer {
         try write(passphrase, at: at + payload.count)
         let rc = try call("signer_seed_from_seedqr",
                           [.i32(UInt32(payload.count)), .i32(UInt32(passphrase.count))])
-        guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_seedqr failed") }
+        guard rc == 1 else { throw SignerError.invalidInput("seed_from_seedqr failed") }
         return self
     }
 
@@ -369,9 +371,10 @@ public final class Signer {
         return nil
     }
 
-    /// The account xpub and an output descriptor, for making a watch-only wallet elsewhere.
-    public func xpub() throws -> AccountKey {
-        let rc = try call("signer_xpub")
+    /// The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /// wallet elsewhere. `account` is below 2^31.
+    public func xpub(purpose: UInt32 = 84, account: UInt32 = 0) throws -> AccountKey {
+        let rc = try call("signer_xpub", [.i32(purpose), .i32(account)])
         guard rc == 0 else { throw SignerError.refused(stage: "xpub", code: rc) }
         return AccountKey(
             xpub: try cstr(Int(try call("signer_xpub_output")), L.xpubMax),

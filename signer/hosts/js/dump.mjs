@@ -41,6 +41,7 @@ for (const s of S.sign()) {
 }
 const found = S.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", { count: 20 });
 console.log(`found ${found.chain} ${found.index}`);
+console.log(`desc ${S.xpub({ purpose: 86, account: 1 }).descriptor}`);
 S.unload();
 S.init().seedFromSeedQR(Uint8Array.from(Buffer.from("5bbd9d71a8ec7990831aff359d426545", "hex")));
 console.log(`seedqr fingerprint ${S.fingerprint}`);

@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 75,422 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 76,145 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,9 +12,9 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 56 checks in [test.mjs](../hosts/js/test.mjs) |
-| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 41 checks in [Test.kt](../hosts/kotlin/Test.kt) |
-| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 38 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 78 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 50 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 47 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 
@@ -73,14 +73,14 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | | returns |
 |---|---|
 | `signer_init(testnet: i32)` | 1 on success. `testnet` covers signet too |
-| `signer_seed_from_mnemonic(mn_len, pass_len)` | 1 on success. PBKDF2 2048 rounds, about half a second |
+| `signer_seed_from_mnemonic(mn_len, pass_len)` | 1 on success. English BIP39 words with a valid checksum; surrounding and repeated whitespace and capitals are normalised first, the passphrase is used as given. PBKDF2 2048 rounds, about half a second |
 | `signer_seed_from_seedqr(qr_len, pass_len)` | 1 on success. Standard (48 or 96 digits) or Compact (16 or 32 bytes); 0 if the BIP39 checksum fails |
 | `signer_load_seed()` | 1 on success, using the first 64 bytes of the input buffer |
 | `signer_set_prevtx(i, off, len)` | 1 on success. `len` of 0 means that input has no previous transaction |
 | `signer_review()` | 0 on success, otherwise one of the errors below |
 | `signer_display()` | 0 on success |
 | `signer_sign()` | the number of signatures, or the negated error |
-| `signer_xpub()` | 0 on success |
+| `signer_xpub(purpose, account)` | 0 on success. m/purpose'/coin'/account' with `purpose` 84 (`wpkh()`) or 86 (`tr()`) and `account` below 2^31, otherwise `FORMAT`, with the xpub and descriptor buffers emptied |
 | `signer_find_address(len, account, count)` | where the address in `signer_input()` is on m/purpose'/coin'/account', receive then change, indices 0 to `count`-1: `chain << 20 \| index`, or the negated error; `NOT_FOUND` when it is not there. See below |
 | `signer_fingerprint()` | the master fingerprint, or 0 when no seed is loaded |
 | `signer_unload()` | nothing. Zeroes the key, the plan, the signatures and the display |
