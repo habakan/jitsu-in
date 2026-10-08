@@ -159,6 +159,22 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
     }
 
+    // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
+    val typed = "abandon ".repeat(11) + "about"
+    check("whitespace and capitals load the same wallet",
+          Signer(signerWasm).init().seedFromMnemonic((" " + typed.replaceFirst(" ", "  ").uppercase() + "\n").toCharArray())
+              .fingerprint, "73c5da0a")
+    for ((what, bad) in listOf("a bad checksum" to "abandon ".repeat(11) + "abandon",
+                               "a word not in the list" to typed.replace("about", "abaut"))) {
+        val b = Signer(signerWasm).init()
+        try {
+            b.seedFromMnemonic(bad.toCharArray())
+            ok("a mnemonic with $what is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("a mnemonic with $what is refused", e.message == "seed_from_mnemonic failed" && b.fingerprint == "00000000")
+        }
+    }
+
     // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words
     run {
         val words = "forum undo fragile fade shy sign arrest garment culture tube off merit"

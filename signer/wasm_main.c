@@ -79,8 +79,13 @@ static int seed_from(const uint8_t *mn, size_t mn_len, const uint8_t *pass, size
     return ok;
 }
 
+/* English BIP39 only, and the checksum has to hold: a typo is refused rather than becoming a wallet.
+ * Whitespace and capitals are normalised first; the passphrase is used exactly as given */
 int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
-    int ok = mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len && seed_from(in, mn_len, in + mn_len, pass_len);
+    size_t n = 0;
+    int ok = mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len;
+    if (ok) n = bip39_normalize(in, mn_len, in);
+    ok = ok && bip39_mnemonic_ok(in, n) && seed_from(in, n, in + mn_len, pass_len);
     wipe(in, sizeof(in));
     return ok;
 }
