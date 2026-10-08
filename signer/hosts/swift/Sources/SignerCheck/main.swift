@@ -202,6 +202,27 @@ do {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
 }
 
+// --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
+do {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](("  " + mnemonicText.uppercased() + "\n").utf8), none: [UInt8] = []
+    check("whitespace and capitals load the same wallet", try b.seedFromMnemonic(&w, passphrase: &none).fingerprint,
+          "73c5da0a")
+}
+for (what, bad) in [("a bad checksum", String(repeating: "abandon ", count: 11) + "abandon"),
+                    ("a word not in the list", mnemonicText.replacingOccurrences(of: "about", with: "abaut"))] {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](bad.utf8), none: [UInt8] = []
+    do {
+        try b.seedFromMnemonic(&w, passphrase: &none)
+        ok("a mnemonic with \(what) is refused", false)
+    } catch {
+        ok("a mnemonic with \(what) is refused", "\(error)".contains("seed_from_mnemonic failed") && b.fingerprint == "00000000")
+    }
+}
+
 // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words
 do {
     let words = "forum undo fragile fade shy sign arrest garment culture tube off merit"

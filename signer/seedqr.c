@@ -18,35 +18,89 @@ static void sha256_of(const uint8_t *p, size_t n, uint8_t out[32]) {
 }
 
 /* Take 11 bits per word index back into entropy and checksum, then verify it with SHA-256 */
-static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t cap) {
+static int checksum_ok(const uint16_t *idx, unsigned n) {
     uint8_t ent[32], hash[32];
-    unsigned ent_bits = n * 11 - n / 3, ent_len = ent_bits / 8, cs_bits = n / 3;
-    size_t len = 0;
-    int ok;
+    unsigned ent_bits = n * 11 - n / 3, cs_bits = n / 3;
+    int ok = 1;
 
     memset(ent, 0, sizeof(ent));
-    for (unsigned i = 0; i < n * 11; i++) {
-        unsigned bit = idx[i / 11] >> (10 - i % 11) & 1;
-        if (i < ent_bits) ent[i / 8] |= (uint8_t)(bit << (7 - i % 8));
-    }
-    sha256_of(ent, ent_len, hash);
-    ok = 1;
+    for (unsigned i = 0; i < ent_bits; i++) ent[i / 8] |= (uint8_t)((idx[i / 11] >> (10 - i % 11) & 1) << (7 - i % 8));
+    sha256_of(ent, ent_bits / 8, hash);
     for (unsigned i = 0; i < cs_bits; i++) {
         unsigned want = hash[0] >> (7 - i) & 1, got = idx[n - 1] >> (10 - (ent_bits % 11 + i)) & 1;
         ok &= want == got;
     }
+    wipe(ent, sizeof(ent));
+    wipe(hash, sizeof(hash));
+    return ok;
+}
 
-    for (unsigned i = 0; ok && i < n; i++) {
+static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t cap) {
+    size_t len = 0;
+
+    if (!checksum_ok(idx, n)) return 0;
+    for (unsigned i = 0; i < n; i++) {
         size_t w = strnlen(bip39_words[idx[i]], 8);
-        if (len + w + 1 >= cap) return wipe(ent, sizeof(ent)), wipe(hash, sizeof(hash)), 0;
+        if (len + w + 1 >= cap) return 0;
         if (i) out[len++] = ' ';
         memcpy(out + len, bip39_words[idx[i]], w);
         len += w;
     }
     out[len] = 0;
-    wipe(ent, sizeof(ent));
-    wipe(hash, sizeof(hash));
-    return ok ? (int)len : 0;
+    return (int)len;
+}
+
+/* The list is sorted, and NUL padding sorts before any letter, so comparing all eight bytes keeps it
+ * sorted. Only a-z is let through, so a word padded with NUL cannot match a shorter one */
+static int word_index(const uint8_t *w, size_t len) {
+    char key[8] = {0};
+    int lo = 0, hi = 2047, found = -1;
+    for (size_t i = 0; i < len && len <= 8; i++) {
+        if (w[i] < 'a' || w[i] > 'z') hi = -1;
+        key[i] = (char)w[i];
+    }
+    while (len && len <= 8 && found < 0 && lo <= hi) {
+        int mid = (lo + hi) / 2, c = memcmp(key, bip39_words[mid], 8);
+        if (!c) found = mid;
+        else if (c < 0) hi = mid - 1;
+        else lo = mid + 1;
+    }
+    wipe(key, sizeof(key));
+    return found;
+}
+
+size_t bip39_normalize(const uint8_t *in, size_t len, uint8_t *out) {
+    size_t n = 0;
+    int gap = 0;
+    for (size_t i = 0; i < len; i++) {
+        uint8_t c = in[i];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            gap = n > 0;
+            continue;
+        }
+        if (gap) out[n++] = ' ', gap = 0;
+        out[n++] = c >= 'A' && c <= 'Z' ? (uint8_t)(c + 32) : c;
+    }
+    return n;
+}
+
+int bip39_mnemonic_ok(const uint8_t *mn, size_t len) {
+    uint16_t idx[24];
+    unsigned n = 0;
+    size_t start = 0;
+    int ok = 0;
+
+    for (size_t i = 0; i <= len; i++) {
+        if (i < len && mn[i] != ' ') continue;
+        int v = n < 24 ? word_index(mn + start, i - start) : -1;
+        if (v < 0) goto done;
+        idx[n++] = (uint16_t)v;
+        start = i + 1;
+    }
+    ok = n % 3 == 0 && n >= 12 && checksum_ok(idx, n);
+done:
+    wipe(idx, sizeof(idx));
+    return ok;
 }
 
 int seedqr_decode(const uint8_t *payload, size_t len, char *out, size_t cap) {

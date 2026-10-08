@@ -224,6 +224,23 @@ for (const tamper of [false, true]) {
   S3.unload();
 }
 
+// --- what a keyboard adds loads the same wallet; a mnemonic whose BIP39 checksum fails, or a word
+// that is not English BIP39, loads nothing
+for (const typed of [" " + MNEMONIC.replace(" ", "  ").toUpperCase() + "\n", "Abandon" + MNEMONIC.slice(7)]) {
+  const B = await Signer.load(signerWasm);
+  check(`${JSON.stringify(typed.slice(0, 18))}... loads the same wallet`,
+        B.init().seedFromMnemonic(new TextEncoder().encode(typed)).fingerprint, "73c5da0a");
+}
+for (const [what, bad] of [["a bad checksum", "abandon ".repeat(11) + "abandon"], ["a word not in the list", MNEMONIC.replace("about", "abaut")]]) {
+  const B = await Signer.load(signerWasm);
+  try {
+    B.init().seedFromMnemonic(new TextEncoder().encode(bad));
+    ok(`a mnemonic with ${what} is refused`, false);
+  } catch (e) {
+    ok(`a mnemonic with ${what} is refused`, /seed_from_mnemonic failed/.test(e.message) && B.fingerprint === "00000000");
+  }
+}
+
 // --- SeedQR, against the published vector 4: the words never leave the module, so the fingerprint
 // has to equal the one from typing them
 {
