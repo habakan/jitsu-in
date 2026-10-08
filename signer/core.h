@@ -75,10 +75,9 @@ void core_format_btc(uint64_t sats, char out[21]);
 /* The account xpub (m/84'/coin'/0') and an output descriptor, so the PC side can be watch-only */
 #define CORE_XPUB_MAX 120
 #define CORE_DESC_MAX 180
-/* Which index on m/purpose'/coin'/account'/chain an address is, searching 0 to count-1. purpose
- * follows from the address: bc1q/tb1q is 84, bc1p/tb1p is 86, and anything else is CORE_ERR_FORMAT.
- * Returns the index, or -CORE_ERR_* */
-int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t chain, uint32_t count);
+/* Where on m/purpose'/coin'/account' an address is: receive then change, indices below count, as chain << 20 |
+ * index, or -CORE_ERR_*. bc1q/tb1q is purpose 84, bc1p/tb1p 86; any other form is CORE_ERR_FORMAT */
+int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t count);
 
 int core_account_xpub(char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);
 

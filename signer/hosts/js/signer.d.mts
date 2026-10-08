@@ -188,7 +188,7 @@ export type SignerExports = {
     signer_display: () => number;
     signer_sign: () => number;
     signer_xpub: () => number;
-    signer_find_address: (len: number, account: number, chain: number, count: number) => number;
+    signer_find_address: (len: number, account: number, count: number) => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.

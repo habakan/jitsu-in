@@ -120,12 +120,14 @@ ok("the xpub is an xpub", x.xpub.startsWith("xpub"));
         found("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"), '{"chain":0,"index":1}');
   check("not ours", found("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), "null");
   check("beyond count", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { count: 1 }), "null");
-  check("another account", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { account: 1 }), "null");
-  for (const [what, a, err] of [["a testnet address", "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl", SignerError],
+  check("another account", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { account: 1, count: 20 }), "null");
+  for (const [what, a, err, opts] of [["a testnet address", "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl", SignerError],
                                 ["base58", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", SignerError],
-                                ["an oversized string", "bc1q" + "q".repeat(600), RangeError]]) {
+                                ["an oversized string", "bc1q" + "q".repeat(600), RangeError],
+                                ["a NUL inside", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g\0junk", SignerError],
+                                ["a count JavaScript would wrap", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", RangeError, { count: 2 ** 32 + 5 }]]) {
     try {
-      S.findAddress(a);
+      S.findAddress(a, opts);
       ok(`findAddress refuses ${what}`, false);
     } catch (e) {
       ok(`findAddress refuses ${what}`, e instanceof err);

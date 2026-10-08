@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 74,983 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 75,422 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,7 +12,7 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 54 checks in [test.mjs](../hosts/js/test.mjs) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 56 checks in [test.mjs](../hosts/js/test.mjs) |
 | Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 41 checks in [Test.kt](../hosts/kotlin/Test.kt) |
 | Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 38 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
@@ -81,7 +81,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | `signer_display()` | 0 on success |
 | `signer_sign()` | the number of signatures, or the negated error |
 | `signer_xpub()` | 0 on success |
-| `signer_find_address(len, account, chain, count)` | the index of the address in `signer_input()` on m/purpose'/coin'/account'/chain, searching 0 to `count`-1, or the negated error; `NOT_FOUND` when it is not there. See below |
+| `signer_find_address(len, account, count)` | where the address in `signer_input()` is on m/purpose'/coin'/account', receive then change, indices 0 to `count`-1: `chain << 20 \| index`, or the negated error; `NOT_FOUND` when it is not there. See below |
 | `signer_fingerprint()` | the master fingerprint, or 0 when no seed is loaded |
 | `signer_unload()` | nothing. Zeroes the key, the plan, the signatures and the display |
 
@@ -90,12 +90,13 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 `signer_find_address` answers "is this address mine?" before someone sends to it. The purpose follows
 from the address: `bc1q`/`tb1q` is BIP84, `bc1p`/`tb1p` is BIP86. Anything else, an address for the
 other network, or mixed case is `FORMAT`; all upper case is accepted, since that is what a QR's
-alphanumeric mode carries. `count` is 1 to 100,000. Searching receive and change is two calls, and the
-host libraries' `findAddress` makes them and strips a `bitcoin:` URI.
+alphanumeric mode carries; any character outside `0-9a-zA-Z` is `FORMAT` too. `count` is 1 to 100,000.
+The host libraries' `findAddress` strips a `bitcoin:` URI and returns `{ chain, index }`.
 
-Each index is a derivation, and an address that is not ours costs all of them. 2 x 1000 took 0.3 s
-(P2WPKH) and 0.5 s (P2TR) in V8, and 15 s and 32 s in WAMR's classic interpreter, on an M-series Mac.
-Chicory and WasmKit are slower still, which is why their tests pass a count of 20.
+An address of the right form but the wrong length (P2WSH, or one cut short) cannot be ours and is
+`NOT_FOUND` at once. Otherwise each index is a derivation, and an address that is not ours costs all
+of them: 2 x 1000 took 0.13 s (P2WPKH) and 0.40 s (P2TR) in V8, and 7.8 s and 26 s in WAMR's classic
+interpreter, on an M-series Mac. Chicory and WasmKit are slower still, so their tests pass a count of 20.
 
 ## Errors
 

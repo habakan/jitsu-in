@@ -362,13 +362,10 @@ public final class Signer {
         let bytes = [UInt8](a.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)[0].utf8)
         let cap = inputCapacity
         guard bytes.count <= cap else { throw SignerError.tooLarge(size: bytes.count, capacity: cap) }
-        for chain in 0 ... 1 {
-            try write(bytes, at: Int(try call("signer_input")))
-            let rc = try call("signer_find_address",
-                              [.i32(UInt32(bytes.count)), .i32(account), .i32(UInt32(chain)), .i32(count)])
-            if rc >= 0 { return AddressPath(chain: chain, index: Int(rc)) }
-            if rc != -12 { throw SignerError.refused(stage: "findAddress", code: -rc) }
-        }
+        try write(bytes, at: Int(try call("signer_input")))
+        let rc = try call("signer_find_address", [.i32(UInt32(bytes.count)), .i32(account), .i32(count)])
+        if rc >= 0 { return AddressPath(chain: Int(rc >> 20), index: Int(rc & 0xfffff)) }
+        if rc != -Int32(coreErr.firstIndex(of: "NOT_FOUND")!) { throw SignerError.refused(stage: "findAddress", code: -rc) }
         return nil
     }
 

@@ -42,7 +42,7 @@ const L = {
  *   signer_display: () => number,
  *   signer_sign: () => number,
  *   signer_xpub: () => number,
- *   signer_find_address: (len: number, account: number, chain: number, count: number) => number,
+ *   signer_find_address: (len: number, account: number, count: number) => number,
  * }} SignerExports
  */
 
@@ -63,6 +63,8 @@ const L = {
 
 export const OWNER = { EXTERNAL: 0, CHANGE: 1, SELF: 2 };
 export const TEXT_KIND = { ADDRESS: 0, OP_RETURN: 1, SCRIPT: 2 };
+
+const NOT_FOUND = 12;
 
 /** CORE_ERR_* by value, as signer/docs/abi.md lists them.
  *  @type {Record<number, string>} */
@@ -342,12 +344,13 @@ export class Signer {
     const bytes = new TextEncoder().encode(address.trim().replace(/^bitcoin:/i, "").split("?")[0]);
     const cap = this.#e.signer_input_cap();
     if (bytes.length > cap) throw new RangeError(`an address of ${bytes.length} bytes, cap is ${cap}`);
-    for (const chain of [0, 1]) {
-      this.#mem.set(bytes, this.#e.signer_input());
-      const rc = this.#e.signer_find_address(bytes.length, account, chain, count);
-      if (rc >= 0) return { chain, index: rc };
-      if (rc !== -12) throw new SignerError("findAddress", -rc);
+    if (!Number.isInteger(account) || !Number.isInteger(count) || account < 0 || count < 0 || account >= 2 ** 32 || count >= 2 ** 32) {
+      throw new RangeError(`account ${account} and count ${count} have to be integers in range`);
     }
+    this.#mem.set(bytes, this.#e.signer_input());
+    const rc = this.#e.signer_find_address(bytes.length, account, count);
+    if (rc >= 0) return { chain: rc >> 20, index: rc & 0xfffff };
+    if (rc !== -NOT_FOUND) throw new SignerError("findAddress", -rc);
     return null;
   }
 

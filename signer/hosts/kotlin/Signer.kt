@@ -304,12 +304,10 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         val bytes = address.trim().replace(Regex("^bitcoin:", RegexOption.IGNORE_CASE), "")
             .substringBefore('?').toByteArray()
         require(bytes.size <= inputCapacity) { "${bytes.size} bytes of address does not fit in $inputCapacity" }
-        for (chain in 0..1) {
-            memory.write(call("signer_input"), bytes)
-            val rc = call("signer_find_address", bytes.size.toLong(), account.toLong(), chain.toLong(), count.toLong())
-            if (rc >= 0) return AddressPath(chain, rc)
-            if (rc != -12) throw SignerException("findAddress", -rc)
-        }
+        memory.write(call("signer_input"), bytes)
+        val rc = call("signer_find_address", bytes.size.toLong(), account.toLong(), count.toLong())
+        if (rc >= 0) return AddressPath(rc shr 20, rc and 0xfffff)
+        if (rc != -CORE_ERR.indexOf("NOT_FOUND")) throw SignerException("findAddress", -rc)
         return null
     }
 
