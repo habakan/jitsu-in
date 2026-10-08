@@ -37,7 +37,7 @@ private object L {
 
 private val CORE_ERR = arrayOf(
     "OK", "FORMAT", "NO_SEED", "NOT_OURS", "NOTHING_TO_SIGN", "SIGHASH", "SCRIPT",
-    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO",
+    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND",
 )
 
 class SignerException(val stage: String, val code: Int) : Exception(
@@ -69,6 +69,7 @@ class Display(val fee: Long, val spend: Long, val outputs: List<DisplayOutput>)
 class Signature(val input: Int, val pubkey: ByteArray, val sig: ByteArray, val raw: ByteArray)
 
 class AccountKey(val xpub: String, val descriptor: String)
+data class AddressPath(val chain: Int, val index: Int)
 
 class Signer(signerWasm: ByteArray, sha256: String? = null) {
     init {
@@ -293,6 +294,21 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
                 raw = bytes(at, L.SIG_SIZE),
             )
         }
+    }
+
+    /**
+     * Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1.
+     * Takes a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Null when it is not found.
+     */
+    fun findAddress(address: String, account: Int = 0, count: Int = 1000): AddressPath? {
+        val bytes = address.trim().replace(Regex("^bitcoin:", RegexOption.IGNORE_CASE), "")
+            .substringBefore('?').toByteArray()
+        require(bytes.size <= inputCapacity) { "${bytes.size} bytes of address does not fit in $inputCapacity" }
+        memory.write(call("signer_input"), bytes)
+        val rc = call("signer_find_address", bytes.size.toLong(), account.toLong(), count.toLong())
+        if (rc >= 0) return AddressPath(rc shr 20, rc and 0xfffff)
+        if (rc != -CORE_ERR.indexOf("NOT_FOUND")) throw SignerException("findAddress", -rc)
+        return null
     }
 
     /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only

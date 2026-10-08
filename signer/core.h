@@ -22,6 +22,7 @@ enum {
     CORE_ERR_FEE,
     CORE_ERR_NOT_REVIEWED,
     CORE_ERR_CRYPTO,
+    CORE_ERR_NOT_FOUND, /* core_find_address: none of the addresses searched is this one */
 };
 
 typedef enum { CORE_MAINNET = 0, CORE_TESTNET = 1 } core_network_t;
@@ -70,6 +71,10 @@ int core_display(const plan_t *p, const core_review_t *r, core_display_t *d);
 int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS], unsigned *n_sigs);
 /* BTC with eight decimals (60000 -> "0.00060000") */
 void core_format_btc(uint64_t sats, char out[21]);
+
+/* Where on m/purpose'/coin'/account' an address is: receive then change, indices below count, as chain << 20 |
+ * index, or -CORE_ERR_*. 3/2 (P2SH) is purpose 49, bc1q/tb1q 84, bc1p/tb1p 86; any other is CORE_ERR_FORMAT */
+int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t count);
 
 /* The account xpub (m/purpose'/coin'/account') and its sh(wpkh()), wpkh() or tr() descriptor, so the PC
  * side can be watch-only. purpose is 49, 84 or 86 and account below 2^31; CORE_OK, or _FORMAT / _NO_SEED */

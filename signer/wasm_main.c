@@ -19,6 +19,7 @@
  *   init / seed / seedqr / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
  *   review / display / xpub               CORE_OK (0) on success, CORE_ERR_* otherwise
  *   sign                                  the number of signatures, or -CORE_ERR_*
+ *   find_address                          chain << 20 | index, or -CORE_ERR_*
  * Buffer accessors return a pointer, fingerprint returns the value, unload returns nothing. */
 
 /* Where the host writes. All static: this module never allocates */
@@ -79,8 +80,13 @@ static int seed_from(const uint8_t *mn, size_t mn_len, const uint8_t *pass, size
     return ok;
 }
 
+/* English BIP39 only, and the checksum has to hold: a typo is refused rather than becoming a wallet.
+ * Whitespace and capitals are normalised first; the passphrase is used exactly as given */
 int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
-    int ok = mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len && seed_from(in, mn_len, in + mn_len, pass_len);
+    size_t n = 0;
+    int ok = mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len;
+    if (ok) n = bip39_normalize(in, mn_len, in);
+    ok = ok && bip39_mnemonic_ok(in, n) && seed_from(in, n, in + mn_len, pass_len);
     wipe(in, sizeof(in));
     return ok;
 }
@@ -140,6 +146,16 @@ int EXPORT(signer_sign)(void) {
     return rc ? -rc : (int)n;
 }
 
+/* On a refusal nothing from an earlier call is left to be read as this one's */
 int EXPORT(signer_xpub)(unsigned purpose, unsigned account) {
-    return core_account_xpub(purpose, account, xpub, desc);
+    int rc = core_account_xpub(purpose, account, xpub, desc);
+    if (rc) wipe(xpub, sizeof(xpub)), wipe(desc, sizeof(desc));
+    return rc;
+}
+
+/* in holds the address. Nothing secret, but cleared like every other use of in */
+int EXPORT(signer_find_address)(unsigned len, unsigned account, unsigned count) {
+    int rc = len <= sizeof(in) ? core_find_address((const char *)in, len, account, count) : -CORE_ERR_FORMAT;
+    wipe(in, sizeof(in));
+    return rc;
 }

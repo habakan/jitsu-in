@@ -145,12 +145,58 @@ check("the tr() descriptor", tr.descriptor, `tr([73c5da0a/86h/0h/0h]${tr.xpub}/<
     ok(`m/${purpose}'/0'/${account}' descriptor`, got.descriptor.includes(`/${purpose}h/0h/${account}h]${got.xpub}/`));
   }
 }
+// a refusal leaves nothing of the previous xpub to be read as its own
+{
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mn = new TextEncoder().encode(MNEMONIC), mem = () => new Uint8Array(E.memory.buffer);
+  E.signer_init(0);
+  mem().set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  check("the raw ABI exports an xpub", E.signer_xpub(84, 0), 0);
+  check("then refuses BIP44", E.signer_xpub(44, 0), 1);
+  ok("and the xpub and descriptor buffers are empty", mem()[E.signer_xpub_output()] === 0 && mem()[E.signer_desc_output()] === 0);
+}
+// JavaScript would wrap these into a valid i32, so the library refuses them before the module sees them
+for (const [what, opts] of [["2^32 + 1", { account: 2 ** 32 + 1 }], ["1.5", { account: 1.5 }], ["-1", { account: -1 }]]) {
+  try {
+    S.xpub(opts);
+    ok(`xpub for account ${what} is refused`, false);
+  } catch (e) {
+    ok(`xpub for account ${what} is refused`, e instanceof RangeError);
+  }
+}
 for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", { account: 0x80000000 }]]) {
   try {
     S.xpub(opts);
     ok(`xpub for ${what} is refused`, false);
   } catch (e) {
     ok(`xpub for ${what} is refused`, e instanceof SignerError && /FORMAT/.test(e.message));
+  }
+}
+
+// --- which of our addresses an address is, against BIP84's and BIP86's vectors
+{
+  const found = (a, o) => JSON.stringify(S.findAddress(a, o));
+  check("BIP84 0/1", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), '{"chain":0,"index":1}');
+  check("BIP84 change 1/0", found("bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"), '{"chain":1,"index":0}');
+  check("BIP86 0/1", found("bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh"), '{"chain":0,"index":1}');
+  check("BIP49 change 1/0, in base58", found("34K56kSjgUCUSD8GTtuF7c9Zzwokbs6uZ7"), '{"chain":1,"index":0}');
+  check("a BIP21 URI in upper case, as a QR carries it",
+        found("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"), '{"chain":0,"index":1}');
+  check("not ours", found("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), "null");
+  check("beyond count", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { count: 1 }), "null");
+  check("another account", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { account: 1, count: 20 }), "null");
+  for (const [what, a, err, opts] of [["a testnet address", "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl", SignerError],
+                                ["base58", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", SignerError],
+                                ["an oversized string", "bc1q" + "q".repeat(600), RangeError],
+                                ["a NUL inside", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g\0junk", SignerError],
+                                ["a count JavaScript would wrap", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", RangeError, { count: 2 ** 32 + 5 }]]) {
+    try {
+      S.findAddress(a, opts);
+      ok(`findAddress refuses ${what}`, false);
+    } catch (e) {
+      ok(`findAddress refuses ${what}`, e instanceof err);
+    }
   }
 }
 
@@ -230,6 +276,23 @@ for (const tamper of [false, true]) {
   S3.setPrevTxs(prevTxs);
   check("the signer still reviews afterwards", S3.review().nSign > 0, true);
   S3.unload();
+}
+
+// --- what a keyboard adds loads the same wallet; a mnemonic whose BIP39 checksum fails, or a word
+// that is not English BIP39, loads nothing
+for (const typed of [" " + MNEMONIC.replace(" ", "  ").toUpperCase() + "\n", "Abandon" + MNEMONIC.slice(7)]) {
+  const B = await Signer.load(signerWasm);
+  check(`${JSON.stringify(typed.slice(0, 18))}... loads the same wallet`,
+        B.init().seedFromMnemonic(new TextEncoder().encode(typed)).fingerprint, "73c5da0a");
+}
+for (const [what, bad] of [["a bad checksum", "abandon ".repeat(11) + "abandon"], ["a word not in the list", MNEMONIC.replace("about", "abaut")]]) {
+  const B = await Signer.load(signerWasm);
+  try {
+    B.init().seedFromMnemonic(new TextEncoder().encode(bad));
+    ok(`a mnemonic with ${what} is refused`, false);
+  } catch (e) {
+    ok(`a mnemonic with ${what} is refused`, /seed_from_mnemonic failed/.test(e.message) && B.fingerprint === "00000000");
+  }
 }
 
 // --- SeedQR, against the published vector 4: the words never leave the module, so the fingerprint

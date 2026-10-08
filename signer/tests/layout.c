@@ -66,8 +66,8 @@ int main(void) {
            CORE_ERR_NO_SEED, CORE_ERR_NOT_OURS, CORE_ERR_NOTHING_TO_SIGN);
     printf("  \"SIGHASH\": %d, \"SCRIPT\": %d, \"PREVTX_MISSING\": %d, \"PREVTX_MISMATCH\": %d,\n", CORE_ERR_SIGHASH,
            CORE_ERR_SCRIPT, CORE_ERR_PREVTX_MISSING, CORE_ERR_PREVTX_MISMATCH);
-    printf("  \"FEE\": %d, \"NOT_REVIEWED\": %d, \"CRYPTO\": %d\n },\n", CORE_ERR_FEE, CORE_ERR_NOT_REVIEWED,
-           CORE_ERR_CRYPTO);
+    printf("  \"FEE\": %d, \"NOT_REVIEWED\": %d, \"CRYPTO\": %d, \"NOT_FOUND\": %d\n },\n", CORE_ERR_FEE,
+           CORE_ERR_NOT_REVIEWED, CORE_ERR_CRYPTO, CORE_ERR_NOT_FOUND);
 
     printf(" \"owner\": {\"EXTERNAL\": %d, \"CHANGE\": %d, \"SELF\": %d},\n", CORE_OUT_EXTERNAL, CORE_OUT_CHANGE,
            CORE_OUT_SELF);

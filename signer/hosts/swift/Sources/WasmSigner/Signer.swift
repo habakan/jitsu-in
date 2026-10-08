@@ -34,7 +34,7 @@ private enum L {
 
 private let coreErr = [
     "OK", "FORMAT", "NO_SEED", "NOT_OURS", "NOTHING_TO_SIGN", "SIGHASH", "SCRIPT",
-    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO",
+    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND",
 ]
 
 public enum SignerError: Error, CustomStringConvertible {
@@ -44,6 +44,8 @@ public enum SignerError: Error, CustomStringConvertible {
     case outOfBounds(offset: Int, count: Int)
     /// Not a signer.wasm, or it speaks an ABI this host does not.
     case unexpectedModule(String)
+    /// The module refused what was given: a mnemonic or SeedQR that is not valid BIP39, for instance.
+    case invalidInput(String)
     /// More bytes than the module's buffer takes.
     case tooLarge(size: Int, capacity: Int)
     /// sign() before review() passed. One approval permits one signing.
@@ -55,7 +57,7 @@ public enum SignerError: Error, CustomStringConvertible {
             return "\(s): " + (coreErr.indices.contains(Int(c)) ? coreErr[Int(c)] : "unknown(\(c))")
         case .outOfBounds(let o, let n):
             return "the module returned an offset outside its memory: \(o)+\(n)"
-        case .unexpectedModule(let s): return s
+        case .unexpectedModule(let s), .invalidInput(let s): return s
         case .tooLarge(let s, let c): return "\(s) bytes does not fit in \(c)"
         case .notReviewed: return "review() has to pass first; one approval permits one signing"
         }
@@ -103,6 +105,12 @@ public struct Signature {
 public struct AccountKey {
     public let xpub: String
     public let descriptor: String
+}
+
+public struct AddressPath: Equatable {
+    public let chain: Int
+    public let index: Int
+    public init(chain: Int, index: Int) { self.chain = chain; self.index = index }
 }
 
 public final class Signer {
@@ -210,7 +218,7 @@ public final class Signer {
         try write(passphrase, at: at + mnemonic.count)
         let rc = try call("signer_seed_from_mnemonic",
                           [.i32(UInt32(mnemonic.count)), .i32(UInt32(passphrase.count))])
-        guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_mnemonic failed") }
+        guard rc == 1 else { throw SignerError.invalidInput("seed_from_mnemonic failed") }
         return self
     }
 
@@ -232,7 +240,7 @@ public final class Signer {
         try write(passphrase, at: at + payload.count)
         let rc = try call("signer_seed_from_seedqr",
                           [.i32(UInt32(payload.count)), .i32(UInt32(passphrase.count))])
-        guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_seedqr failed") }
+        guard rc == 1 else { throw SignerError.invalidInput("seed_from_seedqr failed") }
         return self
     }
 
@@ -346,6 +354,21 @@ public final class Signer {
                 raw: try bytes(at, L.sigSize)
             )
         }
+    }
+
+    /// Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1.
+    /// Takes a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Nil when it is not found.
+    public func findAddress(_ address: String, account: UInt32 = 0, count: UInt32 = 1000) throws -> AddressPath? {
+        var a = Substring(address.trimmingCharacters(in: .whitespacesAndNewlines))
+        if a.lowercased().hasPrefix("bitcoin:") { a = a.dropFirst(8) }
+        let bytes = [UInt8](a.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)[0].utf8)
+        let cap = inputCapacity
+        guard bytes.count <= cap else { throw SignerError.tooLarge(size: bytes.count, capacity: cap) }
+        try write(bytes, at: Int(try call("signer_input")))
+        let rc = try call("signer_find_address", [.i32(UInt32(bytes.count)), .i32(account), .i32(count)])
+        if rc >= 0 { return AddressPath(chain: Int(rc >> 20), index: Int(rc & 0xfffff)) }
+        if rc != -Int32(coreErr.firstIndex(of: "NOT_FOUND")!) { throw SignerError.refused(stage: "findAddress", code: -rc) }
+        return nil
     }
 
     /// The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only

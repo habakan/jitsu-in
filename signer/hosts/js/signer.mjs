@@ -42,6 +42,7 @@ const L = {
  *   signer_display: () => number,
  *   signer_sign: () => number,
  *   signer_xpub: (purpose: number, account: number) => number,
+ *   signer_find_address: (len: number, account: number, count: number) => number,
  * }} SignerExports
  */
 
@@ -63,11 +64,14 @@ const L = {
 export const OWNER = { EXTERNAL: 0, CHANGE: 1, SELF: 2 };
 export const TEXT_KIND = { ADDRESS: 0, OP_RETURN: 1, SCRIPT: 2 };
 
+const NOT_FOUND = 12;
+
 /** CORE_ERR_* by value, as signer/docs/abi.md lists them.
  *  @type {Record<number, string>} */
 export const ERRORS = {
   1: "FORMAT", 2: "NO_SEED", 3: "NOT_OURS", 4: "NOTHING_TO_SIGN", 5: "SIGHASH", 6: "SCRIPT",
   7: "PREVTX_MISSING", 8: "PREVTX_MISMATCH", 9: "FEE", 10: "NOT_REVIEWED", 11: "CRYPTO",
+  12: "NOT_FOUND",
 };
 
 export class SignerError extends Error {
@@ -329,9 +333,33 @@ export class Signer {
     return out;
   }
 
+  /** Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1. Takes
+   *  a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Returns null when it is not found. */
+  /**
+   * @param {string} address
+   * @param {{ account?: number, count?: number }} [opts]
+   * @returns {{ chain: number, index: number } | null}
+   */
+  findAddress(address, { account = 0, count = 1000 } = {}) {
+    const bytes = new TextEncoder().encode(address.trim().replace(/^bitcoin:/i, "").split("?")[0]);
+    const cap = this.#e.signer_input_cap();
+    if (bytes.length > cap) throw new RangeError(`an address of ${bytes.length} bytes, cap is ${cap}`);
+    if (!Number.isInteger(account) || !Number.isInteger(count) || account < 0 || count < 0 || account >= 2 ** 32 || count >= 2 ** 32) {
+      throw new RangeError(`account ${account} and count ${count} have to be integers in range`);
+    }
+    this.#mem.set(bytes, this.#e.signer_input());
+    const rc = this.#e.signer_find_address(bytes.length, account, count);
+    if (rc >= 0) return { chain: rc >> 20, index: rc & 0xfffff };
+    if (rc !== -NOT_FOUND) throw new SignerError("findAddress", -rc);
+    return null;
+  }
+
   /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
    *  wallet elsewhere. `account` is below 2^31. */
   xpub({ purpose = 84, account = 0 } = {}) {
+    if (!Number.isInteger(purpose) || !Number.isInteger(account) || purpose < 0 || account < 0 || account >= 2 ** 32) {
+      throw new RangeError(`purpose ${purpose} and account ${account} have to be integers in range`);
+    }
     const rc = this.#e.signer_xpub(purpose, account);
     if (rc !== 0) throw new SignerError("xpub", rc);
     const dec = new TextDecoder();
