@@ -248,7 +248,7 @@ public final class Signer {
     /// clear. Nothing is loaded. The entropy is zeroed, and so is the module's copy of the words.
     public func mnemonicFromEntropy(_ entropy: inout [UInt8]) throws -> [UInt8] {
         let n = UInt32(entropy.count)
-        return try generate(&entropy, "mnemonic_from_entropy") {
+        return try generate(&entropy, "mnemonic_from_entropy", "signer_mnemonic_output") {
             try self.call("signer_mnemonic_from_entropy", [.i32(n)])
         }
     }
@@ -257,19 +257,30 @@ public final class Signer {
     public func mnemonicFromDice(_ rolls: inout [UInt8], words: UInt32 = 24) throws -> [UInt8] {
         guard words == 12 || words == 24 else { throw SignerError.invalidInput("dice make 12 or 24 words, not \(words)") }
         let n = UInt32(rolls.count)
-        return try generate(&rolls, "mnemonic_from_dice") {
+        return try generate(&rolls, "mnemonic_from_dice", "signer_mnemonic_output") {
             try self.call("signer_mnemonic_from_dice", [.i32(n), .i32(words)])
         }
     }
 
-    private func generate(_ input: inout [UInt8], _ name: String, _ make: () throws -> Int32) throws -> [UInt8] {
+    /// The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+    /// numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+    /// so clear it once shown. The mnemonic is zeroed, and so is the module's copy.
+    public func seedQRFromMnemonic(_ mnemonic: inout [UInt8], compact: Bool = false) throws -> [UInt8] {
+        let n = UInt32(mnemonic.count)
+        return try generate(&mnemonic, "seedqr_from_mnemonic", "signer_seedqr_output") {
+            try self.call("signer_seedqr_from_mnemonic", [.i32(n), .i32(compact ? 1 : 0)])
+        }
+    }
+
+    private func generate(_ input: inout [UInt8], _ name: String, _ output: String,
+                          _ make: () throws -> Int32) throws -> [UInt8] {
         defer { for i in input.indices { input[i] = 0 } }
         let cap = inputCapacity
         guard input.count <= cap else { throw SignerError.tooLarge(size: input.count, capacity: cap) }
         try write(input, at: Int(try call("signer_input")))
         let n = Int(try make())
         guard n > 0 else { throw SignerError.unexpectedModule("\(name) failed") }
-        let at = Int(try call("signer_mnemonic_output"))
+        let at = Int(try call(output))
         let out = try bytes(at, n)
         try write([UInt8](repeating: 0, count: n), at: at)
         return out

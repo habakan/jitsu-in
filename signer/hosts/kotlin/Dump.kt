@@ -37,6 +37,7 @@ fun main(args: Array<String>) {
     println("found ${found.chain} ${found.index}")
     println("desc ${s.xpub(purpose = 86, account = 1).descriptor}")
     println("dice ${String(s.mnemonicFromDice("3".repeat(99).toByteArray()))}")
+    println("seedqr ${String(s.seedQRFromMnemonic(("abandon ".repeat(11) + "about").toCharArray()))}")
     s.unload()
     s.init().seedFromSeedQR("5bbd9d71a8ec7990831aff359d426545".chunked(2).map { it.toInt(16).toByte() }.toByteArray())
     println("seedqr fingerprint ${s.fingerprint}")

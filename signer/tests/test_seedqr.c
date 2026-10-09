@@ -65,6 +65,32 @@ int main(void) {
               "published vector %u from compact", i + 1);
     }
 
+    /* encoding: the words back into both forms, and those back into the words */
+    for (unsigned i = 0; i < sizeof(seedqr_vectors) / sizeof(seedqr_vectors[0]); i++) {
+        const char *m = seedqr_vectors[i].mnemonic, *d = seedqr_vectors[i].digits;
+        uint8_t qr[96];
+        int n = seedqr_encode((const uint8_t *)m, strlen(m), 0, qr, sizeof(qr));
+        CHECK(n == (int)strlen(d) && !memcmp(qr, d, strlen(d)), "published vector %u to digits", i + 1);
+        CHECK(seedqr_decode(qr, (size_t)n, out, sizeof(out)) > 0 && !strcmp(out, m), "vector %u digits round trip",
+              i + 1);
+        n = seedqr_encode((const uint8_t *)m, strlen(m), 1, qr, sizeof(qr));
+        CHECK(n == (int)seedqr_vectors[i].len && !memcmp(qr, seedqr_vectors[i].compact, (size_t)n),
+              "published vector %u to compact", i + 1);
+        CHECK(seedqr_decode(qr, (size_t)n, out, sizeof(out)) > 0 && !strcmp(out, m), "vector %u compact round trip",
+              i + 1);
+    }
+    {
+        uint8_t qr[96];
+        const char *bad = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon "
+                          "abandon";
+        const char *w15 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon "
+                          "abandon abandon abandon address";
+        CHECK(!seedqr_encode((const uint8_t *)bad, strlen(bad), 0, qr, sizeof(qr)), "bad checksum refused");
+        CHECK(!seedqr_encode((const uint8_t *)w15, strlen(w15), 0, qr, sizeof(qr)), "15 words refused");
+        CHECK(!seedqr_encode((const uint8_t *)want12, strlen(want12), 0, qr, 47), "a small buffer refused");
+        CHECK(!seedqr_encode((const uint8_t *)want12, strlen(want12), 1, qr, 15), "a small compact buffer refused");
+    }
+
     printf("%d/%d checks passed\n", checks - failures, checks);
     return failures != 0;
 }

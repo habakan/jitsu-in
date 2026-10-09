@@ -32,6 +32,7 @@ static core_sig_t sigs[PLAN_MAX_INPUTS];
 static uint8_t in[512]; /* a mnemonic or SeedQR || passphrase, a seed, entropy or dice; always wiped after */
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 static char mnemonic[256]; /* a newly made mnemonic, until the host has read it */
+static uint8_t seedqr[96]; /* a SeedQR made from a mnemonic, likewise */
 
 unsigned char *EXPORT(signer_input)(void) {
     return in;
@@ -63,6 +64,9 @@ char *EXPORT(signer_desc_output)(void) {
 }
 char *EXPORT(signer_mnemonic_output)(void) {
     return mnemonic;
+}
+unsigned char *EXPORT(signer_seedqr_output)(void) {
+    return seedqr;
 }
 
 int EXPORT(signer_init)(int testnet) {
@@ -121,6 +125,7 @@ void EXPORT(signer_unload)(void) {
     wipe(sigs, sizeof(sigs));
     wipe(&display, sizeof(display));
     wipe(mnemonic, sizeof(mnemonic));
+    wipe(seedqr, sizeof(seedqr));
 }
 
 unsigned EXPORT(signer_fingerprint)(void) {
@@ -181,6 +186,17 @@ int EXPORT(signer_mnemonic_from_dice)(unsigned len, unsigned words) {
     wipe(mnemonic, sizeof(mnemonic));
     n = len <= sizeof(in) ? bip39_mnemonic_from_dice(in, len, words, mnemonic, sizeof(mnemonic)) : 0;
     if (!n) wipe(mnemonic, sizeof(mnemonic));
+    wipe(in, sizeof(in));
+    return n;
+}
+
+/* The SeedQR for the mnemonic in in, to show as a backup: the Standard digits, or the CompactSeedQR's
+ * bytes. Returns its length in signer_seedqr_output(), or 0 */
+int EXPORT(signer_seedqr_from_mnemonic)(unsigned mn_len, int compact) {
+    int n;
+    wipe(seedqr, sizeof(seedqr));
+    n = mn_len <= sizeof(in) ? seedqr_encode(in, mn_len, compact, seedqr, sizeof(seedqr)) : 0;
+    if (!n) wipe(seedqr, sizeof(seedqr));
     wipe(in, sizeof(in));
     return n;
 }

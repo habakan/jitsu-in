@@ -224,6 +224,25 @@ fun main(args: Array<String>) {
         g.unload()
     }
 
+    // --- making a SeedQR from the words, against the published vector 4, and reading it back
+    run {
+        val q = Signer(signerWasm).init()
+        val words = "forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray()
+        check("Standard SeedQR digits", String(q.seedQRFromMnemonic(words)), "073318950739065415961602009907670428187212261116")
+        ok("the words passed in are zeroed", words.all { it == '\u0000' })
+        val compact = q.seedQRFromMnemonic("forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray(), compact = true)
+        check("CompactSeedQR bytes", compact.joinToString("") { "%02x".format(it) }, "5bbd9d71a8ec7990831aff359d426545")
+        val want = q.seedFromMnemonic("forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray()).fingerprint
+        check("the CompactSeedQR made here loads the same key", q.init().seedFromSeedQR(compact).fingerprint, want)
+        try {
+            q.seedQRFromMnemonic(("abandon ".repeat(11) + "abandon").toCharArray())
+            ok("a SeedQR of a bad mnemonic is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("a SeedQR of a bad mnemonic is refused", e.message == "seedqr_from_mnemonic failed")
+        }
+        q.unload()
+    }
+
     // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
     val typed = "abandon ".repeat(11) + "about"
     check("whitespace and capitals load the same wallet",

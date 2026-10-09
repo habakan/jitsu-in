@@ -106,6 +106,16 @@ export class Signer {
      * @param {12 | 24} [words]
      */
     mnemonicFromDice(rolls: Uint8Array, words?: 12 | 24): Uint8Array<ArrayBuffer>;
+    /** The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+     *  numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+     *  so clear it once shown. `mnemonic` is zeroed, and so is the module's copy. */
+    /**
+     * @param {Uint8Array} mnemonic
+     * @param {{ compact?: boolean }} [opts]
+     */
+    seedQRFromMnemonic(mnemonic: Uint8Array, { compact }?: {
+        compact?: boolean;
+    }): Uint8Array<ArrayBuffer>;
     /** For a seed you already have. 64 bytes. */
     /** @param {Uint8Array} seed */
     loadSeed(seed: Uint8Array): this;
@@ -207,6 +217,8 @@ export type SignerExports = {
     signer_mnemonic_output: () => number;
     signer_mnemonic_from_entropy: (len: number) => number;
     signer_mnemonic_from_dice: (len: number, words: number) => number;
+    signer_seedqr_output: () => number;
+    signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.

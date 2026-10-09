@@ -88,6 +88,8 @@ if dumpOnly {
     print("desc \(try s.xpub(purpose: 86, account: 1).descriptor)")
     var rolls = [UInt8](String(repeating: "3", count: 99).utf8)
     print("dice \(String(decoding: try s.mnemonicFromDice(&rolls), as: UTF8.self))")
+    var abandon = [UInt8](mnemonicText.utf8)
+    print("seedqr \(String(decoding: try s.seedQRFromMnemonic(&abandon), as: UTF8.self))")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
     var none: [UInt8] = []
@@ -256,6 +258,30 @@ do {
         ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == 0x31)
     }
     g.unload()
+}
+
+// --- making a SeedQR from the words, against the published vector 4, and reading it back
+do {
+    let q = try Signer(signerWasm: signerWasm)
+    try q.initialise()
+    var words = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8)
+    check("Standard SeedQR digits", String(decoding: try q.seedQRFromMnemonic(&words), as: UTF8.self), "073318950739065415961602009907670428187212261116")
+    ok("the words passed in are zeroed", words.allSatisfy { $0 == 0 })
+    var again = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8), none: [UInt8] = []
+    var compact = try q.seedQRFromMnemonic(&again, compact: true)
+    check("CompactSeedQR bytes", hex(compact), "5bbd9d71a8ec7990831aff359d426545")
+    var typed = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8)
+    let want = try q.seedFromMnemonic(&typed, passphrase: &none).fingerprint
+    check("the CompactSeedQR made here loads the same key",
+          try q.initialise().seedFromSeedQR(&compact, passphrase: &none).fingerprint, want)
+    do {
+        var bad = [UInt8]((String(repeating: "abandon ", count: 11) + "abandon").utf8)
+        _ = try q.seedQRFromMnemonic(&bad)
+        ok("a SeedQR of a bad mnemonic is refused", false)
+    } catch {
+        ok("a SeedQR of a bad mnemonic is refused", "\(error)" == "seedqr_from_mnemonic failed")
+    }
+    q.unload()
 }
 
 // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing

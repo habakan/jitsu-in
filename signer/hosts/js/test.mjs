@@ -308,6 +308,37 @@ for (const tamper of [false, true]) {
   G.unload();
 }
 
+// --- making a SeedQR from the words, against the published vector 4, and reading it back
+{
+  const Q = await Signer.load(signerWasm);
+  Q.init();
+  const enc = (t) => new TextEncoder().encode(t);
+  const words = enc("forum undo fragile fade shy sign arrest garment culture tube off merit");
+  const digits = Q.seedQRFromMnemonic(words);
+  check("Standard SeedQR digits", new TextDecoder().decode(digits), "073318950739065415961602009907670428187212261116");
+  ok("the words passed in are zeroed", words.every((b) => b === 0));
+  const compact = Q.seedQRFromMnemonic(enc("forum undo fragile fade shy sign arrest garment culture tube off merit"), { compact: true });
+  check("CompactSeedQR bytes", hex(compact), "5bbd9d71a8ec7990831aff359d426545");
+  const want = Q.seedFromMnemonic(enc("forum undo fragile fade shy sign arrest garment culture tube off merit")).fingerprint;
+  check("the CompactSeedQR made here loads the same key", Q.init().seedFromSeedQR(compact).fingerprint, want);
+  try {
+    Q.seedQRFromMnemonic(enc("abandon ".repeat(11) + "abandon"));
+    ok("a SeedQR of a bad mnemonic is refused", false);
+  } catch (e) {
+    ok("a SeedQR of a bad mnemonic is refused", /seedqr_from_mnemonic failed/.test(e.message));
+  }
+  Q.unload();
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  E.signer_init(0);
+  new Uint8Array(E.memory.buffer).set(enc("forum undo fragile fade shy sign arrest garment culture tube off merit"), E.signer_input());
+  check("the raw ABI writes the digits", E.signer_seedqr_from_mnemonic(70, 0), 48);
+  new Uint8Array(E.memory.buffer).set(enc("forum undo fragile fade shy sign arrest garment culture tube off merit"), E.signer_input());
+  check("then the compact bytes", E.signer_seedqr_from_mnemonic(70, 1), 16);
+  ok("which leave nothing of the digits after them", new Uint8Array(E.memory.buffer, E.signer_seedqr_output() + 16, 80).every((b) => b === 0));
+  E.signer_unload();
+  ok("unload clears the SeedQR", Buffer.from(E.memory.buffer).indexOf(Buffer.from("073318950739065415961602")) < 0);
+}
+
 // --- what a keyboard adds loads the same wallet; a mnemonic whose BIP39 checksum fails, or a word
 // that is not English BIP39, loads nothing
 for (const typed of [" " + MNEMONIC.replace(" ", "  ").toUpperCase() + "\n", "Abandon" + MNEMONIC.slice(7)]) {
