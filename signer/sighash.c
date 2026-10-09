@@ -34,7 +34,14 @@ int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, const uint8_t pkh[20]
     static const uint8_t code_head[4] = {0x19, 0x76, 0xa9, 0x14}, code_tail[2] = {0x88, 0xac};
     sha256_ctx h;
 
+    uint8_t redeem[22] = {0x00, 20}, sh[20];
     if (index >= p->n_inputs) return 0;
+    memcpy(redeem + 2, pkh, 20);
+    hash160(redeem, sizeof(redeem), sh);
+    if (!(in->spk.len == 22 && !memcmp(in->spk.bytes, redeem, 22)) &&
+        !(in->spk.len == 23 && in->spk.bytes[0] == 0xa9 && in->spk.bytes[1] == 20 && in->spk.bytes[22] == 0x87 &&
+          !memcmp(in->spk.bytes + 2, sh, 20)))
+        return 0; /* the key hash is not what this input's script pays to */
     sha256_init(&h);
     for (unsigned i = 0; i < p->n_inputs; i++) h_outpoint(&h, &p->inputs[i]);
     sha256d_final(&h, prevouts);

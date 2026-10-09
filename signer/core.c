@@ -363,6 +363,7 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
     bip32_node_t acct, chain, child;
     secp256k1_keypair kp;
     uint8_t spk[34], pub[33], cpub[33], redeem[22] = {0x00, 20};
+    size_t n;
 
     if (!seed_loaded) return -CORE_ERR_NO_SEED;
     if (len < 4 || len >= ADDRESS_MAX || account >= H || !count || count > MAX_ADDRESS_INDEX) return -CORE_ERR_FORMAT;
@@ -384,6 +385,7 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
     want[len] = 0;
     if (other || (upper && lower)) return -CORE_ERR_FORMAT;
     if (len != need) return -CORE_ERR_NOT_FOUND; /* P2WSH, a P2SH of something else, or cut short: not ours */
+    n = purpose == 49 ? 23 : purpose == 84 ? 22 : 34;
 
     /* The chain's public key once, not once a child: it is half the work of each unhardened step */
     path[0] = purpose | H, path[1] = (uint32_t)network | H, path[2] = account | H;
@@ -392,7 +394,6 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
         if (!bip32_derive(ctx, &acct, &c, 1, &chain) || !bip32_pubkey(ctx, chain.key, cpub)) rc = -CORE_ERR_CRYPTO;
         for (uint32_t i = 0; rc == -CORE_ERR_NOT_FOUND && i < count; i++) {
             int ok = bip32_child(&chain, cpub, i, &child);
-            size_t n = purpose == 49 ? 23 : purpose == 84 ? 22 : 34;
             if (ok && purpose != 86) {
                 ok = bip32_pubkey(ctx, child.key, pub);
                 hash160(pub, sizeof(pub), redeem + 2);

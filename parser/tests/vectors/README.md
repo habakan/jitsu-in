@@ -21,6 +21,7 @@ The seed is BIP39's published all-zero test vector (`abandon` x11 + `about`), fi
 | `own_mixed_nwu` | P2WPKH and P2TR in one transaction |
 | `own_p2sh_p2wpkh_1in` | one BIP49 P2SH-P2WPKH input, paying out plus P2SH change |
 | `own_mixed_p2sh_nwu` | P2WPKH and P2SH-P2WPKH in one transaction |
+| `own_with_p2sh_multisig_input` | one P2WPKH input ours, beside a P2SH multisig whose key and fingerprint are ours too |
 | `own_with_foreign_input` | one input ours, one someone else's |
 
 ## Regenerating them

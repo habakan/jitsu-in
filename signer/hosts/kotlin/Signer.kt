@@ -311,7 +311,7 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         return null
     }
 
-    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     fun xpub(purpose: Int = 84, account: Int = 0): AccountKey {
         val rc = call("signer_xpub", purpose.toLong(), account.toLong())

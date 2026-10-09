@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 76,819 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 76,977 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,7 +12,7 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 87 checks in [test.mjs](../hosts/js/test.mjs) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 89 checks in [test.mjs](../hosts/js/test.mjs) |
 | Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 51 checks in [Test.kt](../hosts/kotlin/Test.kt) |
 | Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 48 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
@@ -80,7 +80,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | `signer_review()` | 0 on success, otherwise one of the errors below |
 | `signer_display()` | 0 on success |
 | `signer_sign()` | the number of signatures, or the negated error |
-| `signer_xpub(purpose, account)` | 0 on success. m/purpose'/coin'/account' with `purpose` 49 (`sh(wpkh())`), 84 (`wpkh()`) or 86 (`tr()`) and `account` below 2^31, otherwise `FORMAT` |
+| `signer_xpub(purpose, account)` | 0 on success. m/purpose'/coin'/account' with `purpose` 49 (`sh(wpkh())`), 84 (`wpkh()`) or 86 (`tr()`) and `account` below 2^31, otherwise `FORMAT`, with the xpub and descriptor buffers emptied |
 | `signer_find_address(len, account, count)` | where the address in `signer_input()` is on m/purpose'/coin'/account', receive then change, indices 0 to `count`-1: `chain << 20 \| index`, or the negated error; `NOT_FOUND` when it is not there. See below |
 | `signer_fingerprint()` | the master fingerprint, or 0 when no seed is loaded |
 | `signer_unload()` | nothing. Zeroes the key, the plan, the signatures and the display |

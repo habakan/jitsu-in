@@ -14,8 +14,8 @@ whose behaviour could differ with where the module was put.
 
 | | size | imports | what it does |
 |---|---:|---:|---|
-| `parser.wasm` | 15,632 B | 0 | UR reassembly, PSBT parsing, building the plan, taking signatures back, UR encoding |
-| `signer.wasm` | 76,819 B | 0 | BIP39 seed, SeedQR, BIP32 derivation, re-checking a plan, ECDSA and Schnorr signing, xpub export |
+| `parser.wasm` | 15,697 B | 0 | UR reassembly, PSBT parsing, building the plan, taking signatures back, UR encoding |
+| `signer.wasm` | 76,977 B | 0 | BIP39 seed, SeedQR, BIP32 derivation, re-checking a plan, ECDSA and Schnorr signing, xpub export |
 
 <img src="everywhere.svg" alt="The same bytes run everywhere" width="940">
 

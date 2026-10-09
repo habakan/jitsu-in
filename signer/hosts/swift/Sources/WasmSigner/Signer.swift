@@ -371,7 +371,7 @@ public final class Signer {
         return nil
     }
 
-    /// The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /// The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
     /// wallet elsewhere. `account` is below 2^31.
     public func xpub(purpose: UInt32 = 84, account: UInt32 = 0) throws -> AccountKey {
         let rc = try call("signer_xpub", [.i32(purpose), .i32(account)])

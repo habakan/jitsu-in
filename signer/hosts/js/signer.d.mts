@@ -155,7 +155,7 @@ export class Signer {
         chain: number;
         index: number;
     } | null;
-    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     xpub({ purpose, account }?: {
         purpose?: number | undefined;
