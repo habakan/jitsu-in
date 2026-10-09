@@ -28,10 +28,10 @@ static unsigned indices_entropy(const uint16_t *idx, unsigned n, uint8_t ent[32]
 /* The checksum bits after the entropy, against SHA-256 of it */
 static int checksum_ok(const uint16_t *idx, unsigned n) {
     uint8_t ent[32], hash[32];
-    unsigned ent_bits = n * 11 - n / 3, cs_bits = n / 3;
+    unsigned ent_len = indices_entropy(idx, n, ent), ent_bits = ent_len * 8, cs_bits = n / 3;
     int ok = 1;
 
-    sha256_of(ent, indices_entropy(idx, n, ent), hash);
+    sha256_of(ent, ent_len, hash);
     for (unsigned i = 0; i < cs_bits; i++) {
         unsigned want = hash[0] >> (7 - i) & 1, got = idx[n - 1] >> (10 - (ent_bits % 11 + i)) & 1;
         ok &= want == got;
@@ -47,7 +47,7 @@ static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t ca
     if (!checksum_ok(idx, n)) return 0;
     for (unsigned i = 0; i < n; i++) {
         size_t w = strnlen(bip39_words[idx[i]], 8);
-        if (len + w + 1 >= cap) return 0;
+        if (len + w + 1 >= cap) return wipe(out, len), 0;
         if (i) out[len++] = ' ';
         memcpy(out + len, bip39_words[idx[i]], w);
         len += w;
@@ -60,19 +60,34 @@ static int check_and_build(const uint16_t *idx, unsigned n, char *out, size_t ca
  * sorted. Only a-z is let through, so a word padded with NUL cannot match a shorter one */
 static int word_index(const uint8_t *w, size_t len) {
     char key[8] = {0};
-    int lo = 0, hi = 2047;
-    if (len == 0 || len > 8) return -1;
-    for (size_t i = 0; i < len; i++) {
-        if (w[i] < 'a' || w[i] > 'z') return -1;
+    int lo = 0, hi = 2047, found = -1;
+    for (size_t i = 0; i < len && len <= 8; i++) {
+        if (w[i] < 'a' || w[i] > 'z') hi = -1;
         key[i] = (char)w[i];
     }
-    while (lo <= hi) {
+    while (len && len <= 8 && found < 0 && lo <= hi) {
         int mid = (lo + hi) / 2, c = memcmp(key, bip39_words[mid], 8);
-        if (!c) return mid;
-        if (c < 0) hi = mid - 1;
+        if (!c) found = mid;
+        else if (c < 0) hi = mid - 1;
         else lo = mid + 1;
     }
-    return -1;
+    wipe(key, sizeof(key));
+    return found;
+}
+
+size_t bip39_normalize(const uint8_t *in, size_t len, uint8_t *out) {
+    size_t n = 0;
+    int gap = 0;
+    for (size_t i = 0; i < len; i++) {
+        uint8_t c = in[i];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            gap = n > 0;
+            continue;
+        }
+        if (gap) out[n++] = ' ', gap = 0;
+        out[n++] = c >= 'A' && c <= 'Z' ? (uint8_t)(c + 32) : c;
+    }
+    return n;
 }
 
 /* The word indices of a valid mnemonic, and how many there are; 0 if it is not one */

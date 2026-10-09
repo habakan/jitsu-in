@@ -164,8 +164,8 @@ build/test_%: signer/tests/test_%.c $(SIGNER_C_SRC) signer/*.h signer/tests/*.h 
 	@mkdir -p build
 	$(CC) -O1 -Isigner -Iparser/c/include -I$(SECP)/include -I$(SECP)/src $(SECP_DEFS) -o $@ $< $(SIGNER_C_SRC)
 
-check-signer-c: build/test_seedqr build/test_bip39 build/test_xpub
-	build/test_seedqr && build/test_bip39 && build/test_xpub
+check-signer-c: build/test_seedqr build/test_bip39 build/test_xpub build/test_find
+	build/test_seedqr && build/test_bip39 && build/test_xpub && build/test_find
 .PHONY: check-signer-c
 
 check-signer-js: build/signer.wasm build/parser.wasm

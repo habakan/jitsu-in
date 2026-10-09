@@ -19,6 +19,7 @@
  *   init / seed / seedqr / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
  *   review / display / xpub               CORE_OK (0) on success, CORE_ERR_* otherwise
  *   sign                                  the number of signatures, or -CORE_ERR_*
+ *   find_address                          chain << 20 | index, or -CORE_ERR_*
  * Buffer accessors return a pointer, fingerprint returns the value, unload returns nothing. */
 
 /* Where the host writes. All static: this module never allocates */
@@ -28,7 +29,7 @@ static core_prevtx_t prevtx[PLAN_MAX_INPUTS];
 static core_review_t review;
 static core_display_t display;
 static core_sig_t sigs[PLAN_MAX_INPUTS];
-static uint8_t in[512]; /* mnemonic || passphrase, or a 64-byte seed */
+static uint8_t in[512]; /* a mnemonic or SeedQR || passphrase, a seed, entropy or dice; always wiped after */
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 static char mnemonic[256]; /* a newly made mnemonic, until the host has read it */
 static uint8_t seedqr[96]; /* a SeedQR made from a mnemonic, likewise */
@@ -87,10 +88,13 @@ static int seed_from(const uint8_t *mn, size_t mn_len, const uint8_t *pass, size
     return ok;
 }
 
-/* English BIP39 only, and the checksum has to hold: a typo is refused rather than becoming a wallet */
+/* English BIP39 only, and the checksum has to hold: a typo is refused rather than becoming a wallet.
+ * Whitespace and capitals are normalised first; the passphrase is used exactly as given */
 int EXPORT(signer_seed_from_mnemonic)(unsigned mn_len, unsigned pass_len) {
-    int ok = mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len && bip39_mnemonic_ok(in, mn_len) &&
-             seed_from(in, mn_len, in + mn_len, pass_len);
+    size_t n = 0;
+    int ok = mn_len <= sizeof(in) && pass_len <= sizeof(in) - mn_len;
+    if (ok) n = bip39_normalize(in, mn_len, in);
+    ok = ok && bip39_mnemonic_ok(in, n) && seed_from(in, n, in + mn_len, pass_len);
     wipe(in, sizeof(in));
     return ok;
 }
@@ -152,23 +156,35 @@ int EXPORT(signer_sign)(void) {
     return rc ? -rc : (int)n;
 }
 
-/* 0 on success and CORE_ERR_* otherwise, like review and display. core_account_xpub itself is a
- * predicate, so the sense is flipped here rather than at every call site */
-int EXPORT(signer_xpub)(void) {
-    return core_account_xpub(xpub, desc) ? CORE_OK : CORE_ERR_NO_SEED;
+/* On a refusal nothing from an earlier call is left to be read as this one's */
+int EXPORT(signer_xpub)(unsigned purpose, unsigned account) {
+    int rc = core_account_xpub(purpose, account, xpub, desc);
+    if (rc) wipe(xpub, sizeof(xpub)), wipe(desc, sizeof(desc));
+    return rc;
+}
+
+/* in holds the address. Nothing secret, but cleared like every other use of in */
+int EXPORT(signer_find_address)(unsigned len, unsigned account, unsigned count) {
+    int rc = len <= sizeof(in) ? core_find_address((const char *)in, len, account, count) : -CORE_ERR_FORMAT;
+    wipe(in, sizeof(in));
+    return rc;
 }
 
 /* A new mnemonic from the entropy in in, or from dice rolls (1 to 6) in in. Returns its length in
  * signer_mnemonic_output(), or 0. Nothing is loaded: the words are to be written down first */
 int EXPORT(signer_mnemonic_from_entropy)(unsigned len) {
-    int n = len <= sizeof(in) ? bip39_mnemonic_from_entropy(in, len, mnemonic, sizeof(mnemonic)) : 0;
+    int n;
+    wipe(mnemonic, sizeof(mnemonic));
+    n = len <= sizeof(in) ? bip39_mnemonic_from_entropy(in, len, mnemonic, sizeof(mnemonic)) : 0;
     if (!n) wipe(mnemonic, sizeof(mnemonic));
     wipe(in, sizeof(in));
     return n;
 }
 
 int EXPORT(signer_mnemonic_from_dice)(unsigned len, unsigned words) {
-    int n = len <= sizeof(in) ? bip39_mnemonic_from_dice(in, len, words, mnemonic, sizeof(mnemonic)) : 0;
+    int n;
+    wipe(mnemonic, sizeof(mnemonic));
+    n = len <= sizeof(in) ? bip39_mnemonic_from_dice(in, len, words, mnemonic, sizeof(mnemonic)) : 0;
     if (!n) wipe(mnemonic, sizeof(mnemonic));
     wipe(in, sizeof(in));
     return n;
@@ -177,7 +193,9 @@ int EXPORT(signer_mnemonic_from_dice)(unsigned len, unsigned words) {
 /* The SeedQR for the mnemonic in in, to show as a backup: the Standard digits, or the CompactSeedQR's
  * bytes. Returns its length in signer_seedqr_output(), or 0 */
 int EXPORT(signer_seedqr_from_mnemonic)(unsigned mn_len, int compact) {
-    int n = mn_len <= sizeof(in) ? seedqr_encode(in, mn_len, compact, seedqr, sizeof(seedqr)) : 0;
+    int n;
+    wipe(seedqr, sizeof(seedqr));
+    n = mn_len <= sizeof(in) ? seedqr_encode(in, mn_len, compact, seedqr, sizeof(seedqr)) : 0;
     if (!n) wipe(seedqr, sizeof(seedqr));
     wipe(in, sizeof(in));
     return n;
