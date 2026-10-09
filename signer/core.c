@@ -2,6 +2,7 @@
 #include <string.h>
 #include "wipe.h"
 #include "bip32.h"
+#include "bip85.h"
 #include "hash.h"
 #include "address.h"
 #include "sighash.h"
@@ -51,21 +52,25 @@ static int taproot_tweak(uint8_t seckey[32], uint8_t xonly_out[32], secp256k1_ke
 }
 
 /* Does the key at this derivation actually control spk? On a match the key is left in node */
+/* A key's P2WPKH script, or with nested BIP49's P2SH of it, whose redeem script is 0014{HASH160(pubkey)}.
+ * Returns the script's length */
+static size_t wpkh_spk(const uint8_t pub[33], int nested, uint8_t spk[23]) {
+    uint8_t redeem[22] = {0x00, 20};
+    hash160(pub, 33, redeem + 2);
+    if (!nested) return memcpy(spk, redeem, sizeof(redeem)), sizeof(redeem);
+    spk[0] = 0xa9, spk[1] = 20, spk[22] = 0x87;
+    hash160(redeem, sizeof(redeem), spk + 2);
+    return 23;
+}
+
 static int owns(const plan_keypath_t *key, const plan_script_t *spk, bip32_node_t *node) {
-    uint8_t pub[33], h[20], xonly[32];
+    uint8_t pub[33], mine[23], xonly[32];
     secp256k1_keypair kp;
     int type = spk_type(spk), ok = 0;
 
     if (key->fingerprint != master_fp || !bip32_derive(ctx, &master, key->path, key->depth, node)) return 0;
-    if (type == SPK_P2WPKH && bip32_pubkey(ctx, node->key, pub)) {
-        hash160(pub, 33, h);
-        ok = !memcmp(h, spk->bytes + 2, 20);
-    } else if (type == SPK_P2SH_P2WPKH && bip32_pubkey(ctx, node->key, pub)) {
-        /* BIP49: the script hash has to be that of the P2WPKH redeem script, 0014{HASH160(pubkey)} */
-        uint8_t redeem[22] = {0x00, 20};
-        hash160(pub, 33, redeem + 2);
-        hash160(redeem, sizeof(redeem), h);
-        ok = !memcmp(h, spk->bytes + 2, 20);
+    if ((type == SPK_P2WPKH || type == SPK_P2SH_P2WPKH) && bip32_pubkey(ctx, node->key, pub)) {
+        ok = wpkh_spk(pub, type == SPK_P2SH_P2WPKH, mine) == spk->len && !memcmp(mine, spk->bytes, spk->len);
     } else if (type == SPK_P2TR && taproot_tweak(node->key, xonly, &kp)) {
         ok = !memcmp(xonly, spk->bytes + 2, 32);
     }
@@ -164,6 +169,7 @@ int core_init(core_network_t net) {
     if (secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE) > sizeof(ctx_mem)) return 0;
     ctx = secp256k1_context_preallocated_create(ctx_mem, SECP256K1_CONTEXT_NONE);
     network = net;
+    reviewed = msg_reviewed = 0; /* an approval given under the other network is not this one's */
     return ctx != NULL;
 }
 
@@ -187,6 +193,9 @@ void core_unload(void) {
     reviewed = 0;
     msg_reviewed = 0;
     wipe(msg, sizeof(msg));
+    wipe(msg_hash, sizeof(msg_hash));
+    wipe(msg_path, sizeof(msg_path));
+    msg_len = 0;
 }
 
 uint32_t core_fingerprint(void) {
@@ -360,6 +369,69 @@ int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS],
     return CORE_OK;
 }
 
+int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t count) {
+    static const char b58[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const int testnet = network == CORE_TESTNET;
+    char want[ADDRESS_MAX], got[ADDRESS_MAX];
+    int upper = 0, lower = 0, other = 0, rc = -CORE_ERR_NOT_FOUND;
+    unsigned purpose, need;
+    uint32_t path[3];
+    bip32_node_t acct, chain, child;
+    secp256k1_keypair kp;
+    uint8_t spk[34], pub[33], cpub[33];
+    size_t n;
+
+    if (!seed_loaded) return -CORE_ERR_NO_SEED;
+    if (len < 4 || len >= ADDRESS_MAX || account >= H || !count || count > MAX_ADDRESS_INDEX) return -CORE_ERR_FORMAT;
+    if (addr[0] == (testnet ? '2' : '3')) { /* BIP49's P2SH-P2WPKH, in base58, where case is part of the address */
+        for (size_t i = 0; i < len; i++) other |= !addr[i] || !strchr(b58, addr[i]);
+        memcpy(want, addr, len);
+        purpose = 49, need = testnet ? 35 : 34;
+    } else { /* BIP173 allows all upper case, which is what a QR's alphanumeric mode carries, but not mixed */
+        for (size_t i = 0; i < len; i++) {
+            char c = addr[i];
+            upper |= c >= 'A' && c <= 'Z';
+            lower |= c >= 'a' && c <= 'z';
+            other |= !(c >= '0' && c <= '9') && !(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z');
+            want[i] = c >= 'A' && c <= 'Z' ? (char)(c + 32) : c;
+        }
+        if (memcmp(want, testnet ? "tb1" : "bc1", 3) || (want[3] != 'q' && want[3] != 'p')) other = 1;
+        purpose = want[3] == 'q' ? 84 : 86, need = purpose == 84 ? 42 : 62;
+    }
+    want[len] = 0;
+    if (other || (upper && lower)) return -CORE_ERR_FORMAT;
+    if (len != need) return -CORE_ERR_NOT_FOUND; /* P2WSH, a P2SH of something else, or cut short: not ours */
+    n = purpose == 49 ? 23 : purpose == 84 ? 22 : 34;
+
+    /* The chain's public key once, not once a child: it is half the work of each unhardened step */
+    path[0] = purpose | H, path[1] = (uint32_t)network | H, path[2] = account | H;
+    if (!bip32_derive(ctx, &master, path, 3, &acct)) rc = -CORE_ERR_CRYPTO;
+    for (uint32_t c = 0; rc == -CORE_ERR_NOT_FOUND && c < 2; c++) {
+        if (!bip32_derive(ctx, &acct, &c, 1, &chain) || !bip32_pubkey(ctx, chain.key, cpub)) rc = -CORE_ERR_CRYPTO;
+        for (uint32_t i = 0; rc == -CORE_ERR_NOT_FOUND && i < count; i++) {
+            int ok = bip32_child(&chain, cpub, i, &child);
+            if (ok && purpose != 86) {
+                ok = bip32_pubkey(ctx, child.key, pub);
+                wpkh_spk(pub, purpose == 49, spk);
+            } else if (ok) {
+                ok = taproot_tweak(child.key, spk + 2, &kp);
+                spk[0] = 0x51, spk[1] = 32;
+            }
+            if (!ok) rc = -CORE_ERR_CRYPTO;
+            else if (address_encode(spk, n, testnet, got) && !strcmp(got, want)) rc = (int)(c << 20 | i);
+        }
+    }
+    wipe(&acct, sizeof(acct));
+    wipe(&chain, sizeof(chain));
+    wipe(&child, sizeof(child));
+    wipe(&kp, sizeof(kp));
+    return rc;
+}
+
+int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap) {
+    return seed_loaded ? bip85_bip39(ctx, &master, words, index, out, cap) : 0;
+}
+
 static void msg_binding(uint8_t out[32]) {
     sha256_ctx h;
     sha256_init(&h);
@@ -386,16 +458,8 @@ int core_message_review(const uint8_t *m, size_t len, unsigned purpose, uint32_t
     ok = bip32_derive(ctx, &master, msg_path, 5, &node) && bip32_pubkey(ctx, node.key, pub);
     wipe(&node, sizeof(node));
     if (!ok) return CORE_ERR_CRYPTO;
-    if (purpose == 84) {
-        spk[0] = 0x00, spk[1] = 20;
-        hash160(pub, 33, spk + 2);
-    } else {
-        uint8_t redeem[22] = {0x00, 20};
-        hash160(pub, 33, redeem + 2);
-        spk[0] = 0xa9, spk[1] = 20, spk[22] = 0x87;
-        hash160(redeem, sizeof(redeem), spk + 2);
-    }
-    if (!address_encode(spk, purpose == 84 ? 22 : 23, network == CORE_TESTNET, out->address)) return CORE_ERR_CRYPTO;
+    if (!address_encode(spk, wpkh_spk(pub, purpose == 49, spk), network == CORE_TESTNET, out->address))
+        return CORE_ERR_CRYPTO;
 
     for (size_t i = 0; i < len; i++) printable &= m[i] >= 0x20 && m[i] <= 0x7e;
     out->text_kind = printable ? CORE_TEXT_MESSAGE : CORE_TEXT_HEX;

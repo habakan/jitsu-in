@@ -83,7 +83,14 @@ if dumpOnly {
         print("out \(o.amount) \(owner[Int(o.owner.rawValue)]) \(kind[Int(o.textKind.rawValue)]) \(o.text)")
     }
     for sig in try s.sign() { print("sig \(sig.input) \(hex(sig.sig))") }
+    let found = try s.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", count: 20)!
+    print("found \(found.chain) \(found.index)")
     print("desc \(try s.xpub(purpose: 86, account: 1).descriptor)")
+    var rolls = [UInt8](String(repeating: "3", count: 99).utf8)
+    print("dice \(String(decoding: try s.mnemonicFromDice(&rolls), as: UTF8.self))")
+    var abandon = [UInt8](mnemonicText.utf8)
+    print("seedqr \(String(decoding: try s.seedQRFromMnemonic(&abandon), as: UTF8.self))")
+    print("bip85 \(String(decoding: try s.bip85Mnemonic(words: 24, index: 3), as: UTF8.self))")
     let shown = try s.messageReview([UInt8]("dump\n".utf8), purpose: 49, chain: 1, index: 2)
     print("message \(shown.address) \(shown.text) \(Data(try s.messageSign()).base64EncodedString())")
     s.unload()
@@ -162,12 +169,36 @@ let tr = try s.xpub(purpose: 86)
 check("BIP86's account 0", tr.xpub, "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ")
 check("the tr() descriptor", tr.descriptor, "tr([73c5da0a/86h/0h/0h]\(tr.xpub)/<0;1>/*)")
 check("the BIP49 descriptor", String(try s.xpub(purpose: 49).descriptor.prefix(32)), "sh(wpkh([73c5da0a/49h/0h/0h]xpub")
-ok("account 1 is named", try s.xpub(account: 1).descriptor.hasPrefix("wpkh([73c5da0a/84h/0h/1h]xpub"))
+let a1 = try s.xpub(account: 1)
+check("account 1, as the JavaScript host derives it independently", a1.xpub, "xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyicJgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn")
+ok("account 1 is named", a1.descriptor.hasPrefix("wpkh([73c5da0a/84h/0h/1h]xpub"))
+do {
+    _ = try s.xpub(account: 0x8000_0000)
+    ok("xpub for a hardened account is refused", false)
+} catch {
+    ok("xpub for a hardened account is refused", "\(error)" == "xpub: FORMAT")
+}
 do {
     _ = try s.xpub(purpose: 44)
     ok("xpub for BIP44 is refused", false)
 } catch {
     ok("xpub for BIP44 is refused", "\(error)".contains("xpub: FORMAT"))
+}
+
+// --- which of our addresses an address is, against BIP84's and BIP86's vectors. A count of 20,
+// because WasmKit interprets every derivation and 1000 of them take minutes
+func find(_ a: String) throws -> AddressPath? { try s.findAddress(a, count: 20) }
+check("BIP84 0/1", try find("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), AddressPath(chain: 0, index: 1))
+check("BIP86 change 1/0", try find("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7"),
+      AddressPath(chain: 1, index: 0))
+check("a BIP21 URI in upper case", try find("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"),
+      AddressPath(chain: 0, index: 1))
+check("not ours", try find("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), nil)
+do {
+    _ = try find("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
+    ok("findAddress refuses base58", false)
+} catch {
+    ok("findAddress refuses base58", "\(error)" == "findAddress: FORMAT")
 }
 
 // --- BIP137: the signature Core's signmessagewithprivkey gives, with the P2WPKH header (check-core-diff)
@@ -211,6 +242,106 @@ do {
     ok("an oversized mnemonic is refused", false)
 } catch {
     ok("an oversized mnemonic is refused", "\(error)".contains("does not fit"))
+}
+
+// --- making a new mnemonic, from entropy and from dice, against BIP39's and the dice vectors
+do {
+    let g = try Signer(signerWasm: signerWasm)
+    try g.initialise()
+    var ent: [UInt8] = [0x9e, 0x88, 0x5d, 0x95, 0x2a, 0xd3, 0x62, 0xca, 0xeb, 0x4e, 0xfe, 0x34, 0xa8, 0xe9, 0x1b, 0xd2]
+    var mn = try g.mnemonicFromEntropy(&ent)
+    check("BIP39's 9e885d95... vector", String(decoding: mn, as: UTF8.self), "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic")
+    ok("the entropy passed in is zeroed", ent.allSatisfy { $0 == 0 })
+    var none: [UInt8] = []
+    check("the generated words load", try g.seedFromMnemonic(&mn, passphrase: &none).fingerprint.count, 8)
+    var rolls = [UInt8](String(repeating: "1", count: 50).utf8)
+    check("50 dice rolls", String(decoding: try g.mnemonicFromDice(&rolls, words: 12), as: UTF8.self), "diet glad hat rural panther lawsuit act drop gallery urge where fit")
+    do {
+        var short = [UInt8](String(repeating: "1", count: 98).utf8)
+        _ = try g.mnemonicFromDice(&short)
+        ok("98 rolls for 24 words are refused", false)
+    } catch {
+        ok("98 rolls for 24 words are refused", "\(error)" == "mnemonic_from_dice failed")
+    }
+    do {
+        var short = [UInt8](repeating: 0, count: 15)
+        _ = try g.mnemonicFromEntropy(&short)
+        ok("15 bytes of entropy are refused", false)
+    } catch {
+        ok("15 bytes of entropy are refused", "\(error)" == "mnemonic_from_entropy failed")
+    }
+    var kept = [UInt8](String(repeating: "1", count: 99).utf8)
+    do {
+        _ = try g.mnemonicFromDice(&kept, words: 18)
+        ok("18 words from dice is refused", false)
+    } catch {
+        ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == 0x31)
+    }
+    g.unload()
+}
+
+// --- making a SeedQR from the words, against the published vector 4, and reading it back
+do {
+    let q = try Signer(signerWasm: signerWasm)
+    try q.initialise()
+    var words = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8)
+    check("Standard SeedQR digits", String(decoding: try q.seedQRFromMnemonic(&words), as: UTF8.self), "073318950739065415961602009907670428187212261116")
+    ok("the words passed in are zeroed", words.allSatisfy { $0 == 0 })
+    var again = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8), none: [UInt8] = []
+    var compact = try q.seedQRFromMnemonic(&again, compact: true)
+    check("CompactSeedQR bytes", hex(compact), "5bbd9d71a8ec7990831aff359d426545")
+    var typed = [UInt8]("forum undo fragile fade shy sign arrest garment culture tube off merit".utf8)
+    let want = try q.seedFromMnemonic(&typed, passphrase: &none).fingerprint
+    check("the CompactSeedQR made here loads the same key",
+          try q.initialise().seedFromSeedQR(&compact, passphrase: &none).fingerprint, want)
+    do {
+        var bad = [UInt8]((String(repeating: "abandon ", count: 11) + "abandon").utf8)
+        _ = try q.seedQRFromMnemonic(&bad)
+        ok("a SeedQR of a bad mnemonic is refused", false)
+    } catch {
+        ok("a SeedQR of a bad mnemonic is refused", "\(error)" == "seedqr_from_mnemonic failed")
+    }
+    q.unload()
+}
+
+// --- BIP85: the child the JavaScript host checks against its own derivation
+do {
+    let b = try freshSigner()
+    check("BIP85 12 words, index 0", String(decoding: try b.bip85Mnemonic(words: 12), as: UTF8.self), "prosper short ramp prepare exchange stove life snack client enough purpose fold")
+    do {
+        _ = try b.bip85Mnemonic(words: 15)
+        ok("BIP85 with 15 words is refused", false)
+    } catch {
+        ok("BIP85 with 15 words is refused", "\(error)" == "bip85_mnemonic failed")
+    }
+    b.unload()
+    do {
+        _ = try b.initialise().bip85Mnemonic()
+        ok("BIP85 with no seed says so", false)
+    } catch {
+        ok("BIP85 with no seed says so", "\(error)" == "no seed is loaded")
+    }
+}
+
+// --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
+do {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](("  " + mnemonicText.uppercased() + "\n").utf8), none: [UInt8] = []
+    check("whitespace and capitals load the same wallet", try b.seedFromMnemonic(&w, passphrase: &none).fingerprint,
+          "73c5da0a")
+}
+for (what, bad) in [("a bad checksum", String(repeating: "abandon ", count: 11) + "abandon"),
+                    ("a word not in the list", mnemonicText.replacingOccurrences(of: "about", with: "abaut"))] {
+    let b = try Signer(signerWasm: signerWasm)
+    try b.initialise()
+    var w = [UInt8](bad.utf8), none: [UInt8] = []
+    do {
+        try b.seedFromMnemonic(&w, passphrase: &none)
+        ok("a mnemonic with \(what) is refused", false)
+    } catch {
+        ok("a mnemonic with \(what) is refused", "\(error)".contains("seed_from_mnemonic failed") && b.fingerprint == "00000000")
+    }
 }
 
 // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words

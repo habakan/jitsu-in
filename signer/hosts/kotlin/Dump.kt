@@ -33,7 +33,12 @@ fun main(args: Array<String>) {
     println("fee ${d.fee} spend ${d.spend}")
     for (o in d.outputs) println("out ${o.amount} ${o.owner} ${o.textKind} ${o.text}")
     for (sig in s.sign()) println("sig ${sig.input} ${sig.sig.joinToString("") { "%02x".format(it) }}")
+    val found = s.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", count = 20)!!
+    println("found ${found.chain} ${found.index}")
     println("desc ${s.xpub(purpose = 86, account = 1).descriptor}")
+    println("dice ${String(s.mnemonicFromDice("3".repeat(99).toByteArray()))}")
+    println("seedqr ${String(s.seedQRFromMnemonic(("abandon ".repeat(11) + "about").toCharArray()))}")
+    println("bip85 ${String(s.bip85Mnemonic(words = 24, index = 3))}")
     val shown = s.messageReview("dump\n".toByteArray(), purpose = 49, chain = 1, index = 2)
     println("message ${shown.address} ${shown.text} ${java.util.Base64.getEncoder().encodeToString(s.messageSign())}")
     s.unload()

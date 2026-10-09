@@ -145,12 +145,58 @@ check("the tr() descriptor", tr.descriptor, `tr([73c5da0a/86h/0h/0h]${tr.xpub}/<
     ok(`m/${purpose}'/0'/${account}' descriptor`, got.descriptor.includes(`/${purpose}h/0h/${account}h]${got.xpub}/`));
   }
 }
+// a refusal leaves nothing of the previous xpub to be read as its own
+{
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mn = new TextEncoder().encode(MNEMONIC), mem = () => new Uint8Array(E.memory.buffer);
+  E.signer_init(0);
+  mem().set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  check("the raw ABI exports an xpub", E.signer_xpub(84, 0), 0);
+  check("then refuses BIP44", E.signer_xpub(44, 0), 1);
+  ok("and the xpub and descriptor buffers are empty", mem()[E.signer_xpub_output()] === 0 && mem()[E.signer_desc_output()] === 0);
+}
+// JavaScript would wrap these into a valid i32, so the library refuses them before the module sees them
+for (const [what, opts] of [["2^32 + 1", { account: 2 ** 32 + 1 }], ["1.5", { account: 1.5 }], ["-1", { account: -1 }]]) {
+  try {
+    S.xpub(opts);
+    ok(`xpub for account ${what} is refused`, false);
+  } catch (e) {
+    ok(`xpub for account ${what} is refused`, e instanceof RangeError);
+  }
+}
 for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", { account: 0x80000000 }]]) {
   try {
     S.xpub(opts);
     ok(`xpub for ${what} is refused`, false);
   } catch (e) {
     ok(`xpub for ${what} is refused`, e instanceof SignerError && /FORMAT/.test(e.message));
+  }
+}
+
+// --- which of our addresses an address is, against BIP84's and BIP86's vectors
+{
+  const found = (a, o) => JSON.stringify(S.findAddress(a, o));
+  check("BIP84 0/1", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), '{"chain":0,"index":1}');
+  check("BIP84 change 1/0", found("bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"), '{"chain":1,"index":0}');
+  check("BIP86 0/1", found("bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh"), '{"chain":0,"index":1}');
+  check("BIP49 change 1/0, in base58", found("34K56kSjgUCUSD8GTtuF7c9Zzwokbs6uZ7"), '{"chain":1,"index":0}');
+  check("a BIP21 URI in upper case, as a QR carries it",
+        found("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"), '{"chain":0,"index":1}');
+  check("not ours", found("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), "null");
+  check("beyond count", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { count: 1 }), "null");
+  check("another account", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", { account: 1, count: 20 }), "null");
+  for (const [what, a, err, opts] of [["a testnet address", "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl", SignerError],
+                                ["base58", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", SignerError],
+                                ["an oversized string", "bc1q" + "q".repeat(600), RangeError],
+                                ["a NUL inside", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g\0junk", SignerError],
+                                ["a count JavaScript would wrap", "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", RangeError, { count: 2 ** 32 + 5 }]]) {
+    try {
+      S.findAddress(a, opts);
+      ok(`findAddress refuses ${what}`, false);
+    } catch (e) {
+      ok(`findAddress refuses ${what}`, e instanceof err);
+    }
   }
 }
 
@@ -167,6 +213,13 @@ for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", {
        dv.outputs.some((o) => o.owner === OWNER.CHANGE && o.text.startsWith("3")));
     const sv = P2.sign();
     ok(`${name}: ECDSA with a compressed key for each`, sv.every((s) => s.sig[0] === 0x30 && (s.pubkey[0] === 2 || s.pubkey[0] === 3)));
+  }
+  // a P2SH multisig we cosign is left alone, not a reason to refuse the input of ours beside it
+  {
+    const m = planFor(`${root}parser/build/vectors/own_with_p2sh_multisig_input.psbt`, parseInt("73c5da0a", 16));
+    const rm = P2.setPlan(m.plan).setPrevTxs(m.prevTxs).review();
+    ok("beside a P2SH multisig we cosign, our P2WPKH input alone is signed", rm.nSign === 1 && rm.willSign[0] && !rm.willSign[1]);
+    check("and signed", P2.sign().length, 1);
   }
   // a P2SH that is not P2SH(P2WPKH(our key)), whatever the PSBT says, is refused
   const v = planFor(`${root}parser/build/vectors/own_p2sh_p2wpkh_1in.psbt`, parseInt("73c5da0a", 16));
@@ -230,6 +283,17 @@ for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", {
     mem()[at + 15] = "9".charCodeAt(0);
   }
   check("a message changed after review is refused", E.signer_message_sign(), 10);
+  // a review does not survive a re-init, which may change the network, nor does a signature an unload
+  mem().set(m, E.signer_input());
+  check("a fresh review", E.signer_message_review(m.length, 84, 0, 0, 0), 0);
+  E.signer_init(1);
+  check("is forgotten by init", E.signer_message_sign(), 10);
+  E.signer_init(0);
+  mem().set(m, E.signer_input());
+  E.signer_message_review(m.length, 84, 0, 0, 0);
+  check("signs once reviewed again", E.signer_message_sign(), 0);
+  E.signer_unload();
+  ok("and unload clears the signature", new Uint8Array(E.memory.buffer, E.signer_message_sig(), 65).every((b) => b === 0));
 }
 
 // --- the module refuses to sign a plan it was not shown
@@ -280,6 +344,162 @@ for (const tamper of [false, true]) {
   S3.setPrevTxs(prevTxs);
   check("the signer still reviews afterwards", S3.review().nSign > 0, true);
   S3.unload();
+}
+
+// --- making a new mnemonic, from entropy and from dice, against BIP39's and the dice vectors
+{
+  const G = await Signer.load(signerWasm);
+  G.init();
+  const dec = (b) => new TextDecoder().decode(b);
+  const ent = Uint8Array.from(Buffer.from("9e885d952ad362caeb4efe34a8e91bd2", "hex"));
+  const mn = G.mnemonicFromEntropy(ent);
+  check("BIP39's 9e885d95... vector", dec(mn),
+        "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic");
+  ok("the entropy passed in is zeroed", ent.every((b) => b === 0));
+  check("the generated words load", G.seedFromMnemonic(mn).fingerprint.length, 8);
+  ok("the words returned are cleared by loading them", mn.every((b) => b === 0));
+  const enc = (t) => new TextEncoder().encode(t);
+  check("50 dice rolls", dec(G.mnemonicFromDice(enc("1".repeat(50)), 12)),
+        "diet glad hat rural panther lawsuit act drop gallery urge where fit");
+  check("99 dice rolls", dec(G.mnemonicFromDice(enc("2".repeat(45) + "5".repeat(53) + "6"))),
+        "lizard broken love tired depend eyebrow excess lonely advance father various cram ignore panic feed plunge miss regret boring unique galaxy fan detail fly");
+  try {
+    G.mnemonicFromDice(/** @type {any} */ ("1".repeat(99)));
+    ok("dice rolls as a string are refused for what they are", false);
+  } catch (e) {
+    ok("dice rolls as a string are refused for what they are", e instanceof TypeError && /Uint8Array/.test(e.message));
+  }
+  const kept = enc("1".repeat(99));
+  try {
+    G.mnemonicFromDice(kept, /** @type {any} */ (18));
+    ok("18 words from dice is refused", false);
+  } catch (e) {
+    ok("18 words from dice is refused, and the rolls are kept to retry", e instanceof RangeError && kept[0] === 0x31);
+  }
+  for (const [what, call] of [["15 bytes of entropy", () => G.mnemonicFromEntropy(new Uint8Array(15))],
+                              ["98 rolls for 24 words", () => G.mnemonicFromDice(enc("1".repeat(98)))],
+                              ["a 7 among the rolls", () => G.mnemonicFromDice(enc("7" + "1".repeat(49)), 12)]]) {
+    try {
+      call();
+      ok(`${what} is refused`, false);
+    } catch (e) {
+      ok(`${what} is refused`, /failed/.test(e.message));
+    }
+  }
+  // the words never stay in the module's output buffer once the library has read them
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  E.signer_init(0);
+  new Uint8Array(E.memory.buffer).set(Buffer.from("9e885d952ad362caeb4efe34a8e91bd2", "hex"), E.signer_input());
+  const n = E.signer_mnemonic_from_entropy(16);
+  check("the raw ABI writes the words", new TextDecoder().decode(new Uint8Array(E.memory.buffer, E.signer_mnemonic_output(), n)),
+        "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic");
+  // a longer mnemonic made before leaves nothing after a shorter one's NUL
+  new Uint8Array(E.memory.buffer).set(new Uint8Array(32).fill(7), E.signer_input());
+  E.signer_mnemonic_from_entropy(32);
+  new Uint8Array(E.memory.buffer).set(Buffer.from("9e885d952ad362caeb4efe34a8e91bd2", "hex"), E.signer_input());
+  const short = E.signer_mnemonic_from_entropy(16);
+  ok("a shorter mnemonic leaves nothing of the longer one after it",
+     new Uint8Array(E.memory.buffer, E.signer_mnemonic_output() + short, 256 - short).every((b) => b === 0));
+  E.signer_unload();
+  ok("unload clears the words", Buffer.from(E.memory.buffer).indexOf(Buffer.from("ozone drill")) < 0);
+  G.unload();
+}
+
+// --- making a SeedQR from the words, against the published vector 4, and reading it back
+{
+  const Q = await Signer.load(signerWasm);
+  Q.init();
+  const enc = (t) => new TextEncoder().encode(t);
+  const words = enc("forum undo fragile fade shy sign arrest garment culture tube off merit");
+  const digits = Q.seedQRFromMnemonic(words);
+  check("Standard SeedQR digits", new TextDecoder().decode(digits), "073318950739065415961602009907670428187212261116");
+  ok("the words passed in are zeroed", words.every((b) => b === 0));
+  const compact = Q.seedQRFromMnemonic(enc("forum undo fragile fade shy sign arrest garment culture tube off merit"), { compact: true });
+  check("CompactSeedQR bytes", hex(compact), "5bbd9d71a8ec7990831aff359d426545");
+  const want = Q.seedFromMnemonic(enc("forum undo fragile fade shy sign arrest garment culture tube off merit")).fingerprint;
+  check("the CompactSeedQR made here loads the same key", Q.init().seedFromSeedQR(compact).fingerprint, want);
+  try {
+    Q.seedQRFromMnemonic(enc("abandon ".repeat(11) + "abandon"));
+    ok("a SeedQR of a bad mnemonic is refused", false);
+  } catch (e) {
+    ok("a SeedQR of a bad mnemonic is refused", /seedqr_from_mnemonic failed/.test(e.message));
+  }
+  Q.unload();
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  E.signer_init(0);
+  new Uint8Array(E.memory.buffer).set(enc("forum undo fragile fade shy sign arrest garment culture tube off merit"), E.signer_input());
+  check("the raw ABI writes the digits", E.signer_seedqr_from_mnemonic(70, 0), 48);
+  new Uint8Array(E.memory.buffer).set(enc("forum undo fragile fade shy sign arrest garment culture tube off merit"), E.signer_input());
+  check("then the compact bytes", E.signer_seedqr_from_mnemonic(70, 1), 16);
+  ok("which leave nothing of the digits after them", new Uint8Array(E.memory.buffer, E.signer_seedqr_output() + 16, 80).every((b) => b === 0));
+  E.signer_unload();
+  ok("unload clears the SeedQR", Buffer.from(E.memory.buffer).indexOf(Buffer.from("073318950739065415961602")) < 0);
+}
+
+// --- BIP85 children of the loaded seed, against a derivation written here. Every step is hardened, so
+// it is only HMAC and addition mod n; the words come from mnemonicFromEntropy, checked against BIP39 above
+{
+  const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+  const big = (b) => BigInt("0x" + Buffer.from(b).toString("hex"));
+  const child = (words, index) => {
+    const I = createHmac("sha512", "Bitcoin seed").update(pbkdf2Sync(MNEMONIC, "mnemonic", 2048, 64, "sha512")).digest();
+    let k = I.subarray(0, 32), c = I.subarray(32);
+    for (const i of [83696968, 39, 0, words, index].map((v) => (v | 0x80000000) >>> 0)) {
+      const J = createHmac("sha512", c).update(Buffer.concat([Buffer.alloc(1), k, Buffer.from([i >>> 24, (i >> 16) & 255, (i >> 8) & 255, i & 255])])).digest();
+      k = Buffer.from(((big(J.subarray(0, 32)) + big(k)) % N).toString(16).padStart(64, "0"), "hex");
+      c = J.subarray(32);
+    }
+    return Uint8Array.from(createHmac("sha512", "bip-entropy-from-k").update(k).digest().subarray(0, words * 4 / 3));
+  };
+  const B = await Signer.load(signerWasm);
+  B.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  const dec = (b) => new TextDecoder().decode(b);
+  for (const [words, index] of [[12, 0], [12, 1], [24, 0], [18, 7]]) {
+    check(`BIP85 ${words} words, index ${index}`, dec(B.bip85Mnemonic({ words, index })), dec(B.mnemonicFromEntropy(child(words, index))));
+  }
+  check("BIP85 12 words, index 0, by value", dec(B.bip85Mnemonic({ words: 12 })),
+        "prosper short ramp prepare exchange stove life snack client enough purpose fold");
+  // JavaScript would wrap these to index 0 or 1 at the i32 boundary, and the user would write down another child
+  for (const [what, opts] of [["15 words", { words: 15 }], ["index NaN", { index: NaN }], ["index 2^32", { index: 2 ** 32 }], ["index 1.7", { index: 1.7 }]]) {
+    try {
+      B.bip85Mnemonic(/** @type {any} */ (opts));
+      ok(`BIP85 with ${what} is refused`, false);
+    } catch (e) {
+      ok(`BIP85 with ${what} is refused`, e instanceof RangeError);
+    }
+  }
+  B.unload();
+  try {
+    B.init().bip85Mnemonic();
+    ok("BIP85 with no seed says so", false);
+  } catch (e) {
+    ok("BIP85 with no seed says so", /no seed is loaded/.test(e.message));
+  }
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mn = new TextEncoder().encode(MNEMONIC);
+  E.signer_init(0);
+  new Uint8Array(E.memory.buffer).set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  check("the raw ABI writes a child", E.signer_bip85_mnemonic(12, 0) > 0, true);
+  E.signer_unload();
+  ok("unload clears the child", Buffer.from(E.memory.buffer).indexOf(Buffer.from("prosper short")) < 0);
+}
+
+// --- what a keyboard adds loads the same wallet; a mnemonic whose BIP39 checksum fails, or a word
+// that is not English BIP39, loads nothing
+for (const typed of [" " + MNEMONIC.replace(" ", "  ").toUpperCase() + "\n", "Abandon" + MNEMONIC.slice(7)]) {
+  const B = await Signer.load(signerWasm);
+  check(`${JSON.stringify(typed.slice(0, 18))}... loads the same wallet`,
+        B.init().seedFromMnemonic(new TextEncoder().encode(typed)).fingerprint, "73c5da0a");
+}
+for (const [what, bad] of [["a bad checksum", "abandon ".repeat(11) + "abandon"], ["a word not in the list", MNEMONIC.replace("about", "abaut")]]) {
+  const B = await Signer.load(signerWasm);
+  try {
+    B.init().seedFromMnemonic(new TextEncoder().encode(bad));
+    ok(`a mnemonic with ${what} is refused`, false);
+  } catch (e) {
+    ok(`a mnemonic with ${what} is refused`, /seed_from_mnemonic failed/.test(e.message) && B.fingerprint === "00000000");
+  }
 }
 
 // --- SeedQR, against the published vector 4: the words never leave the module, so the fingerprint

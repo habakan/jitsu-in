@@ -2,6 +2,7 @@
 // produced. The signatures are deterministic, so "the same" means byte-identical, not merely valid.
 //
 //   java -cp "test.jar:$CP" TestKt <signer.wasm> <parser.wasm> <psbt> <natively-signed-psbt>
+import wasmsigner.AddressPath
 import wasmsigner.Owner
 import wasmsigner.Signer
 import wasmsigner.SignerException
@@ -120,12 +121,35 @@ fun main(args: Array<String>) {
     check("BIP86's account 0", tr.xpub, "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ")
     check("the tr() descriptor", tr.descriptor, "tr([73c5da0a/86h/0h/0h]${tr.xpub}/<0;1>/*)")
     check("the BIP49 descriptor", s.xpub(purpose = 49).descriptor.take(32), "sh(wpkh([73c5da0a/49h/0h/0h]xpub")
-    ok("account 1 is named", s.xpub(account = 1).descriptor.startsWith("wpkh([73c5da0a/84h/0h/1h]xpub"))
+    val a1 = s.xpub(account = 1)
+    check("account 1, as the JavaScript host derives it independently", a1.xpub, "xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyicJgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn")
+    ok("account 1 is named", a1.descriptor.startsWith("wpkh([73c5da0a/84h/0h/1h]xpub"))
+    try {
+        s.xpub(account = -1)
+        ok("xpub for a hardened account is refused", false)
+    } catch (e: SignerException) {
+        ok("xpub for a hardened account is refused", e.message == "xpub: FORMAT")
+    }
     try {
         s.xpub(purpose = 44)
         ok("xpub for BIP44 is refused", false)
     } catch (e: SignerException) {
         ok("xpub for BIP44 is refused", e.message!!.contains("FORMAT"))
+    }
+
+    // --- which of our addresses an address is, against BIP84's and BIP86's vectors. A count of 20,
+    // because Chicory interprets every derivation and 1000 of them take minutes
+    val find = { a: String -> s.findAddress(a, count = 20) }
+    check("BIP84 0/1", find("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), AddressPath(0, 1))
+    check("BIP86 change 1/0", find("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7"), AddressPath(1, 0))
+    check("a BIP21 URI in upper case", find("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"),
+          AddressPath(0, 1))
+    check("not ours", find("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), null)
+    try {
+        find("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
+        ok("findAddress refuses base58", false)
+    } catch (e: SignerException) {
+        ok("findAddress refuses base58", e.message == "findAddress: FORMAT")
     }
 
     // --- BIP137: the signature Core's signmessagewithprivkey gives, with the P2WPKH header (check-core-diff)
@@ -183,6 +207,91 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", false)
     } catch (e: IllegalArgumentException) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
+    }
+
+    // --- making a new mnemonic, from entropy and from dice, against BIP39's and the dice vectors
+    run {
+        val g = Signer(signerWasm).init()
+        val ent = "9e885d952ad362caeb4efe34a8e91bd2".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val mn = g.mnemonicFromEntropy(ent)
+        check("BIP39's 9e885d95... vector", String(mn), "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic")
+        ok("the entropy passed in is zeroed", ent.all { it == 0.toByte() })
+        check("the generated words load", g.seedFromMnemonic(mn).fingerprint.length, 8)
+        check("50 dice rolls", String(g.mnemonicFromDice("1".repeat(50).toByteArray(), 12)), "diet glad hat rural panther lawsuit act drop gallery urge where fit")
+        try {
+            g.mnemonicFromDice("1".repeat(98).toByteArray())
+            ok("98 rolls for 24 words are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("98 rolls for 24 words are refused", e.message == "mnemonic_from_dice failed")
+        }
+        try {
+            g.mnemonicFromEntropy(ByteArray(15))
+            ok("15 bytes of entropy are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("15 bytes of entropy are refused", e.message == "mnemonic_from_entropy failed")
+        }
+        val kept = "1".repeat(99).toByteArray()
+        try {
+            g.mnemonicFromDice(kept, 18)
+            ok("18 words from dice is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == '1'.code.toByte())
+        }
+        g.unload()
+    }
+
+    // --- making a SeedQR from the words, against the published vector 4, and reading it back
+    run {
+        val q = Signer(signerWasm).init()
+        val words = "forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray()
+        check("Standard SeedQR digits", String(q.seedQRFromMnemonic(words)), "073318950739065415961602009907670428187212261116")
+        ok("the words passed in are zeroed", words.all { it == '\u0000' })
+        val compact = q.seedQRFromMnemonic("forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray(), compact = true)
+        check("CompactSeedQR bytes", compact.joinToString("") { "%02x".format(it) }, "5bbd9d71a8ec7990831aff359d426545")
+        val want = q.seedFromMnemonic("forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray()).fingerprint
+        check("the CompactSeedQR made here loads the same key", q.init().seedFromSeedQR(compact).fingerprint, want)
+        try {
+            q.seedQRFromMnemonic(("abandon ".repeat(11) + "abandon").toCharArray())
+            ok("a SeedQR of a bad mnemonic is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("a SeedQR of a bad mnemonic is refused", e.message == "seedqr_from_mnemonic failed")
+        }
+        q.unload()
+    }
+
+    // --- BIP85: the child the JavaScript host checks against its own derivation
+    run {
+        val b = Signer(signerWasm).init().seedFromMnemonic(mnemonic.copyOf())
+        check("BIP85 12 words, index 0", String(b.bip85Mnemonic(words = 12)), "prosper short ramp prepare exchange stove life snack client enough purpose fold")
+        try {
+            b.bip85Mnemonic(words = 15)
+            ok("BIP85 with 15 words is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("BIP85 with 15 words is refused", e.message == "bip85_mnemonic failed")
+        }
+        b.unload()
+        try {
+            b.init().bip85Mnemonic()
+            ok("BIP85 with no seed says so", false)
+        } catch (e: IllegalArgumentException) {
+            ok("BIP85 with no seed says so", e.message == "no seed is loaded")
+        }
+    }
+
+    // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
+    val typed = "abandon ".repeat(11) + "about"
+    check("whitespace and capitals load the same wallet",
+          Signer(signerWasm).init().seedFromMnemonic((" " + typed.replaceFirst(" ", "  ").uppercase() + "\n").toCharArray())
+              .fingerprint, "73c5da0a")
+    for ((what, bad) in listOf("a bad checksum" to "abandon ".repeat(11) + "abandon",
+                               "a word not in the list" to typed.replace("about", "abaut"))) {
+        val b = Signer(signerWasm).init()
+        try {
+            b.seedFromMnemonic(bad.toCharArray())
+            ok("a mnemonic with $what is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("a mnemonic with $what is refused", e.message == "seed_from_mnemonic failed" && b.fingerprint == "00000000")
+        }
     }
 
     // --- SeedQR, against the published vector 4: the fingerprint has to equal the one from typing the words

@@ -20,7 +20,7 @@ const PLATFORMS = [
   ["Web viewer", "the browser's own engine", "parser.wasm · read-only", false, 210, "globe"],
 ];
 
-const MODULES = [["parser.wasm", "15,632 B"], ["signer.wasm", "77,520 B"]];
+const MODULES = [["parser.wasm", "15,697 B"], ["signer.wasm", "81,085 B"]];
 const NAME = "jitsu-in";
 
 // Brand logos are trademarked, so each platform gets a shape that says what kind it is

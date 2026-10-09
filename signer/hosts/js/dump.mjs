@@ -39,7 +39,12 @@ for (const o of d.outputs) {
 for (const s of S.sign()) {
   console.log(`sig ${s.input} ` + [...s.sig].map((b) => b.toString(16).padStart(2, "0")).join(""));
 }
+const found = S.findAddress("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", { count: 20 });
+console.log(`found ${found.chain} ${found.index}`);
 console.log(`desc ${S.xpub({ purpose: 86, account: 1 }).descriptor}`);
+console.log(`dice ${new TextDecoder().decode(S.mnemonicFromDice(new TextEncoder().encode("3".repeat(99))))}`);
+console.log(`seedqr ${new TextDecoder().decode(S.seedQRFromMnemonic(new TextEncoder().encode("abandon ".repeat(11) + "about")))}`);
+console.log(`bip85 ${new TextDecoder().decode(S.bip85Mnemonic({ words: 24, index: 3 }))}`);
 const shown = S.messageReview(new TextEncoder().encode("dump\n"), { purpose: 49, chain: 1, index: 2 });
 console.log(`message ${shown.address} ${shown.text} ${Buffer.from(S.messageSign()).toString("base64")}`);
 S.unload();

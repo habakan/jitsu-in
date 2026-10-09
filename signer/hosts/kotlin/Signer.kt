@@ -40,7 +40,7 @@ private object L {
 
 private val CORE_ERR = arrayOf(
     "OK", "FORMAT", "NO_SEED", "NOT_OURS", "NOTHING_TO_SIGN", "SIGHASH", "SCRIPT",
-    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO",
+    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND",
 )
 
 class SignerException(val stage: String, val code: Int) : Exception(
@@ -75,6 +75,7 @@ class Display(val fee: Long, val spend: Long, val outputs: List<DisplayOutput>)
 class Signature(val input: Int, val pubkey: ByteArray, val sig: ByteArray, val raw: ByteArray)
 
 class AccountKey(val xpub: String, val descriptor: String)
+data class AddressPath(val chain: Int, val index: Int)
 
 class Signer(signerWasm: ByteArray, sha256: String? = null) {
     init {
@@ -197,6 +198,65 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         }
     }
 
+    /**
+     * A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), to show and then clear. Nothing
+     * is loaded. The entropy is zeroed, and so is the module's copy of the words.
+     */
+    fun mnemonicFromEntropy(entropy: ByteArray): CharArray = chars(
+        generate(entropy, "mnemonic_from_entropy", "signer_mnemonic_output") {
+            call("signer_mnemonic_from_entropy", entropy.size.toLong())
+        })
+
+    /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. */
+    fun mnemonicFromDice(rolls: ByteArray, words: Int = 24): CharArray {
+        require(words == 12 || words == 24) { "dice make 12 or 24 words, not $words" }
+        return chars(generate(rolls, "mnemonic_from_dice", "signer_mnemonic_output") {
+            call("signer_mnemonic_from_dice", rolls.size.toLong(), words.toLong())
+        })
+    }
+
+    /**
+     * The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+     * numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+     * so clear it once shown. The mnemonic is zeroed, and so is the module's copy.
+     */
+    fun seedQRFromMnemonic(mnemonic: CharArray, compact: Boolean = false): ByteArray {
+        try {
+            val mn = utf8(mnemonic)
+            return generate(mn, "seedqr_from_mnemonic", "signer_seedqr_output") {
+                call("signer_seedqr_from_mnemonic", mn.size.toLong(), if (compact) 1L else 0L)
+            }
+        } finally {
+            mnemonic.fill('\u0000')
+        }
+    }
+
+    /**
+     * The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), to show and then
+     * clear. English; `words` is 12, 18 or 24. The module's copy is zeroed.
+     */
+    fun bip85Mnemonic(words: Int = 24, index: Int = 0): CharArray {
+        require(fingerprint != "00000000") { "no seed is loaded" }
+        return chars(generate(ByteArray(0), "bip85_mnemonic", "signer_mnemonic_output") {
+            call("signer_bip85_mnemonic", words.toLong(), index.toLong())
+        })
+    }
+
+    private fun chars(raw: ByteArray) = CharArray(raw.size) { raw[it].toInt().toChar() }.also { raw.fill(0) }
+
+    private fun generate(input: ByteArray, name: String, output: String, make: () -> Int): ByteArray {
+        try {
+            require(input.size <= inputCapacity) { "${input.size} bytes does not fit in $inputCapacity" }
+            memory.write(call("signer_input"), input)
+            val n = make()
+            require(n > 0) { "$name failed" }
+            val at = call(output)
+            return bytes(at, n).also { memory.write(at, ByteArray(n)) }
+        } finally {
+            input.fill(0)
+        }
+    }
+
     /** For a seed you already have. 64 bytes. */
     fun loadSeed(seed: ByteArray): Signer {
         require(seed.size == 64) { "a seed is 64 bytes, got ${seed.size}" }
@@ -302,6 +362,21 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
     }
 
     /**
+     * Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1.
+     * Takes a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Null when it is not found.
+     */
+    fun findAddress(address: String, account: Int = 0, count: Int = 1000): AddressPath? {
+        val bytes = address.trim().replace(Regex("^bitcoin:", RegexOption.IGNORE_CASE), "")
+            .substringBefore('?').toByteArray()
+        require(bytes.size <= inputCapacity) { "${bytes.size} bytes of address does not fit in $inputCapacity" }
+        memory.write(call("signer_input"), bytes)
+        val rc = call("signer_find_address", bytes.size.toLong(), account.toLong(), count.toLong())
+        if (rc >= 0) return AddressPath(rc shr 20, rc and 0xfffff)
+        if (rc != -CORE_ERR.indexOf("NOT_FOUND")) throw SignerException("findAddress", -rc)
+        return null
+    }
+
+    /**
      * What to show before signing a message with BIP137: the address of m/purpose'/coin'/account'/chain/index
      * (purpose 49 or 84), and the message, as it is when it is printable ASCII and in hex otherwise.
      * Approving it permits one messageSign().
@@ -325,7 +400,7 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         return bytes(call("signer_message_sig"), 65)
     }
 
-    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     fun xpub(purpose: Int = 84, account: Int = 0): AccountKey {
         val rc = call("signer_xpub", purpose.toLong(), account.toLong())

@@ -102,6 +102,34 @@ export class Signer {
      * @param {Uint8Array} [passphrase]
      */
     seedFromSeedQR(payload: Uint8Array, passphrase?: Uint8Array): this;
+    /** A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), as UTF-8 bytes to show and then
+     *  clear. Nothing is loaded. `entropy` is zeroed, and so is the module's copy of the words. */
+    /** @param {Uint8Array} entropy */
+    mnemonicFromEntropy(entropy: Uint8Array): Uint8Array<ArrayBuffer>;
+    /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. The
+     *  entropy is SHA-256 of the rolls. `rolls` is zeroed. */
+    /**
+     * @param {Uint8Array} rolls
+     * @param {12 | 24} [words]
+     */
+    mnemonicFromDice(rolls: Uint8Array, words?: 12 | 24): Uint8Array<ArrayBuffer>;
+    /** The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+     *  numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+     *  so clear it once shown. `mnemonic` is zeroed, and so is the module's copy. */
+    /**
+     * @param {Uint8Array} mnemonic
+     * @param {{ compact?: boolean }} [opts]
+     */
+    seedQRFromMnemonic(mnemonic: Uint8Array, { compact }?: {
+        compact?: boolean;
+    }): Uint8Array<ArrayBuffer>;
+    /** The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+     *  show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed. */
+    /** @param {{ words?: 12 | 18 | 24, index?: number }} [opts] */
+    bip85Mnemonic({ words, index }?: {
+        words?: 12 | 18 | 24;
+        index?: number;
+    }): Uint8Array<ArrayBuffer>;
     /** For a seed you already have. 64 bytes. */
     /** @param {Uint8Array} seed */
     loadSeed(seed: Uint8Array): this;
@@ -148,6 +176,20 @@ export class Signer {
         sig: Uint8Array<ArrayBuffer>;
         raw: Uint8Array<ArrayBuffer>;
     }[];
+    /** Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1. Takes
+     *  a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Returns null when it is not found. */
+    /**
+     * @param {string} address
+     * @param {{ account?: number, count?: number }} [opts]
+     * @returns {{ chain: number, index: number } | null}
+     */
+    findAddress(address: string, { account, count }?: {
+        account?: number;
+        count?: number;
+    }): {
+        chain: number;
+        index: number;
+    } | null;
     /** What to show before signing a message with BIP137: the address of m/purpose'/coin'/account'/chain/index
      *  (purpose 49 or 84), and the message, as it is when it is printable ASCII and in hex otherwise.
      *  Approving it permits one messageSign(). */
@@ -168,7 +210,7 @@ export class Signer {
     /** The BIP137 signature of the message messageReview() showed: 65 bytes, header then r and s. Most
      *  wallets want it in base64. */
     messageSign(): Uint8Array<ArrayBuffer>;
-    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     xpub({ purpose, account }?: {
         purpose?: number | undefined;
@@ -205,6 +247,13 @@ export type SignerExports = {
     signer_display: () => number;
     signer_sign: () => number;
     signer_xpub: (purpose: number, account: number) => number;
+    signer_find_address: (len: number, account: number, count: number) => number;
+    signer_mnemonic_output: () => number;
+    signer_mnemonic_from_entropy: (len: number) => number;
+    signer_mnemonic_from_dice: (len: number, words: number) => number;
+    signer_seedqr_output: () => number;
+    signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number;
+    signer_bip85_mnemonic: (words: number, index: number) => number;
     signer_message_output: () => number;
     signer_message_sig: () => number;
     signer_message_review: (len: number, purpose: number, account: number, chain: number, index: number) => number;
