@@ -243,6 +243,25 @@ fun main(args: Array<String>) {
         q.unload()
     }
 
+    // --- BIP85: the child the JavaScript host checks against its own derivation
+    run {
+        val b = Signer(signerWasm).init().seedFromMnemonic(mnemonic.copyOf())
+        check("BIP85 12 words, index 0", String(b.bip85Mnemonic(words = 12)), "prosper short ramp prepare exchange stove life snack client enough purpose fold")
+        try {
+            b.bip85Mnemonic(words = 15)
+            ok("BIP85 with 15 words is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("BIP85 with 15 words is refused", e.message == "bip85_mnemonic failed")
+        }
+        b.unload()
+        try {
+            b.init().bip85Mnemonic()
+            ok("BIP85 with no seed says so", false)
+        } catch (e: IllegalArgumentException) {
+            ok("BIP85 with no seed says so", e.message == "no seed is loaded")
+        }
+    }
+
     // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
     val typed = "abandon ".repeat(11) + "about"
     check("whitespace and capitals load the same wallet",

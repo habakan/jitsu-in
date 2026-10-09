@@ -72,6 +72,10 @@ int core_sign(const plan_t *p, core_rng_t rng, core_sig_t sigs[PLAN_MAX_INPUTS],
 /* BTC with eight decimals (60000 -> "0.00060000") */
 void core_format_btc(uint64_t sats, char out[21]);
 
+/* The BIP85 child mnemonic (English, 12, 18 or 24 words, index below 2^31) of the loaded seed. Returns
+ * its length, NUL-terminated in out, or 0 */
+int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap);
+
 /* Where on m/purpose'/coin'/account' an address is: receive then change, indices below count, as chain << 20 |
  * index, or -CORE_ERR_*. bc1q/tb1q is purpose 84, bc1p/tb1p 86; any other form is CORE_ERR_FORMAT */
 int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t count);

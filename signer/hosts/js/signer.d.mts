@@ -116,6 +116,13 @@ export class Signer {
     seedQRFromMnemonic(mnemonic: Uint8Array, { compact }?: {
         compact?: boolean;
     }): Uint8Array<ArrayBuffer>;
+    /** The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+     *  show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed. */
+    /** @param {{ words?: 12 | 18 | 24, index?: number }} [opts] */
+    bip85Mnemonic({ words, index }?: {
+        words?: 12 | 18 | 24;
+        index?: number;
+    }): Uint8Array<ArrayBuffer>;
     /** For a seed you already have. 64 bytes. */
     /** @param {Uint8Array} seed */
     loadSeed(seed: Uint8Array): this;
@@ -219,6 +226,7 @@ export type SignerExports = {
     signer_mnemonic_from_dice: (len: number, words: number) => number;
     signer_seedqr_output: () => number;
     signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number;
+    signer_bip85_mnemonic: (words: number, index: number) => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.

@@ -225,6 +225,17 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         }
     }
 
+    /**
+     * The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), to show and then
+     * clear. English; `words` is 12, 18 or 24. The module's copy is zeroed.
+     */
+    fun bip85Mnemonic(words: Int = 24, index: Int = 0): CharArray {
+        require(fingerprint != "00000000") { "no seed is loaded" }
+        return chars(generate(ByteArray(0), "bip85_mnemonic", "signer_mnemonic_output") {
+            call("signer_bip85_mnemonic", words.toLong(), index.toLong())
+        })
+    }
+
     private fun chars(raw: ByteArray) = CharArray(raw.size) { raw[it].toInt().toChar() }.also { raw.fill(0) }
 
     private fun generate(input: ByteArray, name: String, output: String, make: () -> Int): ByteArray {

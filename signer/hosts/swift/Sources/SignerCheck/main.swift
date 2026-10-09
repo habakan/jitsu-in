@@ -90,6 +90,7 @@ if dumpOnly {
     print("dice \(String(decoding: try s.mnemonicFromDice(&rolls), as: UTF8.self))")
     var abandon = [UInt8](mnemonicText.utf8)
     print("seedqr \(String(decoding: try s.seedQRFromMnemonic(&abandon), as: UTF8.self))")
+    print("bip85 \(String(decoding: try s.bip85Mnemonic(words: 24, index: 3), as: UTF8.self))")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
     var none: [UInt8] = []
@@ -282,6 +283,25 @@ do {
         ok("a SeedQR of a bad mnemonic is refused", "\(error)" == "seedqr_from_mnemonic failed")
     }
     q.unload()
+}
+
+// --- BIP85: the child the JavaScript host checks against its own derivation
+do {
+    let b = try freshSigner()
+    check("BIP85 12 words, index 0", String(decoding: try b.bip85Mnemonic(words: 12), as: UTF8.self), "prosper short ramp prepare exchange stove life snack client enough purpose fold")
+    do {
+        _ = try b.bip85Mnemonic(words: 15)
+        ok("BIP85 with 15 words is refused", false)
+    } catch {
+        ok("BIP85 with 15 words is refused", "\(error)" == "bip85_mnemonic failed")
+    }
+    b.unload()
+    do {
+        _ = try b.initialise().bip85Mnemonic()
+        ok("BIP85 with no seed says so", false)
+    } catch {
+        ok("BIP85 with no seed says so", "\(error)" == "no seed is loaded")
+    }
 }
 
 // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing

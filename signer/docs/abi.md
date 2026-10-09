@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 77,195 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 77,573 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,9 +12,9 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 101 checks in [test.mjs](../hosts/js/test.mjs) |
-| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 62 checks in [Test.kt](../hosts/kotlin/Test.kt) |
-| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 59 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 113 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 65 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 62 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 
@@ -24,7 +24,7 @@ way it is not for `parser.wasm`.
 - **Do not log, serialise or copy the input buffer.** The mnemonic, the SeedQR and the seed pass through
   `signer_input()`. The module wipes it after use; whatever your language did with the string you
   built it from is yours to clear
-- **A new mnemonic, or a SeedQR made for a backup, comes out of the module, once.** The host
+- **A new mnemonic, a BIP85 child, or a SeedQR made for a backup, comes out of the module, once.** The host
   libraries copy it out of `signer_mnemonic_output()` or `signer_seedqr_output()` and zero it there;
   the copy they return is yours to clear. The module has no randomness of its own, so the entropy has
   to come from the host: a CSPRNG, or dice
@@ -85,6 +85,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | `signer_mnemonic_from_entropy(len)` | the length of the new mnemonic, or 0. 16, 20, 24, 28 or 32 bytes of entropy give 12 to 24 words. Nothing is loaded |
 | `signer_mnemonic_from_dice(len, words)` | the same from dice rolls, the characters `1` to `6`: at least 50 for 12 words, 99 for 24. The entropy is SHA-256 of the rolls, the first 16 bytes for 12 words |
 | `signer_seedqr_from_mnemonic(mn_len, compact)` | the length of the SeedQR for the 12 or 24 word mnemonic in the input buffer, or 0: the Standard digits as ASCII (48 or 96, for QR numeric mode), or with `compact` the CompactSeedQR's 16 or 32 bytes (for byte mode) |
+| `signer_bip85_mnemonic(words, index)` | the length of the loaded seed's BIP85 child mnemonic at m/83696968'/39'/0'/words'/index' in `signer_mnemonic_output()`, or 0. English; `words` is 12, 18 or 24 and `index` below 2^31 |
 | `signer_set_prevtx(i, off, len)` | 1 on success. `len` of 0 means that input has no previous transaction |
 | `signer_review()` | 0 on success, otherwise one of the errors below |
 | `signer_display()` | 0 on success |

@@ -200,3 +200,10 @@ int EXPORT(signer_seedqr_from_mnemonic)(unsigned mn_len, int compact) {
     wipe(in, sizeof(in));
     return n;
 }
+
+/* The BIP85 child mnemonic of the loaded seed, into signer_mnemonic_output(). Returns its length, or 0 */
+int EXPORT(signer_bip85_mnemonic)(unsigned words, unsigned index) {
+    int n = core_bip85_mnemonic(words, index, mnemonic, sizeof(mnemonic));
+    if (!n) wipe(mnemonic, sizeof(mnemonic));
+    return n;
+}

@@ -339,6 +339,55 @@ for (const tamper of [false, true]) {
   ok("unload clears the SeedQR", Buffer.from(E.memory.buffer).indexOf(Buffer.from("073318950739065415961602")) < 0);
 }
 
+// --- BIP85 children of the loaded seed, against a derivation written here. Every step is hardened, so
+// it is only HMAC and addition mod n; the words come from mnemonicFromEntropy, checked against BIP39 above
+{
+  const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+  const big = (b) => BigInt("0x" + Buffer.from(b).toString("hex"));
+  const child = (words, index) => {
+    const I = createHmac("sha512", "Bitcoin seed").update(pbkdf2Sync(MNEMONIC, "mnemonic", 2048, 64, "sha512")).digest();
+    let k = I.subarray(0, 32), c = I.subarray(32);
+    for (const i of [83696968, 39, 0, words, index].map((v) => (v | 0x80000000) >>> 0)) {
+      const J = createHmac("sha512", c).update(Buffer.concat([Buffer.alloc(1), k, Buffer.from([i >>> 24, (i >> 16) & 255, (i >> 8) & 255, i & 255])])).digest();
+      k = Buffer.from(((big(J.subarray(0, 32)) + big(k)) % N).toString(16).padStart(64, "0"), "hex");
+      c = J.subarray(32);
+    }
+    return Uint8Array.from(createHmac("sha512", "bip-entropy-from-k").update(k).digest().subarray(0, words * 4 / 3));
+  };
+  const B = await Signer.load(signerWasm);
+  B.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  const dec = (b) => new TextDecoder().decode(b);
+  for (const [words, index] of [[12, 0], [12, 1], [24, 0], [18, 7]]) {
+    check(`BIP85 ${words} words, index ${index}`, dec(B.bip85Mnemonic({ words, index })), dec(B.mnemonicFromEntropy(child(words, index))));
+  }
+  check("BIP85 12 words, index 0, by value", dec(B.bip85Mnemonic({ words: 12 })),
+        "prosper short ramp prepare exchange stove life snack client enough purpose fold");
+  // JavaScript would wrap these to index 0 or 1 at the i32 boundary, and the user would write down another child
+  for (const [what, opts] of [["15 words", { words: 15 }], ["index NaN", { index: NaN }], ["index 2^32", { index: 2 ** 32 }], ["index 1.7", { index: 1.7 }]]) {
+    try {
+      B.bip85Mnemonic(/** @type {any} */ (opts));
+      ok(`BIP85 with ${what} is refused`, false);
+    } catch (e) {
+      ok(`BIP85 with ${what} is refused`, e instanceof RangeError);
+    }
+  }
+  B.unload();
+  try {
+    B.init().bip85Mnemonic();
+    ok("BIP85 with no seed says so", false);
+  } catch (e) {
+    ok("BIP85 with no seed says so", /no seed is loaded/.test(e.message));
+  }
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mn = new TextEncoder().encode(MNEMONIC);
+  E.signer_init(0);
+  new Uint8Array(E.memory.buffer).set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  check("the raw ABI writes a child", E.signer_bip85_mnemonic(12, 0) > 0, true);
+  E.signer_unload();
+  ok("unload clears the child", Buffer.from(E.memory.buffer).indexOf(Buffer.from("prosper short")) < 0);
+}
+
 // --- what a keyboard adds loads the same wallet; a mnemonic whose BIP39 checksum fails, or a word
 // that is not English BIP39, loads nothing
 for (const typed of [" " + MNEMONIC.replace(" ", "  ").toUpperCase() + "\n", "Abandon" + MNEMONIC.slice(7)]) {

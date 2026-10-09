@@ -2,6 +2,7 @@
 #include <string.h>
 #include "wipe.h"
 #include "bip32.h"
+#include "bip85.h"
 #include "hash.h"
 #include "address.h"
 #include "sighash.h"
@@ -390,6 +391,10 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
     wipe(&child, sizeof(child));
     wipe(&kp, sizeof(kp));
     return rc;
+}
+
+int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap) {
+    return seed_loaded ? bip85_bip39(ctx, &master, words, index, out, cap) : 0;
 }
 
 /* The account xpub (m/purpose'/coin'/account') and an output descriptor built from it. Hand these to

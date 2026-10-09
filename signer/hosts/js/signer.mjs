@@ -48,6 +48,7 @@ const L = {
  *   signer_mnemonic_from_dice: (len: number, words: number) => number,
  *   signer_seedqr_output: () => number,
  *   signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number,
+ *   signer_bip85_mnemonic: (words: number, index: number) => number,
  * }} SignerExports
  */
 
@@ -241,6 +242,18 @@ export class Signer {
   seedQRFromMnemonic(mnemonic, { compact = false } = {}) {
     return this.#generate(mnemonic, () => this.#e.signer_seedqr_from_mnemonic(mnemonic.length, compact ? 1 : 0),
                           "seedqr_from_mnemonic", () => this.#e.signer_seedqr_output());
+  }
+
+  /** The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+   *  show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed. */
+  /** @param {{ words?: 12 | 18 | 24, index?: number }} [opts] */
+  bip85Mnemonic({ words = 24, index = 0 } = {}) {
+    if ((words !== 12 && words !== 18 && words !== 24) || !Number.isInteger(index) || index < 0 || index >= 2 ** 31) {
+      throw new RangeError(`BIP85 takes 12, 18 or 24 words and an index below 2^31, not ${words} and ${index}`);
+    }
+    if (this.fingerprint === "00000000") throw new Error("bip85_mnemonic: no seed is loaded");
+    return this.#generate(new Uint8Array(0), () => this.#e.signer_bip85_mnemonic(words, index), "bip85_mnemonic",
+                          () => this.#e.signer_mnemonic_output());
   }
 
   /**
