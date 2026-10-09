@@ -6,7 +6,7 @@
 //   the parse       decodepsbt            against the plan parser.wasm built
 //   the fee         decodepsbt's fee      against what signer.wasm's review computed
 //   the signatures  walletprocesspsbt     against signer.wasm's, byte for byte
-//   the descriptors deriveaddresses       signer.wasm's wpkh() and tr() against Core's own keys
+//   the descriptors deriveaddresses       signer.wasm's sh(wpkh()), wpkh() and tr() against Core's keys
 //
 // The last is only possible because signing is deterministic on both sides: Core and this signer
 // both grind for a low R in ECDSA and both pass a zero aux_rand for Schnorr, so one key over one
@@ -21,15 +21,18 @@ import { createHash } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import { Signer } from "../signer/hosts/js/signer.mjs";
 
-// The published BIP39 all-zero test vector, derived to m/84'/0'/0' and m/86'/0'/0' with the testnet
+// The published BIP39 all-zero test vector, derived to m/49'/0'/0', m/84'/0'/0' and m/86'/0'/0' with the testnet
 // version bytes regtest wants. Committed rather than derived at test time so that nothing here needs
 // a Bitcoin library of its own — and checked against signer.wasm's own xpub below, so a wrong
 // constant fails loudly instead of quietly testing the wrong key.
 const ACCOUNTS = [
-  { kind: "wpkh", purpose: 84,
+  { kind: "wpkh", close: ")", purpose: 84,
     tprv: "tprv8gGUtTW1HhuYrycHNfewtKXPYsB3CgE8uK733ntLBPGfyDhse352wryMJXvQr4zkNDL3ZBDZvJh5NpkuqyEZtLvNLLNmjJD4UV6dsRECvrC",
     xpub: "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V" },
-  { kind: "tr", purpose: 86,
+  { kind: "sh(wpkh", close: "))", purpose: 49,
+    tprv: "tprv8fnNnm525ViePCEx7Z9cZb6QNUtsUc8XKaePnZtPnKZWHw1rnAC9r6MdMdsmrkGW7Vy3eVtwtRqrfkxfWjnitBTNEZjTb6pbui7BUmnBBd3",
+    xpub: "xpub6C6nQwHaWbSrzs5tZ1q7m5R9cPK9eYpNMFesiXsYrgc1P8bvLLAet9JfHjYXKjToD8cBRswJXXbbFpXgwsswVPAZzKMa1jUp2kVkGVUaJa7" },
+  { kind: "tr", close: ")", purpose: 86,
     tprv: "tprv8fMn4hSKPRC1oaCPqxDb1JWtgkpeiQvZhsr8W2xuy3GEMkzoArcAWTfJxYb6Wj8XNNDWEjfYKK4wGQXh3ZUXhDF2NcnsALpWTeSwarJt7Vc",
     xpub: "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ" },
 ];
@@ -80,7 +83,7 @@ for (const a of ACCOUNTS) {
   // Receive and change separately: Core only accepts a multipath <0;1> in getdescriptorinfo from
   // some versions on, and 28.1 refuses it
   for (const [chain, internal] of [[0, false], [1, true]]) {
-    const desc = `${a.kind}([${FINGERPRINT}/${a.purpose}h/0h/0h]${a.tprv}/${chain}/*)`;
+    const desc = `${a.kind}([${FINGERPRINT}/${a.purpose}h/0h/0h]${a.tprv}/${chain}/*${a.close}`;
     const ck = JSON.parse(cli("getdescriptorinfo", desc)).checksum;
     imports.push({ desc: `${desc}#${ck}`, timestamp: "now", active: true, internal, range: [0, 20] });
   }
@@ -133,7 +136,7 @@ const signerWasm = readFileSync(signerPath);
     const { xpub, descriptor } = s.xpub({ purpose: a.purpose });
     for (const chain of [0, 1]) {
       const ours = derive(descriptor.replace(xpub, toTpub(xpub)).replace("/<0;1>/*)", `/${chain}/*)`));
-      const core = derive(`${a.kind}([${FINGERPRINT}/${a.purpose}h/0h/0h]${a.tprv}/${chain}/*)`);
+      const core = derive(`${a.kind}([${FINGERPRINT}/${a.purpose}h/0h/0h]${a.tprv}/${chain}/*${a.close}`);
       if (ours !== core) {
         console.error(`${descriptor} gives other addresses than Core's key on chain ${chain}:\n  ${ours}\n  ${core}`);
         process.exit(1);
@@ -141,7 +144,7 @@ const signerWasm = readFileSync(signerPath);
     }
   }
   s.unload();
-  console.log("the exported wpkh() and tr() descriptors give the addresses Core derives from the keys");
+  console.log("the exported sh(wpkh()), wpkh() and tr() descriptors give the addresses Core derives from the keys");
 }
 
 // --- parser.wasm, driven directly: no native host and no WAMR needed

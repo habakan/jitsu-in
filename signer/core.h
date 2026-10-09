@@ -16,7 +16,7 @@ enum {
     CORE_ERR_NOT_OURS, /* an input claims our fingerprint, but its key does not produce its script */
     CORE_ERR_NOTHING_TO_SIGN,
     CORE_ERR_SIGHASH,        /* a sighash type we do not allow */
-    CORE_ERR_SCRIPT,         /* an input to be signed is neither P2WPKH nor P2TR */
+    CORE_ERR_SCRIPT,         /* an input to be signed is not P2WPKH, P2SH-P2WPKH or P2TR */
     CORE_ERR_PREVTX_MISSING, /* two or more inputs including SegWit v0, and no non_witness_utxo */
     CORE_ERR_PREVTX_MISMATCH,
     CORE_ERR_FEE,
@@ -77,11 +77,11 @@ void core_format_btc(uint64_t sats, char out[21]);
 int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap);
 
 /* Where on m/purpose'/coin'/account' an address is: receive then change, indices below count, as chain << 20 |
- * index, or -CORE_ERR_*. bc1q/tb1q is purpose 84, bc1p/tb1p 86; any other form is CORE_ERR_FORMAT */
+ * index, or -CORE_ERR_*. 3/2 (P2SH) is purpose 49, bc1q/tb1q 84, bc1p/tb1p 86; any other is CORE_ERR_FORMAT */
 int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t count);
 
-/* The account xpub (m/purpose'/coin'/account') and its wpkh() or tr() descriptor, so the PC side can be
- * watch-only. purpose is 84 or 86 and account below 2^31; CORE_OK, or CORE_ERR_FORMAT / _NO_SEED */
+/* The account xpub (m/purpose'/coin'/account') and its sh(wpkh()), wpkh() or tr() descriptor, so the PC
+ * side can be watch-only. purpose is 49, 84 or 86 and account below 2^31; CORE_OK, or _FORMAT / _NO_SEED */
 #define CORE_XPUB_MAX 120
 #define CORE_DESC_MAX 180
 int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);

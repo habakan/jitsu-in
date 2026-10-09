@@ -28,13 +28,20 @@ static void h_output(sha256_ctx *h, const plan_output_t *o) {
     h_script(h, &o->spk);
 }
 
-int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, uint8_t out[32]) {
+int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, const uint8_t pkh[20], uint8_t out[32]) {
     const plan_input_t *in = &p->inputs[index];
     uint8_t prevouts[32], sequences[32], outputs[32];
     static const uint8_t code_head[4] = {0x19, 0x76, 0xa9, 0x14}, code_tail[2] = {0x88, 0xac};
     sha256_ctx h;
 
-    if (index >= p->n_inputs || in->spk.len != 22 || in->spk.bytes[0] != 0 || in->spk.bytes[1] != 20) return 0;
+    uint8_t redeem[22] = {0x00, 20}, sh[20];
+    if (index >= p->n_inputs) return 0;
+    memcpy(redeem + 2, pkh, 20);
+    hash160(redeem, sizeof(redeem), sh);
+    if (!(in->spk.len == 22 && !memcmp(in->spk.bytes, redeem, 22)) &&
+        !(in->spk.len == 23 && in->spk.bytes[0] == 0xa9 && in->spk.bytes[1] == 20 && in->spk.bytes[22] == 0x87 &&
+          !memcmp(in->spk.bytes + 2, sh, 20)))
+        return 0; /* the key hash is not what this input's script pays to */
     sha256_init(&h);
     for (unsigned i = 0; i < p->n_inputs; i++) h_outpoint(&h, &p->inputs[i]);
     sha256d_final(&h, prevouts);
@@ -51,7 +58,7 @@ int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, uint8_t out[32]) {
     sha256_update(&h, sequences, 32);
     h_outpoint(&h, in);
     sha256_update(&h, code_head, 4);
-    sha256_update(&h, in->spk.bytes + 2, 20);
+    sha256_update(&h, pkh, 20);
     sha256_update(&h, code_tail, 2);
     h_le(&h, in->amount, 8);
     h_le(&h, in->sequence, 4);

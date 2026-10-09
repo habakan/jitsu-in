@@ -97,7 +97,8 @@ static void test_bip143(void) {
     set_spk(&p.inputs[1].spk, spk, 22);
     p.inputs[1].amount = 600000000;
     unhex("c37af31116d1b27caf68aae9e3ac82f1477929014d5b917657d0eb49478cb670", want);
-    CHECK(sighash_bip143_p2wpkh(&p, 1, digest) && !memcmp(digest, want, 32), "bip143 sighash");
+    CHECK(sighash_bip143_p2wpkh(&p, 1, p.inputs[1].spk.bytes + 2, digest) && !memcmp(digest, want, 32),
+          "bip143 sighash");
     unhex("619c335025c7f4012e556c2a58b2506e30b8511b53ade95ea316fd8c3286feb9", key);
     unhex("304402203609e17b84f6a7d30c80bfa610b5b4542f32a8a0d5447a12fb1366d7f01cc44a0220573a954c4518331561406f90300e8f33"
           "58f51928d43c212a8caed02de67eebee",
@@ -203,7 +204,8 @@ static void test_review_and_sign(void) {
     {
         secp256k1_pubkey pub;
         secp256k1_ecdsa_signature sig;
-        CHECK(sighash_bip143_p2wpkh(&p, 0, digest) && secp256k1_ec_pubkey_parse(ctx, &pub, sigs[0].pubkey, 33) &&
+        CHECK(sighash_bip143_p2wpkh(&p, 0, p.inputs[0].spk.bytes + 2, digest) &&
+                  secp256k1_ec_pubkey_parse(ctx, &pub, sigs[0].pubkey, 33) &&
                   secp256k1_ecdsa_signature_parse_der(ctx, &sig, sigs[0].sig, sigs[0].sig_len - 1u) &&
                   secp256k1_ecdsa_verify(ctx, &sig, digest, &pub) && sigs[0].sig[sigs[0].sig_len - 1] == 1,
               "p2wpkh signature verifies");

@@ -170,7 +170,7 @@ export class Signer {
         raw: Uint8Array<ArrayBuffer>;
     }[];
     /** Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1. Takes
-     *  a bare address or a BIP21 URI; P2WPKH and P2TR only. Returns null when it is not found. */
+     *  a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Returns null when it is not found. */
     /**
      * @param {string} address
      * @param {{ account?: number, count?: number }} [opts]
@@ -183,7 +183,7 @@ export class Signer {
         chain: number;
         index: number;
     } | null;
-    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     xpub({ purpose, account }?: {
         purpose?: number | undefined;

@@ -25,8 +25,19 @@ def path_list(path):
     return [int(p[:-1]) + H if p.endswith("h") else int(p) for p in path.split("/")[1:]]
 
 
+# m/45h stands for a P2SH multisig we cosign: our key and fingerprint are in it, but it is not BIP49's
+def multisig(path):
+    return script.multisig(1, [key(path)])
+
+
 def spk(path):
-    return script.p2tr(key(path)) if path.startswith("m/86h") else script.p2wpkh(key(path))
+    if path.startswith("m/45h"):
+        return script.p2sh(multisig(path))
+    if path.startswith("m/86h"):
+        return script.p2tr(key(path))
+    if path.startswith("m/49h"):
+        return script.p2sh(script.p2wpkh(key(path)))
+    return script.p2wpkh(key(path))
 
 
 def prev_tx(target_spk, amount, vout, salt):
@@ -48,8 +59,10 @@ def build(name, inputs, outputs):
         prevs.append((ptx, vout, s, amount))
         vin.append(TransactionInput(ptx.txid(), vout, sequence=0xFFFFFFFD))
         exp_in.append({"prev_txid": bytes(reversed(ptx.txid())).hex(), "prev_vout": vout, "sequence": 0xFFFFFFFD,
-                       "amount": amount, "spk": s.data.hex(), "key": keypath(path) if path else None,
-                       "sighash_type": (0 if path.startswith("m/86h") else 1) if path else 0, "has_prevtx": nwu})
+                       "amount": amount, "spk": s.data.hex(),
+                       "key": keypath(path) if path and not path.startswith("m/45h") else None,
+                       "sighash_type": (0 if path.startswith("m/86h") else 1) if path and not path.startswith("m/45h") else 0,
+                       "has_prevtx": nwu})
     vout = []
     for n, (path, amount) in enumerate(outputs):
         s = spk(path) if path else script.p2wpkh(key("m/1h/%d" % n))
@@ -64,11 +77,17 @@ def build(name, inputs, outputs):
             inp.taproot_bip32_derivations[key(path)] = ([], DerivationPath(FP, path_list(path)))
         elif path:
             inp.bip32_derivations[key(path)] = DerivationPath(FP, path_list(path))
+        if path and path.startswith("m/49h"):
+            inp.redeem_script = script.p2wpkh(key(path))
+        if path and path.startswith("m/45h"):
+            inp.redeem_script = multisig(path)
     for o, (path, _) in zip(psbt.outputs, outputs):
         if path and path.startswith("m/86h"):
             o.taproot_bip32_derivations[key(path)] = ([], DerivationPath(FP, path_list(path)))
         elif path:
             o.bip32_derivations[key(path)] = DerivationPath(FP, path_list(path))
+        if path and path.startswith("m/49h"):
+            o.redeem_script = script.p2wpkh(key(path))
     open(os.path.join(out_dir, name + ".psbt"), "wb").write(psbt.serialize())
     expected = {"fingerprint": int.from_bytes(FP, "big"), "tx_version": 2, "locktime": 0,
                 "inputs": exp_in, "outputs": exp_out,
@@ -76,7 +95,7 @@ def build(name, inputs, outputs):
     json.dump(expected, open(os.path.join(out_dir, name + ".json"), "w"), indent=1)
 
 
-A, T = "m/84h/0h/0h", "m/86h/0h/0h"
+A, T, S = "m/84h/0h/0h", "m/86h/0h/0h", "m/49h/0h/0h"
 build("own_p2wpkh_1in", [(A + "/0/0", 100000, 0, False)], [(None, 60000), (A + "/1/0", 39000)])
 build("own_p2wpkh_2in_nwu", [(A + "/0/0", 100000, 1, True), (A + "/0/1", 50000, 0, True)],
       [(None, 60000), (A + "/1/0", 89000)])
@@ -84,6 +103,11 @@ build("own_p2tr_2in", [(T + "/0/0", 70000, 0, False), (T + "/0/1", 70000, 2, Fal
       [(None, 100000), (T + "/1/0", 39000)])
 build("own_mixed_nwu", [(A + "/0/0", 100000, 0, True), (T + "/0/0", 70000, 1, True)],
       [(None, 100000), (A + "/0/5", 20000), (T + "/1/0", 49000)])
+build("own_p2sh_p2wpkh_1in", [(S + "/0/0", 100000, 0, False)], [(None, 60000), (S + "/1/0", 39000)])
+build("own_mixed_p2sh_nwu", [(A + "/0/0", 100000, 0, True), (S + "/0/1", 50000, 1, True)],
+      [(None, 100000), (S + "/1/0", 49000)])
+build("own_with_p2sh_multisig_input", [(A + "/0/0", 100000, 0, True), ("m/45h/0/0/0", 30000, 0, True)],
+      [(None, 100000), (A + "/1/0", 29000)])
 build("own_with_foreign_input", [(A + "/0/0", 100000, 0, True), (None, 30000, 0, True)],
       [(None, 100000), (A + "/1/0", 29000)])
 

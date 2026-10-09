@@ -38,6 +38,11 @@ int main(void) {
     CHECK(find("bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh", 10) == 1, "BIP86 0/1");
     CHECK(find("bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7", 10) == (1 << 20), "BIP86 1/0");
     CHECK(find("BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G", 10) == 1, "upper case, as a QR carries it");
+    /* BIP49, in base58, whose case is part of the address: the change in own_mixed_p2sh_nwu, m/49'/0'/0'/1/0 */
+    CHECK(find("34K56kSjgUCUSD8GTtuF7c9Zzwokbs6uZ7", 10) == (1 << 20), "BIP49 1/0");
+    CHECK(find("34K56KSjgUCUSD8GTtuF7c9Zzwokbs6uZ7", 10) == -CORE_ERR_NOT_FOUND,
+          "base58 with one letter's case changed is not ours");
+    CHECK(find("34K56kSjgUCUSD8GTtuF7c9Zzwokbs6uZ0", 10) == -CORE_ERR_FORMAT, "0 is not base58");
 
     CHECK(find("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", 1) == -CORE_ERR_NOT_FOUND, "beyond count");
     CHECK(core_find_address("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", 42, 1, 10) == -CORE_ERR_NOT_FOUND,
@@ -64,6 +69,7 @@ int main(void) {
 
     CHECK(core_init(CORE_TESTNET) && core_load_seed(seed), "load testnet");
     CHECK(find("tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl", 10) == 0, "testnet BIP84 0/0");
+    CHECK(find("2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2", 10) == 0, "BIP49's own testnet vector, m/49'/1'/0'/0/0");
     CHECK(find("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", 10) == -CORE_ERR_FORMAT, "mainnet on testnet");
 
     core_unload();

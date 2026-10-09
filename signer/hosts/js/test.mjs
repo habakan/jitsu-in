@@ -153,7 +153,7 @@ check("the tr() descriptor", tr.descriptor, `tr([73c5da0a/86h/0h/0h]${tr.xpub}/<
   mem().set(mn, E.signer_input());
   E.signer_seed_from_mnemonic(mn.length, 0);
   check("the raw ABI exports an xpub", E.signer_xpub(84, 0), 0);
-  check("then refuses BIP49", E.signer_xpub(49, 0), 1);
+  check("then refuses BIP44", E.signer_xpub(44, 0), 1);
   ok("and the xpub and descriptor buffers are empty", mem()[E.signer_xpub_output()] === 0 && mem()[E.signer_desc_output()] === 0);
 }
 // JavaScript would wrap these into a valid i32, so the library refuses them before the module sees them
@@ -165,7 +165,7 @@ for (const [what, opts] of [["2^32 + 1", { account: 2 ** 32 + 1 }], ["1.5", { ac
     ok(`xpub for account ${what} is refused`, e instanceof RangeError);
   }
 }
-for (const [what, opts] of [["BIP49", { purpose: 49 }], ["a hardened account", { account: 0x80000000 }]]) {
+for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", { account: 0x80000000 }]]) {
   try {
     S.xpub(opts);
     ok(`xpub for ${what} is refused`, false);
@@ -180,6 +180,7 @@ for (const [what, opts] of [["BIP49", { purpose: 49 }], ["a hardened account", {
   check("BIP84 0/1", found("bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"), '{"chain":0,"index":1}');
   check("BIP84 change 1/0", found("bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"), '{"chain":1,"index":0}');
   check("BIP86 0/1", found("bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh"), '{"chain":0,"index":1}');
+  check("BIP49 change 1/0, in base58", found("34K56kSjgUCUSD8GTtuF7c9Zzwokbs6uZ7"), '{"chain":1,"index":0}');
   check("a BIP21 URI in upper case, as a QR carries it",
         found("bitcoin:BC1QNJG0JD8228AQ7EGYZACY8CYS3KNF9XVRERKF9G?amount=0.1"), '{"chain":0,"index":1}');
   check("not ours", found("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"), "null");
@@ -197,6 +198,41 @@ for (const [what, opts] of [["BIP49", { purpose: 49 }], ["a hardened account", {
       ok(`findAddress refuses ${what}`, e instanceof err);
     }
   }
+}
+
+// --- BIP49: P2SH-P2WPKH inputs and change, beside P2WPKH (Core signs the same PSBTs: check-core-diff)
+{
+  const P2 = await Signer.load(signerWasm);
+  P2.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  for (const name of ["own_p2sh_p2wpkh_1in", "own_mixed_p2sh_nwu"]) {
+    const v = planFor(`${root}parser/build/vectors/${name}.psbt`, parseInt("73c5da0a", 16));
+    const rv = P2.setPlan(v.plan).setPrevTxs(v.prevTxs).review();
+    check(`${name}: every input of ours is signed`, rv.nSign, name.includes("mixed") ? 2 : 1);
+    const dv = P2.display();
+    ok(`${name}: the change is a P2SH address, and marked as change`,
+       dv.outputs.some((o) => o.owner === OWNER.CHANGE && o.text.startsWith("3")));
+    const sv = P2.sign();
+    ok(`${name}: ECDSA with a compressed key for each`, sv.every((s) => s.sig[0] === 0x30 && (s.pubkey[0] === 2 || s.pubkey[0] === 3)));
+  }
+  // a P2SH multisig we cosign is left alone, not a reason to refuse the input of ours beside it
+  {
+    const m = planFor(`${root}parser/build/vectors/own_with_p2sh_multisig_input.psbt`, parseInt("73c5da0a", 16));
+    const rm = P2.setPlan(m.plan).setPrevTxs(m.prevTxs).review();
+    ok("beside a P2SH multisig we cosign, our P2WPKH input alone is signed", rm.nSign === 1 && rm.willSign[0] && !rm.willSign[1]);
+    check("and signed", P2.sign().length, 1);
+  }
+  // a P2SH that is not P2SH(P2WPKH(our key)), whatever the PSBT says, is refused
+  const v = planFor(`${root}parser/build/vectors/own_p2sh_p2wpkh_1in.psbt`, parseInt("73c5da0a", 16));
+  v.plan[24 + 52 + 10] ^= 1;  // a byte of the first input's script hash
+  try {
+    P2.setPlan(v.plan).setPrevTxs(v.prevTxs).review();
+    ok("a P2SH hiding another script is refused", false);
+  } catch (e) {
+    ok("a P2SH hiding another script is refused", /NOT_OURS/.test(e.message));
+  }
+  const x49 = P2.xpub({ purpose: 49 });
+  check("the BIP49 descriptor", x49.descriptor, `sh(wpkh([73c5da0a/49h/0h/0h]${x49.xpub}/<0;1>/*))`);
+  P2.unload();
 }
 
 // --- the module refuses to sign a plan it was not shown

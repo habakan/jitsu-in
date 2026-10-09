@@ -409,7 +409,7 @@ public final class Signer {
     }
 
     /// Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1.
-    /// Takes a bare address or a BIP21 URI; P2WPKH and P2TR only. Nil when it is not found.
+    /// Takes a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Nil when it is not found.
     public func findAddress(_ address: String, account: UInt32 = 0, count: UInt32 = 1000) throws -> AddressPath? {
         var a = Substring(address.trimmingCharacters(in: .whitespacesAndNewlines))
         if a.lowercased().hasPrefix("bitcoin:") { a = a.dropFirst(8) }
@@ -423,7 +423,7 @@ public final class Signer {
         return nil
     }
 
-    /// The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /// The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
     /// wallet elsewhere. `account` is below 2^31.
     public func xpub(purpose: UInt32 = 84, account: UInt32 = 0) throws -> AccountKey {
         let rc = try call("signer_xpub", [.i32(purpose), .i32(account)])

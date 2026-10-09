@@ -357,7 +357,7 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
 
     /**
      * Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1.
-     * Takes a bare address or a BIP21 URI; P2WPKH and P2TR only. Null when it is not found.
+     * Takes a bare address or a BIP21 URI; P2SH-P2WPKH, P2WPKH and P2TR only. Null when it is not found.
      */
     fun findAddress(address: String, account: Int = 0, count: Int = 1000): AddressPath? {
         val bytes = address.trim().replace(Regex("^bitcoin:", RegexOption.IGNORE_CASE), "")
@@ -370,7 +370,7 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         return null
     }
 
-    /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     fun xpub(purpose: Int = 84, account: Int = 0): AccountKey {
         val rc = call("signer_xpub", purpose.toLong(), account.toLong())

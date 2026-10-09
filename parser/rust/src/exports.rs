@@ -112,7 +112,7 @@ pub extern "C" fn parser_finalize(n: u32) -> i32 {
         if in_.key.depth == 0 {
             return -(psbt::Err::Sig as i32);
         }
-        let bad = if in_.spk.is_p2wpkh() {
+        let bad = if in_.spk.is_wpkh() {
             (s.pubkey[0] != 2 && s.pubkey[0] != 3) || s.sig_len < 9 || s.sig_len > 73
         } else {
             s.pubkey[0] != 0 || (s.sig_len != 64 && s.sig_len != 65)
@@ -140,7 +140,7 @@ pub extern "C" fn parser_finalize(n: u32) -> i32 {
         o += end - prev;
         prev = end;
         // Every length here is below 0xfd, so each compact size is a single byte
-        if parsed.plan.inputs[i].spk.is_p2wpkh() {
+        if parsed.plan.inputs[i].spk.is_wpkh() {
             dst[o] = 34;
             dst[o + 1] = 0x02; // PSBT_IN_PARTIAL_SIG
             o += 2;

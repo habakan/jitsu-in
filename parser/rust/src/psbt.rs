@@ -280,6 +280,7 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
     let mut bip32 = Cand::NONE;
     let mut tap = Cand::NONE;
     let mut finalized = false;
+    let mut wpkh_redeem = false;
     let mut has_tapsig = false;
     let mut has_merkle = false;
     let mut sighash: u32 = 0xffff_ffff;
@@ -315,6 +316,7 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
                 if klen != 1 {
                     return Err(Err::Format);
                 }
+                wpkh_redeem |= e.key[0] == 0x04 && e.val.len() == 22 && e.val[0] == 0 && e.val[1] == 20;
             }
             0x06 => {
                 // An uncompressed key cannot be used for P2WPKH, so one is validated and discarded
@@ -454,9 +456,9 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
         return Err(Err::Unsupported);
     }
 
-    // Only a P2WPKH with our derivation and no signature yet, or a P2TR key-path spend with no
-    // script tree and no signature yet, is one this signer will sign
-    let chosen = if in_.spk.is_p2wpkh() && bip32.found && !signed_by_cand {
+    // Only a P2WPKH (or a P2SH whose redeem script is one) with our derivation and no signature yet,
+    // or a P2TR key-path spend with no script tree and no signature yet, is one this signer will sign
+    let chosen = if in_.spk.is_wpkh() && (in_.spk.len == 22 || wpkh_redeem) && bip32.found && !signed_by_cand {
         in_.sighash_type = if sighash == 0xffff_ffff { 0x01 } else { sighash as u8 };
         Some(bip32)
     } else if in_.spk.is_p2tr() && tap.found && !has_merkle && !has_tapsig {
@@ -522,7 +524,7 @@ fn parse_output(r: &mut Reader, idx: usize, fp: u32, out: &mut Parsed) -> Res {
     }
 
     let o = &mut out.plan.outputs[idx];
-    let chosen = if o.spk.is_p2wpkh() && bip32.found {
+    let chosen = if o.spk.is_wpkh() && bip32.found {
         Some(bip32)
     } else if o.spk.is_p2tr() && tap.found && !has_tree {
         Some(tap)

@@ -37,9 +37,11 @@ impl Script {
         &self.bytes[..self.len as usize]
     }
 
-    /// `0014{20 bytes}`: a witness v0 key hash.
-    pub fn is_p2wpkh(&self) -> bool {
-        self.len == 22 && self.bytes[0] == 0 && self.bytes[1] == 20
+    /// `0014{20 bytes}`, or `a914{20 bytes}87`: P2WPKH, bare or nested in P2SH. Which script a P2SH
+    /// hides is for the signer to establish, by re-deriving the key.
+    pub fn is_wpkh(&self) -> bool {
+        (self.len == 22 && self.bytes[0] == 0 && self.bytes[1] == 20)
+            || (self.len == 23 && self.bytes[0] == 0xa9 && self.bytes[1] == 20 && self.bytes[22] == 0x87)
     }
 
     /// `5120{32 bytes}`: a witness v1 taproot output.
@@ -121,7 +123,7 @@ impl Plan {
 #[derive(Clone, Copy)]
 pub struct Sig {
     pub input: u8,
-    /// A compressed pubkey for P2WPKH; `0x00` then the x-only output key for P2TR.
+    /// A compressed pubkey for P2WPKH and P2SH-P2WPKH; `0x00` then the x-only output key for P2TR.
     pub pubkey: [u8; 33],
     pub sig_len: u8,
     /// DER plus the sighash byte for ECDSA; 64 or 65 bytes for Schnorr.
