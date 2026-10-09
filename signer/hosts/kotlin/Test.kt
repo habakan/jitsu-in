@@ -152,6 +152,21 @@ fun main(args: Array<String>) {
         ok("findAddress refuses base58", e.message == "findAddress: FORMAT")
     }
 
+    // --- BIP137: the signature Core's signmessagewithprivkey gives, with the P2WPKH header (check-core-diff)
+    run {
+        val shown = s.messageReview("This is an example of a signed message.".toByteArray())
+        check("the message's address", shown.address, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu")
+        ok("the message is shown as it is", !shown.isHex && shown.text == "This is an example of a signed message.")
+        check("the BIP137 signature", java.util.Base64.getEncoder().encodeToString(s.messageSign()), "KLRN6BWUkHM2/ac9gTTx/izIth+Q8dyI1m6T8UJX061hEXMnFtDTlKJ/IYgwVCzr1zoF6zlAVzmBa/yEc7Dfi0s=")
+        ok("a newline is shown in hex", s.messageReview("a\nb".toByteArray()).text == "610a62")
+        try {
+            s.messageSign(); s.messageSign()
+            ok("one review permits one message signature", false)
+        } catch (e: SignerException) {
+            ok("one review permits one message signature", e.message == "messageSign: NOT_REVIEWED")
+        }
+    }
+
     // --- signing without a review is refused by this library, and by the module
     run {
         val s2 = Signer(signerWasm).init().seedFromMnemonic(mnemonic.copyOf()).setPlan(plan).setPrevTxs(prevTxs)

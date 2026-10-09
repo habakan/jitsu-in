@@ -17,7 +17,7 @@
 
 /* Three return conventions, and which one a function uses follows from what it does:
  *   init / seed / seedqr / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
- *   review / display / xpub               CORE_OK (0) on success, CORE_ERR_* otherwise
+ *   review / display / xpub / message     CORE_OK (0) on success, CORE_ERR_* otherwise
  *   sign                                  the number of signatures, or -CORE_ERR_*
  *   find_address                          chain << 20 | index, or -CORE_ERR_*
  * Buffer accessors return a pointer, fingerprint returns the value, unload returns nothing. */
@@ -33,6 +33,9 @@ static uint8_t in[512]; /* a mnemonic or SeedQR || passphrase, a seed, entropy o
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 static char mnemonic[256]; /* a newly made mnemonic, until the host has read it */
 static uint8_t seedqr[96]; /* a SeedQR made from a mnemonic, likewise */
+_Static_assert(CORE_MESSAGE_MAX <= sizeof(in), "a message to sign has to fit in the input buffer");
+static core_message_t message;
+static uint8_t message_sig[65];
 
 unsigned char *EXPORT(signer_input)(void) {
     return in;
@@ -67,6 +70,12 @@ char *EXPORT(signer_mnemonic_output)(void) {
 }
 unsigned char *EXPORT(signer_seedqr_output)(void) {
     return seedqr;
+}
+core_message_t *EXPORT(signer_message_output)(void) {
+    return &message;
+}
+unsigned char *EXPORT(signer_message_sig)(void) {
+    return message_sig;
 }
 
 int EXPORT(signer_init)(int testnet) {
@@ -126,6 +135,8 @@ void EXPORT(signer_unload)(void) {
     wipe(&display, sizeof(display));
     wipe(mnemonic, sizeof(mnemonic));
     wipe(seedqr, sizeof(seedqr));
+    wipe(&message, sizeof(message));
+    wipe(message_sig, sizeof(message_sig));
 }
 
 unsigned EXPORT(signer_fingerprint)(void) {
@@ -206,4 +217,16 @@ int EXPORT(signer_bip85_mnemonic)(unsigned words, unsigned index) {
     int n = core_bip85_mnemonic(words, index, mnemonic, sizeof(mnemonic));
     if (!n) wipe(mnemonic, sizeof(mnemonic));
     return n;
+}
+
+/* in holds the message. What to show goes to signer_message_output(); the signature, once that has
+ * been approved, to signer_message_sig() */
+int EXPORT(signer_message_review)(unsigned len, unsigned purpose, unsigned account, unsigned chain, unsigned index) {
+    int rc =
+        len <= sizeof(in) ? core_message_review(in, len, purpose, account, chain, index, &message) : CORE_ERR_FORMAT;
+    wipe(in, sizeof(in));
+    return rc;
+}
+int EXPORT(signer_message_sign)(void) {
+    return core_message_sign(message_sig);
 }

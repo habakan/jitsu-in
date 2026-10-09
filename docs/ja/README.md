@@ -17,7 +17,7 @@ jitsu-in は Bitcoin の署名に使う処理を WebAssembly モジュールと�
 | | byte | import | 何をするか |
 |---|---:|---:|---|
 | [`parser.wasm`](../../parser/README.md) | 15,697 | **0** | アニメーション QR（UR）の復元、PSBT v0 の解析、固定長 plan の生成、署名の差し込み、UR の符号化 |
-| [`signer.wasm`](../../signer/docs/abi.md) | 78,409 | **0** | 鍵、SeedQR、BIP32 導出、plan の再検証、表示内容の組み立て、sighash、署名、xpub 出力、自分のアドレスの検索 |
+| [`signer.wasm`](../../signer/docs/abi.md) | 81,085 | **0** | 鍵、ニーモニックの生成、SeedQR の読み書き、BIP85 の子シード、BIP32 導出、plan の再検証、表示内容の組み立て、sighash、署名、BIP137 のメッセージ署名、xpub 出力、自分のアドレスの検索 |
 
 
 ## 利用方法

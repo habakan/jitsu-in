@@ -65,6 +65,13 @@ export class Signer {
             sigLen: number;
             sig: number;
         };
+        message: {
+            size: number;
+            address: number;
+            textKind: number;
+            text: number;
+            textCap: number;
+        };
         limits: {
             maxInputs: number;
             maxOutputs: number;
@@ -183,6 +190,26 @@ export class Signer {
         chain: number;
         index: number;
     } | null;
+    /** What to show before signing a message with BIP137: the address of m/purpose'/coin'/account'/chain/index
+     *  (purpose 49 or 84), and the message, as it is when it is printable ASCII and in hex otherwise.
+     *  Approving it permits one messageSign(). */
+    /**
+     * @param {Uint8Array} message
+     * @param {{ purpose?: 49 | 84, account?: number, chain?: number, index?: number }} [opts]
+     */
+    messageReview(message: Uint8Array, { purpose, account, chain, index }?: {
+        purpose?: 49 | 84;
+        account?: number;
+        chain?: number;
+        index?: number;
+    }): {
+        address: string;
+        textKind: "message" | "hex";
+        text: string;
+    };
+    /** The BIP137 signature of the message messageReview() showed: 65 bytes, header then r and s. Most
+     *  wallets want it in base64. */
+    messageSign(): Uint8Array<ArrayBuffer>;
     /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     xpub({ purpose, account }?: {
@@ -227,6 +254,10 @@ export type SignerExports = {
     signer_seedqr_output: () => number;
     signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number;
     signer_bip85_mnemonic: (words: number, index: number) => number;
+    signer_message_output: () => number;
+    signer_message_sig: () => number;
+    signer_message_review: (len: number, purpose: number, account: number, chain: number, index: number) => number;
+    signer_message_sign: () => number;
 };
 /**
  * What review() reports. `owner` has one entry per output, `willSign` one per input.

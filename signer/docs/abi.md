@@ -3,7 +3,7 @@
 `signer.wasm` is the half that holds the key. It takes the `plan_t` that `parser.wasm` produced,
 re-derives the keys to check it, builds what a person should be shown, and returns signatures.
 
-It is 78,409 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
+It is 81,085 bytes with **zero imports**: no clock, no randomness, no filesystem, no network. The
 shared conventions are in [../../docs/module-abi.md](../../docs/module-abi.md); this page is
 what is specific to this module.
 
@@ -12,9 +12,9 @@ byte:
 
 | | | |
 |---|---|---|
-| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 124 checks in [test.mjs](../hosts/js/test.mjs) |
-| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 66 checks in [Test.kt](../hosts/kotlin/Test.kt) |
-| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 63 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
+| JavaScript | [hosts/js/signer.mjs](../hosts/js/signer.mjs) | 146 checks in [test.mjs](../hosts/js/test.mjs) |
+| Kotlin / JVM / Android | [hosts/kotlin/Signer.kt](../hosts/kotlin/Signer.kt) | 71 checks in [Test.kt](../hosts/kotlin/Test.kt) |
+| Swift / macOS / iOS | [hosts/swift/Sources/WasmSigner/Signer.swift](../hosts/swift/Sources/WasmSigner/Signer.swift) | 68 checks in [SignerCheck](../hosts/swift/Sources/SignerCheck/main.swift) |
 
 ## What a host must not do
 
@@ -62,7 +62,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 
 | | what goes in it |
 |---|---|
-| `signer_input() -> ptr` | the mnemonic or a SeedQR payload followed by the passphrase, a 64-byte seed, entropy or dice rolls for a new mnemonic, or an address to find |
+| `signer_input() -> ptr` | the mnemonic or a SeedQR payload followed by the passphrase, a 64-byte seed, entropy or dice rolls for a new mnemonic, an address to find, or a message to sign |
 | `signer_input_cap() -> u32` | how many bytes that is (512); check before writing |
 | `signer_plan() -> ptr` | the `plan_t`, 5016 bytes, copied verbatim from `parser_plan()` |
 | `signer_prevtx() -> ptr` | the `non_witness_utxo` bytes, laid out however you like within 32768 |
@@ -73,6 +73,8 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | `signer_desc_output() -> ptr` | the output descriptor, NUL-terminated, at most 180 |
 | `signer_mnemonic_output() -> ptr` | a new mnemonic, NUL-terminated, at most 256. Secret: clear it once read |
 | `signer_seedqr_output() -> ptr` | a SeedQR made from a mnemonic, at most 96 bytes. Secret: clear it once read |
+| `signer_message_output() -> ptr` | `core_message_t`, 1101 bytes: what to show before signing a message |
+| `signer_message_sig() -> ptr` | the BIP137 signature, 65 bytes |
 
 ### Operations
 
@@ -90,6 +92,8 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 | `signer_review()` | 0 on success, otherwise one of the errors below |
 | `signer_display()` | 0 on success |
 | `signer_sign()` | the number of signatures, or the negated error |
+| `signer_message_review(len, purpose, account, chain, index)` | 0 on success. The message in the input buffer (at most 512 bytes) and the key at m/purpose'/coin'/account'/chain/index, `purpose` 49 or 84; see below |
+| `signer_message_sign()` | 0 on success, `NOT_REVIEWED` unless it is the message and key the last review showed |
 | `signer_xpub(purpose, account)` | 0 on success. m/purpose'/coin'/account' with `purpose` 49 (`sh(wpkh())`), 84 (`wpkh()`) or 86 (`tr()`) and `account` below 2^31, otherwise `FORMAT`, with the xpub and descriptor buffers emptied |
 | `signer_find_address(len, account, count)` | where the address in `signer_input()` is on m/purpose'/coin'/account', receive then change, indices 0 to `count`-1: `chain << 20 \| index`, or the negated error; `NOT_FOUND` when it is not there. See below |
 | `signer_fingerprint()` | the master fingerprint, or 0 when no seed is loaded |
@@ -108,6 +112,22 @@ An address of the right form but the wrong length (P2WSH, or one cut short) cann
 `NOT_FOUND` at once. Otherwise each index is a derivation, and an address that is not ours costs all
 of them: 2 x 1000 took 0.13 s (P2WPKH) and 0.40 s (P2TR) in V8, and 7.8 s and 26 s in WAMR's classic
 interpreter, on an M-series Mac. Chicory and WasmKit are slower still, so their tests pass a count of 20.
+
+## Signing a message
+
+`signer_message_review` and `signer_message_sign` make a
+[BIP137](https://github.com/bitcoin/bips/blob/master/bip-0137.mediawiki) signature: the header (35-38
+for P2SH-P2WPKH, 39-42 for P2WPKH), then r and s; most wallets take it in base64. As with a
+transaction, one review permits one signature, and the module signs only the message and key it
+hashed at review time, so a message or key swapped in afterwards is refused. Like the plan's, that hash
+is in memory the host can write: it binds review to signing, it does not defend against the host. A
+message is shown as it is only when every byte is printable ASCII; anything else, a newline or UTF-8
+included, is shown in hex, since such bytes could render as something other than what is signed.
+
+The key is chosen by integers, not by the `signmessage m/84h/... ascii:...` text QR codes carry:
+reading that text is the host's, and the module checks the path it is given. The nonce is RFC6979
+with no extra data, as in Bitcoin Core's `signmessage`, so `make check-core-diff` requires r and s to
+be the bytes Core gives for the same key. P2TR has no BIP137 form; BIP322 is not here yet.
 
 ## Errors
 
@@ -172,6 +192,14 @@ PSBT chose, which is why it is safe to put in front of a person.
 | 1 | 33 | `pubkey`: compressed for P2WPKH and P2SH-P2WPKH, `0x00` then the x-only output key for P2TR |
 | 34 | 1 | `sig_len` |
 | 35 | 73 | `sig`: DER plus the sighash byte for ECDSA, 64 or 65 bytes for Schnorr |
+
+### `core_message_t` (1101 bytes)
+
+| offset | size | field |
+|---:|---:|---|
+| 0 | 75 | `address`, of the key that will sign, NUL-terminated |
+| 75 | 1 | `text_kind`: 0 the message itself, 1 its hex |
+| 76 | 1025 | `text`, NUL-terminated |
 
 Hand these to `parser_sigs()` and call `parser_finalize()`; `parser.wasm` inserts them into the
 original PSBT and leaves every other byte alone.

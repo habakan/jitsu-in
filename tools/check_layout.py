@@ -40,6 +40,11 @@ def main():
         "sig.size": truth["plan_sig_t"]["size"],
         "sig.sigLen": truth["plan_sig_t"]["sig_len"],
         "sig.sig": truth["plan_sig_t"]["sig"],
+        "message.size": truth["core_message_t"]["size"],
+        "message.address": truth["core_message_t"]["address"],
+        "message.textKind": truth["core_message_t"]["text_kind"],
+        "message.text": truth["core_message_t"]["text"],
+        "message.textCap": truth["core_message_t"]["text_cap"],
     }
     for name, want in want_js.items():
         key = name.split(".")[1]
@@ -73,6 +78,11 @@ def main():
         "SIG_SIZE": truth["plan_sig_t"]["size"],
         "SIG_LEN": truth["plan_sig_t"]["sig_len"],
         "SIG_SIG": truth["plan_sig_t"]["sig"],
+        "MSG_SIZE": truth["core_message_t"]["size"],
+        "MSG_ADDRESS": truth["core_message_t"]["address"],
+        "MSG_TEXT_KIND": truth["core_message_t"]["text_kind"],
+        "MSG_TEXT": truth["core_message_t"]["text"],
+        "MSG_TEXT_CAP": truth["core_message_t"]["text_cap"],
     }
     for name, want in want_kt.items():
         m = re.search(r"\bconst val " + name + r" = (\d+)", kt)
@@ -100,6 +110,11 @@ def main():
         "sigSize": truth["plan_sig_t"]["size"],
         "sigLen": truth["plan_sig_t"]["sig_len"],
         "sigSig": truth["plan_sig_t"]["sig"],
+        "msgSize": truth["core_message_t"]["size"],
+        "msgAddress": truth["core_message_t"]["address"],
+        "msgTextKind": truth["core_message_t"]["text_kind"],
+        "msgText": truth["core_message_t"]["text"],
+        "msgTextCap": truth["core_message_t"]["text_cap"],
     }
     for name, want in want_sw.items():
         m = re.search(r"\b" + name + r" = (\d+)", sw)
@@ -119,6 +134,7 @@ def main():
         (f"`core_review_t` ({truth['core_review_t']['size']} bytes)", None),
         (f"`core_display_t` ({truth['core_display_t']['size']} bytes)", None),
         (f"`plan_sig_t` ({truth['plan_sig_t']['size']} bytes)", None),
+        (f"`core_message_t` ({truth['core_message_t']['size']} bytes)", None),
     ]:
         if label not in spec:
             bad.append(f"abi.md: does not say {label}")

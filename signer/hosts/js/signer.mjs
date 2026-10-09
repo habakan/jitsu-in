@@ -14,6 +14,7 @@ const L = {
     outSize: 184, outAmount: 0, outOwner: 8, outTextKind: 9, outText: 10, outTextCap: 167,
   },
   sig: { size: 108, input: 0, pubkey: 1, sigLen: 34, sig: 35 },
+  message: { size: 1101, address: 0, textKind: 75, text: 76, textCap: 1025 },
   limits: { maxInputs: 16, maxOutputs: 16, xpubMax: 120, descMax: 180, prevtxMax: 32768 },
 };
 
@@ -49,6 +50,10 @@ const L = {
  *   signer_seedqr_output: () => number,
  *   signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number,
  *   signer_bip85_mnemonic: (words: number, index: number) => number,
+ *   signer_message_output: () => number,
+ *   signer_message_sig: () => number,
+ *   signer_message_review: (len: number, purpose: number, account: number, chain: number, index: number) => number,
+ *   signer_message_sign: () => number,
  * }} SignerExports
  */
 
@@ -426,6 +431,41 @@ export class Signer {
     if (rc >= 0) return { chain: rc >> 20, index: rc & 0xfffff };
     if (rc !== -NOT_FOUND) throw new SignerError("findAddress", -rc);
     return null;
+  }
+
+  /** What to show before signing a message with BIP137: the address of m/purpose'/coin'/account'/chain/index
+   *  (purpose 49 or 84), and the message, as it is when it is printable ASCII and in hex otherwise.
+   *  Approving it permits one messageSign(). */
+  /**
+   * @param {Uint8Array} message
+   * @param {{ purpose?: 49 | 84, account?: number, chain?: number, index?: number }} [opts]
+   */
+  messageReview(message, { purpose = 84, account = 0, chain = 0, index = 0 } = {}) {
+    const cap = this.#e.signer_input_cap();
+    if (message.length > cap) throw new RangeError(`a message of ${message.length} bytes, cap is ${cap}`);
+    this.#mem.set(message, this.#e.signer_input());
+    const rc = this.#e.signer_message_review(message.length, purpose, account, chain, index);
+    if (rc !== 0) throw new SignerError("messageReview", rc);
+    const at = this.#e.signer_message_output(), m = L.message;
+    const read = (/** @type {number} */ off, /** @type {number} */ cap) => {
+      const raw = this.#mem.subarray(at + off, at + off + cap);
+      const nul = raw.indexOf(0);
+      return new TextDecoder().decode(raw.subarray(0, nul < 0 ? raw.length : nul));
+    };
+    return {
+      address: read(m.address, m.textKind),
+      textKind: /** @type {"message" | "hex"} */ (this.#mem[at + m.textKind] ? "hex" : "message"),
+      text: read(m.text, m.textCap),
+    };
+  }
+
+  /** The BIP137 signature of the message messageReview() showed: 65 bytes, header then r and s. Most
+   *  wallets want it in base64. */
+  messageSign() {
+    const rc = this.#e.signer_message_sign();
+    if (rc !== 0) throw new SignerError("messageSign", rc);
+    const at = this.#e.signer_message_sig();
+    return this.#mem.slice(at, at + 65);
   }
 
   /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only

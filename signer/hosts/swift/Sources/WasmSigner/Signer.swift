@@ -28,6 +28,9 @@ private enum L {
     static let sigSize = 108
     static let sigInput = 0, sigPubkey = 1, sigLen = 34, sigSig = 35
 
+    static let msgSize = 1101
+    static let msgAddress = 0, msgTextKind = 75, msgText = 76, msgTextCap = 1025
+
     static let maxInputs = 16, maxOutputs = 16
     static let xpubMax = 120, descMax = 180, prevtxMax = 32768
 }
@@ -70,6 +73,13 @@ public enum Owner: UInt8 { case external = 0, change = 1, self_ = 2 }
 
 /// What the text of a display output actually is.
 public enum TextKind: UInt8 { case address = 0, opReturn = 1, script = 2 }
+
+/// What to show before signing a message: `text` is the message itself, or its hex when `isHex`.
+public struct MessageReview {
+    public let address: String
+    public let isHex: Bool
+    public let text: String
+}
 
 public struct Review {
     public let totalIn: UInt64
@@ -421,6 +431,29 @@ public final class Signer {
         if rc >= 0 { return AddressPath(chain: Int(rc >> 20), index: Int(rc & 0xfffff)) }
         if rc != -Int32(coreErr.firstIndex(of: "NOT_FOUND")!) { throw SignerError.refused(stage: "findAddress", code: -rc) }
         return nil
+    }
+
+    /// What to show before signing a message with BIP137: the address of m/purpose'/coin'/account'/chain/index
+    /// (purpose 49 or 84), and the message, as it is when it is printable ASCII and in hex otherwise.
+    /// Approving it permits one messageSign().
+    public func messageReview(_ message: [UInt8], purpose: UInt32 = 84, account: UInt32 = 0, chain: UInt32 = 0,
+                              index: UInt32 = 0) throws -> MessageReview {
+        let cap = inputCapacity
+        guard message.count <= cap else { throw SignerError.tooLarge(size: message.count, capacity: cap) }
+        try write(message, at: Int(try call("signer_input")))
+        let rc = try call("signer_message_review",
+                          [.i32(UInt32(message.count)), .i32(purpose), .i32(account), .i32(chain), .i32(index)])
+        guard rc == 0 else { throw SignerError.refused(stage: "messageReview", code: rc) }
+        let at = Int(try call("signer_message_output"))
+        return MessageReview(address: try cstr(at + L.msgAddress, L.msgTextKind), isHex: try u8(at + L.msgTextKind) != 0,
+                             text: try cstr(at + L.msgText, L.msgTextCap))
+    }
+
+    /// The BIP137 signature of the message messageReview() showed: 65 bytes, header then r and s.
+    public func messageSign() throws -> [UInt8] {
+        let rc = try call("signer_message_sign")
+        guard rc == 0 else { throw SignerError.refused(stage: "messageSign", code: rc) }
+        return try bytes(Int(try call("signer_message_sig")), 65)
     }
 
     /// The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only

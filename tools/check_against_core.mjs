@@ -17,7 +17,7 @@
 //
 //   node tools/check_against_core.mjs "bitcoin-cli -datadir=... -regtest" <parser.wasm> <signer.wasm> <psbt>...
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createECDH, createHash, createHmac } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import { Signer } from "../signer/hosts/js/signer.mjs";
 
@@ -145,6 +145,55 @@ const signerWasm = readFileSync(signerPath);
   }
   s.unload();
   console.log("the exported sh(wpkh()), wpkh() and tr() descriptors give the addresses Core derives from the keys");
+}
+
+// --- BIP137 against Core's signmessagewithprivkey, which signs as P2PKH: both are RFC6979 with no extra
+// data, so r and s are the same bytes and the header is 8 (P2WPKH) or 4 (P2SH-P2WPKH) above Core's
+{
+  const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const unb58 = (str) => {
+    let n = 0n;
+    for (const ch of str) n = n * 58n + BigInt(B58.indexOf(ch));
+    return Buffer.from(n.toString(16).padStart(164, "0"), "hex");
+  };
+  const b58check = (data) => {
+    const p = Buffer.concat([data, createHash("sha256").update(createHash("sha256").update(data).digest()).digest().subarray(0, 4)]);
+    let m = BigInt("0x" + p.toString("hex")), out = "";
+    for (; m > 0n; m /= 58n) out = B58[Number(m % 58n)] + out;
+    return out;
+  };
+  const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+  // the committed account tprv, then the two unhardened steps to chain/index
+  const wif = (tprv, chain, index) => {
+    const raw = unb58(tprv);
+    let c = raw.subarray(13, 45), k = raw.subarray(46, 78);
+    for (const i of [chain, index]) {
+      const e = createECDH("secp256k1");
+      e.setPrivateKey(k);
+      const I = createHmac("sha512", c).update(Buffer.concat([e.getPublicKey(null, "compressed"), Buffer.from([0, 0, 0, i])])).digest();
+      k = Buffer.from(((BigInt("0x" + I.subarray(0, 32).toString("hex")) + BigInt("0x" + k.toString("hex"))) % N).toString(16).padStart(64, "0"), "hex");
+      c = I.subarray(32);
+    }
+    return b58check(Buffer.concat([Buffer.from([0xef]), k, Buffer.from([1])]));
+  };
+  const s = await Signer.load(signerWasm);
+  s.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  let n = 0;
+  for (const a of ACCOUNTS.filter((a) => a.purpose !== 86)) {
+    for (const [chain, index, text] of [[0, 0, "This is an example of a signed message."], [0, 3, ""],
+                                        [1, 1, "caf\u00e9\nnext line"], [0, 0, "x".repeat(300)]]) {
+      const core = Buffer.from(cli("signmessagewithprivkey", wif(a.tprv, chain, index), text), "base64");
+      s.messageReview(new TextEncoder().encode(text), { purpose: a.purpose, chain, index });
+      const ours = Buffer.from(s.messageSign());
+      if (!ours.subarray(1).equals(core.subarray(1)) || ours[0] !== core[0] + (a.purpose === 84 ? 8 : 4)) {
+        console.error(`m/${a.purpose}'/0'/0'/${chain}/${index} "${text.slice(0, 20)}": ours ${ours.toString("base64")}, Core ${core.toString("base64")}`);
+        process.exit(1);
+      }
+      n++;
+    }
+  }
+  s.unload();
+  console.log(`${n} BIP137 message signatures have Core's r and s, byte for byte`);
 }
 
 // --- parser.wasm, driven directly: no native host and no WAMR needed

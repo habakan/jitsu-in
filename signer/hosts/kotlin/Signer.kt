@@ -31,6 +31,9 @@ private object L {
     const val SIG_SIZE = 108
     const val SIG_INPUT = 0; const val SIG_PUBKEY = 1; const val SIG_LEN = 34; const val SIG_SIG = 35
 
+    const val MSG_SIZE = 1101
+    const val MSG_ADDRESS = 0; const val MSG_TEXT_KIND = 75; const val MSG_TEXT = 76; const val MSG_TEXT_CAP = 1025
+
     const val MAX_INPUTS = 16; const val MAX_OUTPUTS = 16
     const val XPUB_MAX = 120; const val DESC_MAX = 180; const val PREVTX_MAX = 32768
 }
@@ -50,6 +53,9 @@ enum class Owner { EXTERNAL, CHANGE, SELF }
 
 /** What the text of a display output actually is. */
 enum class TextKind { ADDRESS, OP_RETURN, SCRIPT }
+
+/** What to show before signing a message: `text` is the message itself, or its hex when `isHex` */
+class MessageReview(val address: String, val isHex: Boolean, val text: String)
 
 class Review(
     val totalIn: Long,
@@ -368,6 +374,30 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         if (rc >= 0) return AddressPath(rc shr 20, rc and 0xfffff)
         if (rc != -CORE_ERR.indexOf("NOT_FOUND")) throw SignerException("findAddress", -rc)
         return null
+    }
+
+    /**
+     * What to show before signing a message with BIP137: the address of m/purpose'/coin'/account'/chain/index
+     * (purpose 49 or 84), and the message, as it is when it is printable ASCII and in hex otherwise.
+     * Approving it permits one messageSign().
+     */
+    fun messageReview(message: ByteArray, purpose: Int = 84, account: Int = 0, chain: Int = 0, index: Int = 0):
+        MessageReview {
+        require(message.size <= inputCapacity) { "${message.size} bytes of message does not fit in $inputCapacity" }
+        memory.write(call("signer_input"), message)
+        val rc = call("signer_message_review", message.size.toLong(), purpose.toLong(), account.toLong(),
+                      chain.toLong(), index.toLong())
+        if (rc != 0) throw SignerException("messageReview", rc)
+        val at = call("signer_message_output")
+        return MessageReview(cstr(at + L.MSG_ADDRESS, L.MSG_TEXT_KIND), u8(at + L.MSG_TEXT_KIND) != 0,
+                             cstr(at + L.MSG_TEXT, L.MSG_TEXT_CAP))
+    }
+
+    /** The BIP137 signature of the message messageReview() showed: 65 bytes, header then r and s. */
+    fun messageSign(): ByteArray {
+        val rc = call("signer_message_sign")
+        if (rc != 0) throw SignerException("messageSign", rc)
+        return bytes(call("signer_message_sig"), 65)
     }
 
     /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only

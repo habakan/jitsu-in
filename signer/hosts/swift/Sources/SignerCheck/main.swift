@@ -91,6 +91,8 @@ if dumpOnly {
     var abandon = [UInt8](mnemonicText.utf8)
     print("seedqr \(String(decoding: try s.seedQRFromMnemonic(&abandon), as: UTF8.self))")
     print("bip85 \(String(decoding: try s.bip85Mnemonic(words: 24, index: 3), as: UTF8.self))")
+    let shown = try s.messageReview([UInt8]("dump\n".utf8), purpose: 49, chain: 1, index: 2)
+    print("message \(shown.address) \(shown.text) \(Data(try s.messageSign()).base64EncodedString())")
     s.unload()
     var qr: [UInt8] = [0x5b, 0xbd, 0x9d, 0x71, 0xa8, 0xec, 0x79, 0x90, 0x83, 0x1a, 0xff, 0x35, 0x9d, 0x42, 0x65, 0x45]
     var none: [UInt8] = []
@@ -197,6 +199,22 @@ do {
     ok("findAddress refuses base58", false)
 } catch {
     ok("findAddress refuses base58", "\(error)" == "findAddress: FORMAT")
+}
+
+// --- BIP137: the signature Core's signmessagewithprivkey gives, with the P2WPKH header (check-core-diff)
+do {
+    let shown = try s.messageReview([UInt8]("This is an example of a signed message.".utf8))
+    check("the message's address", shown.address, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu")
+    ok("the message is shown as it is", !shown.isHex && shown.text == "This is an example of a signed message.")
+    check("the BIP137 signature", Data(try s.messageSign()).base64EncodedString(), "KLRN6BWUkHM2/ac9gTTx/izIth+Q8dyI1m6T8UJX061hEXMnFtDTlKJ/IYgwVCzr1zoF6zlAVzmBa/yEc7Dfi0s=")
+    ok("a newline is shown in hex", try s.messageReview([UInt8]("a\nb".utf8)).text == "610a62")
+    do {
+        _ = try s.messageSign()
+        _ = try s.messageSign()
+        ok("one review permits one message signature", false)
+    } catch {
+        ok("one review permits one message signature", "\(error)" == "messageSign: NOT_REVIEWED")
+    }
 }
 
 // --- signing without a review is refused

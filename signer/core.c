@@ -9,6 +9,7 @@
 #include "tx.h"
 #include "secp256k1_extrakeys.h"
 #include "secp256k1_preallocated.h"
+#include "secp256k1_recovery.h"
 #include "secp256k1_schnorrsig.h"
 
 #define H 0x80000000u
@@ -23,6 +24,10 @@ static uint32_t master_fp;
 static int seed_loaded;
 static uint8_t reviewed_hash[32];
 static int reviewed;
+static uint8_t msg[CORE_MESSAGE_MAX], msg_hash[32]; /* the message review showed, and what binds it to sign */
+static uint32_t msg_path[5];
+static size_t msg_len;
+static int msg_reviewed;
 
 enum { SPK_OTHER, SPK_P2WPKH, SPK_P2SH_P2WPKH, SPK_P2TR };
 
@@ -47,21 +52,25 @@ static int taproot_tweak(uint8_t seckey[32], uint8_t xonly_out[32], secp256k1_ke
 }
 
 /* Does the key at this derivation actually control spk? On a match the key is left in node */
+/* A key's P2WPKH script, or with nested BIP49's P2SH of it, whose redeem script is 0014{HASH160(pubkey)}.
+ * Returns the script's length */
+static size_t wpkh_spk(const uint8_t pub[33], int nested, uint8_t spk[23]) {
+    uint8_t redeem[22] = {0x00, 20};
+    hash160(pub, 33, redeem + 2);
+    if (!nested) return memcpy(spk, redeem, sizeof(redeem)), sizeof(redeem);
+    spk[0] = 0xa9, spk[1] = 20, spk[22] = 0x87;
+    hash160(redeem, sizeof(redeem), spk + 2);
+    return 23;
+}
+
 static int owns(const plan_keypath_t *key, const plan_script_t *spk, bip32_node_t *node) {
-    uint8_t pub[33], h[20], xonly[32];
+    uint8_t pub[33], mine[23], xonly[32];
     secp256k1_keypair kp;
     int type = spk_type(spk), ok = 0;
 
     if (key->fingerprint != master_fp || !bip32_derive(ctx, &master, key->path, key->depth, node)) return 0;
-    if (type == SPK_P2WPKH && bip32_pubkey(ctx, node->key, pub)) {
-        hash160(pub, 33, h);
-        ok = !memcmp(h, spk->bytes + 2, 20);
-    } else if (type == SPK_P2SH_P2WPKH && bip32_pubkey(ctx, node->key, pub)) {
-        /* BIP49: the script hash has to be that of the P2WPKH redeem script, 0014{HASH160(pubkey)} */
-        uint8_t redeem[22] = {0x00, 20};
-        hash160(pub, 33, redeem + 2);
-        hash160(redeem, sizeof(redeem), h);
-        ok = !memcmp(h, spk->bytes + 2, 20);
+    if ((type == SPK_P2WPKH || type == SPK_P2SH_P2WPKH) && bip32_pubkey(ctx, node->key, pub)) {
+        ok = wpkh_spk(pub, type == SPK_P2SH_P2WPKH, mine) == spk->len && !memcmp(mine, spk->bytes, spk->len);
     } else if (type == SPK_P2TR && taproot_tweak(node->key, xonly, &kp)) {
         ok = !memcmp(xonly, spk->bytes + 2, 32);
     }
@@ -160,6 +169,7 @@ int core_init(core_network_t net) {
     if (secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE) > sizeof(ctx_mem)) return 0;
     ctx = secp256k1_context_preallocated_create(ctx_mem, SECP256K1_CONTEXT_NONE);
     network = net;
+    reviewed = msg_reviewed = 0; /* an approval given under the other network is not this one's */
     return ctx != NULL;
 }
 
@@ -181,6 +191,11 @@ void core_unload(void) {
     master_fp = 0;
     seed_loaded = 0;
     reviewed = 0;
+    msg_reviewed = 0;
+    wipe(msg, sizeof(msg));
+    wipe(msg_hash, sizeof(msg_hash));
+    wipe(msg_path, sizeof(msg_path));
+    msg_len = 0;
 }
 
 uint32_t core_fingerprint(void) {
@@ -363,7 +378,7 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
     uint32_t path[3];
     bip32_node_t acct, chain, child;
     secp256k1_keypair kp;
-    uint8_t spk[34], pub[33], cpub[33], redeem[22] = {0x00, 20};
+    uint8_t spk[34], pub[33], cpub[33];
     size_t n;
 
     if (!seed_loaded) return -CORE_ERR_NO_SEED;
@@ -397,9 +412,7 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
             int ok = bip32_child(&chain, cpub, i, &child);
             if (ok && purpose != 86) {
                 ok = bip32_pubkey(ctx, child.key, pub);
-                hash160(pub, sizeof(pub), redeem + 2);
-                if (purpose == 84) memcpy(spk, redeem, sizeof(redeem));
-                else spk[0] = 0xa9, spk[1] = 20, spk[22] = 0x87, hash160(redeem, sizeof(redeem), spk + 2);
+                wpkh_spk(pub, purpose == 49, spk);
             } else if (ok) {
                 ok = taproot_tweak(child.key, spk + 2, &kp);
                 spk[0] = 0x51, spk[1] = 32;
@@ -417,6 +430,83 @@ int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t c
 
 int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap) {
     return seed_loaded ? bip85_bip39(ctx, &master, words, index, out, cap) : 0;
+}
+
+static void msg_binding(uint8_t out[32]) {
+    sha256_ctx h;
+    sha256_init(&h);
+    sha256_update(&h, (const uint8_t *)msg_path, sizeof(msg_path));
+    sha256_update(&h, (const uint8_t *)&msg_len, sizeof(msg_len));
+    sha256_update(&h, msg, msg_len);
+    sha256_final(&h, out);
+}
+
+int core_message_review(const uint8_t *m, size_t len, unsigned purpose, uint32_t account, uint32_t chain,
+                        uint32_t index, core_message_t *out) {
+    bip32_node_t node;
+    uint8_t pub[33], spk[23];
+    int printable = 1, ok;
+
+    msg_reviewed = 0;
+    wipe(out, sizeof(*out));
+    if (!seed_loaded) return CORE_ERR_NO_SEED;
+    if (len > CORE_MESSAGE_MAX || (purpose != 49 && purpose != 84) || account >= H || chain > 1 ||
+        index >= MAX_ADDRESS_INDEX)
+        return CORE_ERR_FORMAT;
+    msg_path[0] = purpose | H, msg_path[1] = (uint32_t)network | H, msg_path[2] = account | H;
+    msg_path[3] = chain, msg_path[4] = index;
+    ok = bip32_derive(ctx, &master, msg_path, 5, &node) && bip32_pubkey(ctx, node.key, pub);
+    wipe(&node, sizeof(node));
+    if (!ok) return CORE_ERR_CRYPTO;
+    if (!address_encode(spk, wpkh_spk(pub, purpose == 49, spk), network == CORE_TESTNET, out->address))
+        return CORE_ERR_CRYPTO;
+
+    for (size_t i = 0; i < len; i++) printable &= m[i] >= 0x20 && m[i] <= 0x7e;
+    out->text_kind = printable ? CORE_TEXT_MESSAGE : CORE_TEXT_HEX;
+    if (printable) memcpy(out->text, m, len), out->text[len] = 0;
+    else to_hex(m, len, out->text);
+
+    memcpy(msg, m, len);
+    msg_len = len;
+    msg_binding(msg_hash);
+    msg_reviewed = 1;
+    return CORE_OK;
+}
+
+int core_message_sign(uint8_t sig[65]) {
+    static const char prefix[] = "\x18"
+                                 "Bitcoin Signed Message:\n";
+    uint8_t now[32], hash[32], pub[33], got[33], n[3] = {(uint8_t)msg_len, 0, 0};
+    size_t nlen = 1, glen = 33;
+    bip32_node_t node;
+    secp256k1_ecdsa_recoverable_signature rs;
+    secp256k1_pubkey rec;
+    sha256_ctx h;
+    int recid = 0, ok;
+
+    if (!msg_reviewed) return CORE_ERR_NOT_REVIEWED;
+    msg_binding(now);
+    msg_reviewed = 0;
+    if (memcmp(now, msg_hash, 32)) return CORE_ERR_NOT_REVIEWED;
+    if (msg_len >= 0xfd) n[0] = 0xfd, n[1] = (uint8_t)msg_len, n[2] = (uint8_t)(msg_len >> 8), nlen = 3;
+    sha256_init(&h);
+    sha256_update(&h, (const uint8_t *)prefix, sizeof(prefix) - 1);
+    sha256_update(&h, n, nlen);
+    sha256_update(&h, msg, msg_len);
+    sha256d_final(&h, hash);
+
+    /* RFC6979 with no extra data, as Core's signmessage does, so the same key gives Core's r and s. The
+     * key it recovers to is checked before the signature leaves, as for a transaction */
+    ok = bip32_derive(ctx, &master, msg_path, 5, &node) && bip32_pubkey(ctx, node.key, pub) &&
+         secp256k1_ecdsa_sign_recoverable(ctx, &rs, hash, node.key, NULL, NULL) &&
+         secp256k1_ecdsa_recoverable_signature_serialize_compact(ctx, sig + 1, &recid, &rs) &&
+         secp256k1_ecdsa_recover(ctx, &rec, &rs, hash) &&
+         secp256k1_ec_pubkey_serialize(ctx, got, &glen, &rec, SECP256K1_EC_COMPRESSED) && !memcmp(got, pub, 33);
+    sig[0] = (uint8_t)((msg_path[0] == (84 | H) ? 39 : 35) + recid);
+    wipe(&node, sizeof(node));
+    wipe(&h, sizeof(h));
+    if (!ok) wipe(sig, 65);
+    return ok ? CORE_OK : CORE_ERR_CRYPTO;
 }
 
 /* The account xpub (m/purpose'/coin'/account') and an output descriptor built from it. Hand these to

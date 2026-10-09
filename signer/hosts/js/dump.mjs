@@ -45,6 +45,8 @@ console.log(`desc ${S.xpub({ purpose: 86, account: 1 }).descriptor}`);
 console.log(`dice ${new TextDecoder().decode(S.mnemonicFromDice(new TextEncoder().encode("3".repeat(99))))}`);
 console.log(`seedqr ${new TextDecoder().decode(S.seedQRFromMnemonic(new TextEncoder().encode("abandon ".repeat(11) + "about")))}`);
 console.log(`bip85 ${new TextDecoder().decode(S.bip85Mnemonic({ words: 24, index: 3 }))}`);
+const shown = S.messageReview(new TextEncoder().encode("dump\n"), { purpose: 49, chain: 1, index: 2 });
+console.log(`message ${shown.address} ${shown.text} ${Buffer.from(S.messageSign()).toString("base64")}`);
 S.unload();
 S.init().seedFromSeedQR(Uint8Array.from(Buffer.from("5bbd9d71a8ec7990831aff359d426545", "hex")));
 console.log(`seedqr fingerprint ${S.fingerprint}`);

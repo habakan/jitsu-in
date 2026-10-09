@@ -1,7 +1,7 @@
 // Drives signer.wasm through the host library and checks the result against what the native side
 // produced. The signatures are deterministic, so "the same" means byte-identical, not merely valid.
 import { readFileSync } from "node:fs";
-import { createECDH, createHash, createHmac, pbkdf2Sync } from "node:crypto";
+import { ECDH, createECDH, createHash, createHmac, createPublicKey, pbkdf2Sync, verify } from "node:crypto";
 import { Signer, OWNER, TEXT_KIND, SignerError } from "./signer.mjs";
 // WASM_RUNTIME=wamr runs both modules in WAMR's interpreter instead of V8
 if (process.env.WASM_RUNTIME === "wamr") globalThis.WebAssembly = (await import("../../../tools/wamr_webassembly.mjs")).default;
@@ -233,6 +233,67 @@ for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", {
   const x49 = P2.xpub({ purpose: 49 });
   check("the BIP49 descriptor", x49.descriptor, `sh(wpkh([73c5da0a/49h/0h/0h]${x49.xpub}/<0;1>/*))`);
   P2.unload();
+}
+
+// --- BIP137 message signing, verified with Node's own ECDSA against BIP84's published m/84'/0'/0'/0/0 key
+{
+  const M = await Signer.load(signerWasm);
+  M.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  const enc = (t) => new TextEncoder().encode(t);
+  const pub = ECDH.convertKey("0330d54fd0dd420a6e5f8d3624f5f3482cae350f79d5f0753bf5beef9c2d91af3c", "secp256k1", "hex", undefined, "uncompressed");
+  const key = createPublicKey({ key: Buffer.concat([Buffer.from("3056301006072a8648ce3d020106052b8104000a034200", "hex"), pub]), format: "der", type: "spki" });
+  const once = (m) => createHash("sha256").update(Buffer.concat([Buffer.from("\x18Bitcoin Signed Message:\n", "latin1"), Buffer.from([m.length]), m])).digest();
+  for (const text of ["This is an example of a signed message.", "", "caf\u00e9\nnext line"]) {
+    const m = enc(text);
+    const shown = M.messageReview(m);
+    check(`"${text}": the address is BIP84's first`, shown.address, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu");
+    check(`"${text}": shown ${/^[\x20-\x7e]*$/.test(text) ? "as it is" : "in hex"}`, shown.text,
+          /^[\x20-\x7e]*$/.test(text) ? text : Buffer.from(m).toString("hex"));
+    const sig = M.messageSign();
+    ok(`"${text}": a P2WPKH header`, sig[0] >= 39 && sig[0] <= 42);
+    ok(`"${text}": the signature verifies under the published key`,
+       verify("sha256", once(m), { key, dsaEncoding: "ieee-p1363" }, sig.subarray(1)));
+  }
+  try {
+    M.messageSign();
+    ok("one review permits one message signature", false);
+  } catch (e) {
+    ok("one review permits one message signature", /messageSign: NOT_REVIEWED/.test(e.message));
+  }
+  for (const [what, opts] of [["P2TR", { purpose: 86 }], ["chain 2", { chain: 2 }], ["index 100000", { index: 100000 }]]) {
+    try {
+      M.messageReview(enc("x"), opts);
+      ok(`a message review for ${what} is refused`, false);
+    } catch (e) {
+      ok(`a message review for ${what} is refused`, /messageReview: FORMAT/.test(e.message));
+    }
+  }
+  M.unload();
+  // the module itself refuses a message changed in its memory after the review
+  const E = (await WebAssembly.instantiate(signerWasm, {})).instance.exports;
+  const mn = enc(MNEMONIC), m = enc("pay the bearer 1 BTC");
+  const mem = () => new Uint8Array(E.memory.buffer);
+  E.signer_init(0);
+  mem().set(mn, E.signer_input());
+  E.signer_seed_from_mnemonic(mn.length, 0);
+  mem().set(m, E.signer_input());
+  check("the raw ABI reviews a message", E.signer_message_review(m.length, 84, 0, 0, 0), 0);
+  // every copy: the one shown is in the display buffer, the one signed is the core's own
+  for (let at = 0; (at = Buffer.from(E.memory.buffer).indexOf(Buffer.from("pay the bearer 1 BTC"), at)) >= 0;) {
+    mem()[at + 15] = "9".charCodeAt(0);
+  }
+  check("a message changed after review is refused", E.signer_message_sign(), 10);
+  // a review does not survive a re-init, which may change the network, nor does a signature an unload
+  mem().set(m, E.signer_input());
+  check("a fresh review", E.signer_message_review(m.length, 84, 0, 0, 0), 0);
+  E.signer_init(1);
+  check("is forgotten by init", E.signer_message_sign(), 10);
+  E.signer_init(0);
+  mem().set(m, E.signer_input());
+  E.signer_message_review(m.length, 84, 0, 0, 0);
+  check("signs once reviewed again", E.signer_message_sign(), 0);
+  E.signer_unload();
+  ok("and unload clears the signature", new Uint8Array(E.memory.buffer, E.signer_message_sig(), 65).every((b) => b === 0));
 }
 
 // --- the module refuses to sign a plan it was not shown
