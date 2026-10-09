@@ -78,7 +78,13 @@ int main(void) {
           "24 words");
     CHECK(!bip85_bip39(ctx, &root, 15, 0, mn, sizeof(mn)), "15 words refused");
     CHECK(!bip85_bip39(ctx, &root, 12, H, mn, sizeof(mn)), "a hardened index refused");
+    memset(mn, 0x55, sizeof(mn));
     CHECK(!bip85_bip39(ctx, &root, 24, 0, mn, 100), "a small buffer refused");
+    {
+        int clean = 1;
+        for (unsigned k = 0; k < 100; k++) clean &= mn[k] == 0 || mn[k] == 0x55; /* cleared, or never written */
+        CHECK(clean, "and none of the child's words are left in it");
+    }
     CHECK(bip85_bip39(ctx, &root, 12, H - 1, mn, sizeof(mn)) > 0, "the largest index");
 
     /* through the core, which uses the loaded master */
@@ -89,8 +95,9 @@ int main(void) {
         CHECK(core_init(CORE_MAINNET), "init");
         CHECK(!core_bip85_mnemonic(12, 0, mn, sizeof(mn)), "no seed");
         pbkdf2_hmac_sha512((const uint8_t *)words, sizeof(words) - 1, (const uint8_t *)"mnemonic", 8, 2048, seed);
-        CHECK(core_load_seed(seed) && core_bip85_mnemonic(12, 0, mn, sizeof(mn)) > 0, "from the loaded seed");
-        printf("  %s\n", mn);
+        CHECK(core_load_seed(seed) && core_bip85_mnemonic(12, 0, mn, sizeof(mn)) > 0 &&
+                  !strcmp(mn, "prosper short ramp prepare exchange stove life snack client enough purpose fold"),
+              "from the loaded seed, the child the JavaScript suite derives independently");
         core_unload();
     }
 

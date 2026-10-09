@@ -34,7 +34,7 @@ private enum L {
 
 private let coreErr = [
     "OK", "FORMAT", "NO_SEED", "NOT_OURS", "NOTHING_TO_SIGN", "SIGHASH", "SCRIPT",
-    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO",
+    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND",
 ]
 
 public enum SignerError: Error, CustomStringConvertible {
@@ -44,6 +44,8 @@ public enum SignerError: Error, CustomStringConvertible {
     case outOfBounds(offset: Int, count: Int)
     /// Not a signer.wasm, or it speaks an ABI this host does not.
     case unexpectedModule(String)
+    /// The module refused what was given: a mnemonic or SeedQR that is not valid BIP39, for instance.
+    case invalidInput(String)
     /// More bytes than the module's buffer takes.
     case tooLarge(size: Int, capacity: Int)
     /// sign() before review() passed. One approval permits one signing.
@@ -55,7 +57,7 @@ public enum SignerError: Error, CustomStringConvertible {
             return "\(s): " + (coreErr.indices.contains(Int(c)) ? coreErr[Int(c)] : "unknown(\(c))")
         case .outOfBounds(let o, let n):
             return "the module returned an offset outside its memory: \(o)+\(n)"
-        case .unexpectedModule(let s): return s
+        case .unexpectedModule(let s), .invalidInput(let s): return s
         case .tooLarge(let s, let c): return "\(s) bytes does not fit in \(c)"
         case .notReviewed: return "review() has to pass first; one approval permits one signing"
         }
@@ -103,6 +105,12 @@ public struct Signature {
 public struct AccountKey {
     public let xpub: String
     public let descriptor: String
+}
+
+public struct AddressPath: Equatable {
+    public let chain: Int
+    public let index: Int
+    public init(chain: Int, index: Int) { self.chain = chain; self.index = index }
 }
 
 public final class Signer {
@@ -210,7 +218,7 @@ public final class Signer {
         try write(passphrase, at: at + mnemonic.count)
         let rc = try call("signer_seed_from_mnemonic",
                           [.i32(UInt32(mnemonic.count)), .i32(UInt32(passphrase.count))])
-        guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_mnemonic failed") }
+        guard rc == 1 else { throw SignerError.invalidInput("seed_from_mnemonic failed") }
         return self
     }
 
@@ -232,7 +240,7 @@ public final class Signer {
         try write(passphrase, at: at + payload.count)
         let rc = try call("signer_seed_from_seedqr",
                           [.i32(UInt32(payload.count)), .i32(UInt32(passphrase.count))])
-        guard rc == 1 else { throw SignerError.unexpectedModule("seed_from_seedqr failed") }
+        guard rc == 1 else { throw SignerError.invalidInput("seed_from_seedqr failed") }
         return self
     }
 
@@ -240,36 +248,49 @@ public final class Signer {
     /// clear. Nothing is loaded. The entropy is zeroed, and so is the module's copy of the words.
     public func mnemonicFromEntropy(_ entropy: inout [UInt8]) throws -> [UInt8] {
         let n = UInt32(entropy.count)
-        return try generate(&entropy, "mnemonic_from_entropy") {
+        return try generate(&entropy, "mnemonic_from_entropy", "signer_mnemonic_output") {
             try self.call("signer_mnemonic_from_entropy", [.i32(n)])
         }
     }
 
     /// A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24.
     public func mnemonicFromDice(_ rolls: inout [UInt8], words: UInt32 = 24) throws -> [UInt8] {
+        guard words == 12 || words == 24 else { throw SignerError.invalidInput("dice make 12 or 24 words, not \(words)") }
         let n = UInt32(rolls.count)
-        return try generate(&rolls, "mnemonic_from_dice") {
+        return try generate(&rolls, "mnemonic_from_dice", "signer_mnemonic_output") {
             try self.call("signer_mnemonic_from_dice", [.i32(n), .i32(words)])
+        }
+    }
+
+    /// The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+    /// numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+    /// so clear it once shown. The mnemonic is zeroed, and so is the module's copy.
+    public func seedQRFromMnemonic(_ mnemonic: inout [UInt8], compact: Bool = false) throws -> [UInt8] {
+        let n = UInt32(mnemonic.count)
+        return try generate(&mnemonic, "seedqr_from_mnemonic", "signer_seedqr_output") {
+            try self.call("signer_seedqr_from_mnemonic", [.i32(n), .i32(compact ? 1 : 0)])
         }
     }
 
     /// The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
     /// show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed.
     public func bip85Mnemonic(words: UInt32 = 24, index: UInt32 = 0) throws -> [UInt8] {
+        guard fingerprint != "00000000" else { throw SignerError.invalidInput("no seed is loaded") }
         var none: [UInt8] = []
-        return try generate(&none, "bip85_mnemonic") {
+        return try generate(&none, "bip85_mnemonic", "signer_mnemonic_output") {
             try self.call("signer_bip85_mnemonic", [.i32(words), .i32(index)])
         }
     }
 
-    private func generate(_ input: inout [UInt8], _ name: String, _ make: () throws -> Int32) throws -> [UInt8] {
+    private func generate(_ input: inout [UInt8], _ name: String, _ output: String,
+                          _ make: () throws -> Int32) throws -> [UInt8] {
         defer { for i in input.indices { input[i] = 0 } }
         let cap = inputCapacity
         guard input.count <= cap else { throw SignerError.tooLarge(size: input.count, capacity: cap) }
         try write(input, at: Int(try call("signer_input")))
         let n = Int(try make())
         guard n > 0 else { throw SignerError.unexpectedModule("\(name) failed") }
-        let at = Int(try call("signer_mnemonic_output"))
+        let at = Int(try call(output))
         let out = try bytes(at, n)
         try write([UInt8](repeating: 0, count: n), at: at)
         return out
@@ -387,9 +408,25 @@ public final class Signer {
         }
     }
 
-    /// The account xpub and an output descriptor, for making a watch-only wallet elsewhere.
-    public func xpub() throws -> AccountKey {
-        let rc = try call("signer_xpub")
+    /// Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1.
+    /// Takes a bare address or a BIP21 URI; P2WPKH and P2TR only. Nil when it is not found.
+    public func findAddress(_ address: String, account: UInt32 = 0, count: UInt32 = 1000) throws -> AddressPath? {
+        var a = Substring(address.trimmingCharacters(in: .whitespacesAndNewlines))
+        if a.lowercased().hasPrefix("bitcoin:") { a = a.dropFirst(8) }
+        let bytes = [UInt8](a.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)[0].utf8)
+        let cap = inputCapacity
+        guard bytes.count <= cap else { throw SignerError.tooLarge(size: bytes.count, capacity: cap) }
+        try write(bytes, at: Int(try call("signer_input")))
+        let rc = try call("signer_find_address", [.i32(UInt32(bytes.count)), .i32(account), .i32(count)])
+        if rc >= 0 { return AddressPath(chain: Int(rc >> 20), index: Int(rc & 0xfffff)) }
+        if rc != -Int32(coreErr.firstIndex(of: "NOT_FOUND")!) { throw SignerError.refused(stage: "findAddress", code: -rc) }
+        return nil
+    }
+
+    /// The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+    /// wallet elsewhere. `account` is below 2^31.
+    public func xpub(purpose: UInt32 = 84, account: UInt32 = 0) throws -> AccountKey {
+        let rc = try call("signer_xpub", [.i32(purpose), .i32(account)])
         guard rc == 0 else { throw SignerError.refused(stage: "xpub", code: rc) }
         return AccountKey(
             xpub: try cstr(Int(try call("signer_xpub_output")), L.xpubMax),

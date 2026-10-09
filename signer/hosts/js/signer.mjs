@@ -41,10 +41,13 @@ const L = {
  *   signer_review: () => number,
  *   signer_display: () => number,
  *   signer_sign: () => number,
- *   signer_xpub: () => number,
+ *   signer_xpub: (purpose: number, account: number) => number,
+ *   signer_find_address: (len: number, account: number, count: number) => number,
  *   signer_mnemonic_output: () => number,
  *   signer_mnemonic_from_entropy: (len: number) => number,
  *   signer_mnemonic_from_dice: (len: number, words: number) => number,
+ *   signer_seedqr_output: () => number,
+ *   signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number,
  *   signer_bip85_mnemonic: (words: number, index: number) => number,
  * }} SignerExports
  */
@@ -67,11 +70,14 @@ const L = {
 export const OWNER = { EXTERNAL: 0, CHANGE: 1, SELF: 2 };
 export const TEXT_KIND = { ADDRESS: 0, OP_RETURN: 1, SCRIPT: 2 };
 
+const NOT_FOUND = 12;
+
 /** CORE_ERR_* by value, as signer/docs/abi.md lists them.
  *  @type {Record<number, string>} */
 export const ERRORS = {
   1: "FORMAT", 2: "NO_SEED", 3: "NOT_OURS", 4: "NOTHING_TO_SIGN", 5: "SIGHASH", 6: "SCRIPT",
   7: "PREVTX_MISSING", 8: "PREVTX_MISMATCH", 9: "FEE", 10: "NOT_REVIEWED", 11: "CRYPTO",
+  12: "NOT_FOUND",
 };
 
 export class SignerError extends Error {
@@ -210,7 +216,8 @@ export class Signer {
    *  clear. Nothing is loaded. `entropy` is zeroed, and so is the module's copy of the words. */
   /** @param {Uint8Array} entropy */
   mnemonicFromEntropy(entropy) {
-    return this.#generate(entropy, () => this.#e.signer_mnemonic_from_entropy(entropy.length), "mnemonic_from_entropy");
+    return this.#generate(entropy, () => this.#e.signer_mnemonic_from_entropy(entropy.length), "mnemonic_from_entropy",
+                          () => this.#e.signer_mnemonic_output());
   }
 
   /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. The
@@ -220,29 +227,51 @@ export class Signer {
    * @param {12 | 24} [words]
    */
   mnemonicFromDice(rolls, words = 24) {
-    return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice");
+    if (words !== 12 && words !== 24) throw new RangeError(`dice make 12 or 24 words, not ${words}`);
+    return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice",
+                          () => this.#e.signer_mnemonic_output());
+  }
+
+  /** The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+   *  numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+   *  so clear it once shown. `mnemonic` is zeroed, and so is the module's copy. */
+  /**
+   * @param {Uint8Array} mnemonic
+   * @param {{ compact?: boolean }} [opts]
+   */
+  seedQRFromMnemonic(mnemonic, { compact = false } = {}) {
+    return this.#generate(mnemonic, () => this.#e.signer_seedqr_from_mnemonic(mnemonic.length, compact ? 1 : 0),
+                          "seedqr_from_mnemonic", () => this.#e.signer_seedqr_output());
   }
 
   /** The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
    *  show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed. */
   /** @param {{ words?: 12 | 18 | 24, index?: number }} [opts] */
   bip85Mnemonic({ words = 24, index = 0 } = {}) {
-    return this.#generate(new Uint8Array(0), () => this.#e.signer_bip85_mnemonic(words, index), "bip85_mnemonic");
+    if ((words !== 12 && words !== 18 && words !== 24) || !Number.isInteger(index) || index < 0 || index >= 2 ** 31) {
+      throw new RangeError(`BIP85 takes 12, 18 or 24 words and an index below 2^31, not ${words} and ${index}`);
+    }
+    if (this.fingerprint === "00000000") throw new Error("bip85_mnemonic: no seed is loaded");
+    return this.#generate(new Uint8Array(0), () => this.#e.signer_bip85_mnemonic(words, index), "bip85_mnemonic",
+                          () => this.#e.signer_mnemonic_output());
   }
 
   /**
    * @param {Uint8Array} input
    * @param {() => number} make
    * @param {string} name
+   * @param {() => number} where where the module writes what it made, asked inside the try so that a
+   *   failure there still clears the input
    */
-  #generate(input, make, name) {
+  #generate(input, make, name, where) {
+    if (!(input instanceof Uint8Array)) throw new TypeError(`${name} takes a Uint8Array, so that it can be cleared`);
     try {
       const cap = this.#e.signer_input_cap();
       if (input.length > cap) throw new RangeError(`${input.length} bytes, cap is ${cap}`);
       this.#mem.set(input, this.#e.signer_input());
       const n = make();
       if (!n) throw new Error(`${name} failed`);
-      const at = this.#e.signer_mnemonic_output();
+      const at = where();
       const out = this.#mem.slice(at, at + n);
       this.#mem.fill(0, at, at + n);
       return out;
@@ -378,9 +407,34 @@ export class Signer {
     return out;
   }
 
-  /** The account xpub and an output descriptor, for making a watch-only wallet elsewhere. */
-  xpub() {
-    const rc = this.#e.signer_xpub();
+  /** Which of our addresses this is: receive (chain 0) first, then change, indices 0 to count-1. Takes
+   *  a bare address or a BIP21 URI; P2WPKH and P2TR only. Returns null when it is not found. */
+  /**
+   * @param {string} address
+   * @param {{ account?: number, count?: number }} [opts]
+   * @returns {{ chain: number, index: number } | null}
+   */
+  findAddress(address, { account = 0, count = 1000 } = {}) {
+    const bytes = new TextEncoder().encode(address.trim().replace(/^bitcoin:/i, "").split("?")[0]);
+    const cap = this.#e.signer_input_cap();
+    if (bytes.length > cap) throw new RangeError(`an address of ${bytes.length} bytes, cap is ${cap}`);
+    if (!Number.isInteger(account) || !Number.isInteger(count) || account < 0 || count < 0 || account >= 2 ** 32 || count >= 2 ** 32) {
+      throw new RangeError(`account ${account} and count ${count} have to be integers in range`);
+    }
+    this.#mem.set(bytes, this.#e.signer_input());
+    const rc = this.#e.signer_find_address(bytes.length, account, count);
+    if (rc >= 0) return { chain: rc >> 20, index: rc & 0xfffff };
+    if (rc !== -NOT_FOUND) throw new SignerError("findAddress", -rc);
+    return null;
+  }
+
+  /** The account xpub and its wpkh() (purpose 84) or tr() (86) descriptor, for making a watch-only
+   *  wallet elsewhere. `account` is below 2^31. */
+  xpub({ purpose = 84, account = 0 } = {}) {
+    if (!Number.isInteger(purpose) || !Number.isInteger(account) || purpose < 0 || account < 0 || account >= 2 ** 32) {
+      throw new RangeError(`purpose ${purpose} and account ${account} have to be integers in range`);
+    }
+    const rc = this.#e.signer_xpub(purpose, account);
     if (rc !== 0) throw new SignerError("xpub", rc);
     const dec = new TextDecoder();
     const read = (/** @type {number} */ at, /** @type {number} */ cap) => {
