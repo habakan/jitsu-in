@@ -43,6 +43,12 @@ const L = {
  *   signer_sign: () => number,
  *   signer_xpub: (purpose: number, account: number) => number,
  *   signer_find_address: (len: number, account: number, count: number) => number,
+ *   signer_mnemonic_output: () => number,
+ *   signer_mnemonic_from_entropy: (len: number) => number,
+ *   signer_mnemonic_from_dice: (len: number, words: number) => number,
+ *   signer_seedqr_output: () => number,
+ *   signer_seedqr_from_mnemonic: (mnLen: number, compact: number) => number,
+ *   signer_bip85_mnemonic: (words: number, index: number) => number,
  * }} SignerExports
  */
 
@@ -204,6 +210,74 @@ export class Signer {
       if (passphrase instanceof Uint8Array) passphrase.fill(0);
     }
     return this;
+  }
+
+  /** A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), as UTF-8 bytes to show and then
+   *  clear. Nothing is loaded. `entropy` is zeroed, and so is the module's copy of the words. */
+  /** @param {Uint8Array} entropy */
+  mnemonicFromEntropy(entropy) {
+    return this.#generate(entropy, () => this.#e.signer_mnemonic_from_entropy(entropy.length), "mnemonic_from_entropy",
+                          () => this.#e.signer_mnemonic_output());
+  }
+
+  /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. The
+   *  entropy is SHA-256 of the rolls. `rolls` is zeroed. */
+  /**
+   * @param {Uint8Array} rolls
+   * @param {12 | 24} [words]
+   */
+  mnemonicFromDice(rolls, words = 24) {
+    if (words !== 12 && words !== 24) throw new RangeError(`dice make 12 or 24 words, not ${words}`);
+    return this.#generate(rolls, () => this.#e.signer_mnemonic_from_dice(rolls.length, words), "mnemonic_from_dice",
+                          () => this.#e.signer_mnemonic_output());
+  }
+
+  /** The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+   *  numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+   *  so clear it once shown. `mnemonic` is zeroed, and so is the module's copy. */
+  /**
+   * @param {Uint8Array} mnemonic
+   * @param {{ compact?: boolean }} [opts]
+   */
+  seedQRFromMnemonic(mnemonic, { compact = false } = {}) {
+    return this.#generate(mnemonic, () => this.#e.signer_seedqr_from_mnemonic(mnemonic.length, compact ? 1 : 0),
+                          "seedqr_from_mnemonic", () => this.#e.signer_seedqr_output());
+  }
+
+  /** The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+   *  show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed. */
+  /** @param {{ words?: 12 | 18 | 24, index?: number }} [opts] */
+  bip85Mnemonic({ words = 24, index = 0 } = {}) {
+    if ((words !== 12 && words !== 18 && words !== 24) || !Number.isInteger(index) || index < 0 || index >= 2 ** 31) {
+      throw new RangeError(`BIP85 takes 12, 18 or 24 words and an index below 2^31, not ${words} and ${index}`);
+    }
+    if (this.fingerprint === "00000000") throw new Error("bip85_mnemonic: no seed is loaded");
+    return this.#generate(new Uint8Array(0), () => this.#e.signer_bip85_mnemonic(words, index), "bip85_mnemonic",
+                          () => this.#e.signer_mnemonic_output());
+  }
+
+  /**
+   * @param {Uint8Array} input
+   * @param {() => number} make
+   * @param {string} name
+   * @param {() => number} where where the module writes what it made, asked inside the try so that a
+   *   failure there still clears the input
+   */
+  #generate(input, make, name, where) {
+    if (!(input instanceof Uint8Array)) throw new TypeError(`${name} takes a Uint8Array, so that it can be cleared`);
+    try {
+      const cap = this.#e.signer_input_cap();
+      if (input.length > cap) throw new RangeError(`${input.length} bytes, cap is ${cap}`);
+      this.#mem.set(input, this.#e.signer_input());
+      const n = make();
+      if (!n) throw new Error(`${name} failed`);
+      const at = where();
+      const out = this.#mem.slice(at, at + n);
+      this.#mem.fill(0, at, at + n);
+      return out;
+    } finally {
+      input.fill(0);
+    }
   }
 
   /** For a seed you already have. 64 bytes. */

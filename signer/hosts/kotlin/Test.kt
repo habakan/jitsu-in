@@ -194,6 +194,75 @@ fun main(args: Array<String>) {
         ok("an oversized mnemonic is refused", e.message!!.contains("does not fit"))
     }
 
+    // --- making a new mnemonic, from entropy and from dice, against BIP39's and the dice vectors
+    run {
+        val g = Signer(signerWasm).init()
+        val ent = "9e885d952ad362caeb4efe34a8e91bd2".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val mn = g.mnemonicFromEntropy(ent)
+        check("BIP39's 9e885d95... vector", String(mn), "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic")
+        ok("the entropy passed in is zeroed", ent.all { it == 0.toByte() })
+        check("the generated words load", g.seedFromMnemonic(mn).fingerprint.length, 8)
+        check("50 dice rolls", String(g.mnemonicFromDice("1".repeat(50).toByteArray(), 12)), "diet glad hat rural panther lawsuit act drop gallery urge where fit")
+        try {
+            g.mnemonicFromDice("1".repeat(98).toByteArray())
+            ok("98 rolls for 24 words are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("98 rolls for 24 words are refused", e.message == "mnemonic_from_dice failed")
+        }
+        try {
+            g.mnemonicFromEntropy(ByteArray(15))
+            ok("15 bytes of entropy are refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("15 bytes of entropy are refused", e.message == "mnemonic_from_entropy failed")
+        }
+        val kept = "1".repeat(99).toByteArray()
+        try {
+            g.mnemonicFromDice(kept, 18)
+            ok("18 words from dice is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("18 words from dice is refused, and the rolls are kept to retry", kept[0] == '1'.code.toByte())
+        }
+        g.unload()
+    }
+
+    // --- making a SeedQR from the words, against the published vector 4, and reading it back
+    run {
+        val q = Signer(signerWasm).init()
+        val words = "forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray()
+        check("Standard SeedQR digits", String(q.seedQRFromMnemonic(words)), "073318950739065415961602009907670428187212261116")
+        ok("the words passed in are zeroed", words.all { it == '\u0000' })
+        val compact = q.seedQRFromMnemonic("forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray(), compact = true)
+        check("CompactSeedQR bytes", compact.joinToString("") { "%02x".format(it) }, "5bbd9d71a8ec7990831aff359d426545")
+        val want = q.seedFromMnemonic("forum undo fragile fade shy sign arrest garment culture tube off merit".toCharArray()).fingerprint
+        check("the CompactSeedQR made here loads the same key", q.init().seedFromSeedQR(compact).fingerprint, want)
+        try {
+            q.seedQRFromMnemonic(("abandon ".repeat(11) + "abandon").toCharArray())
+            ok("a SeedQR of a bad mnemonic is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("a SeedQR of a bad mnemonic is refused", e.message == "seedqr_from_mnemonic failed")
+        }
+        q.unload()
+    }
+
+    // --- BIP85: the child the JavaScript host checks against its own derivation
+    run {
+        val b = Signer(signerWasm).init().seedFromMnemonic(mnemonic.copyOf())
+        check("BIP85 12 words, index 0", String(b.bip85Mnemonic(words = 12)), "prosper short ramp prepare exchange stove life snack client enough purpose fold")
+        try {
+            b.bip85Mnemonic(words = 15)
+            ok("BIP85 with 15 words is refused", false)
+        } catch (e: IllegalArgumentException) {
+            ok("BIP85 with 15 words is refused", e.message == "bip85_mnemonic failed")
+        }
+        b.unload()
+        try {
+            b.init().bip85Mnemonic()
+            ok("BIP85 with no seed says so", false)
+        } catch (e: IllegalArgumentException) {
+            ok("BIP85 with no seed says so", e.message == "no seed is loaded")
+        }
+    }
+
     // --- what a keyboard adds loads the same wallet; a bad checksum, or a word not in the list, loads nothing
     val typed = "abandon ".repeat(11) + "about"
     check("whitespace and capitals load the same wallet",

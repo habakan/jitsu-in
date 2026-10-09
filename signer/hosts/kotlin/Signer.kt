@@ -192,6 +192,65 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         }
     }
 
+    /**
+     * A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), to show and then clear. Nothing
+     * is loaded. The entropy is zeroed, and so is the module's copy of the words.
+     */
+    fun mnemonicFromEntropy(entropy: ByteArray): CharArray = chars(
+        generate(entropy, "mnemonic_from_entropy", "signer_mnemonic_output") {
+            call("signer_mnemonic_from_entropy", entropy.size.toLong())
+        })
+
+    /** A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24. */
+    fun mnemonicFromDice(rolls: ByteArray, words: Int = 24): CharArray {
+        require(words == 12 || words == 24) { "dice make 12 or 24 words, not $words" }
+        return chars(generate(rolls, "mnemonic_from_dice", "signer_mnemonic_output") {
+            call("signer_mnemonic_from_dice", rolls.size.toLong(), words.toLong())
+        })
+    }
+
+    /**
+     * The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+     * numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+     * so clear it once shown. The mnemonic is zeroed, and so is the module's copy.
+     */
+    fun seedQRFromMnemonic(mnemonic: CharArray, compact: Boolean = false): ByteArray {
+        try {
+            val mn = utf8(mnemonic)
+            return generate(mn, "seedqr_from_mnemonic", "signer_seedqr_output") {
+                call("signer_seedqr_from_mnemonic", mn.size.toLong(), if (compact) 1L else 0L)
+            }
+        } finally {
+            mnemonic.fill('\u0000')
+        }
+    }
+
+    /**
+     * The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), to show and then
+     * clear. English; `words` is 12, 18 or 24. The module's copy is zeroed.
+     */
+    fun bip85Mnemonic(words: Int = 24, index: Int = 0): CharArray {
+        require(fingerprint != "00000000") { "no seed is loaded" }
+        return chars(generate(ByteArray(0), "bip85_mnemonic", "signer_mnemonic_output") {
+            call("signer_bip85_mnemonic", words.toLong(), index.toLong())
+        })
+    }
+
+    private fun chars(raw: ByteArray) = CharArray(raw.size) { raw[it].toInt().toChar() }.also { raw.fill(0) }
+
+    private fun generate(input: ByteArray, name: String, output: String, make: () -> Int): ByteArray {
+        try {
+            require(input.size <= inputCapacity) { "${input.size} bytes does not fit in $inputCapacity" }
+            memory.write(call("signer_input"), input)
+            val n = make()
+            require(n > 0) { "$name failed" }
+            val at = call(output)
+            return bytes(at, n).also { memory.write(at, ByteArray(n)) }
+        } finally {
+            input.fill(0)
+        }
+    }
+
     /** For a seed you already have. 64 bytes. */
     fun loadSeed(seed: ByteArray): Signer {
         require(seed.size == 64) { "a seed is 64 bytes, got ${seed.size}" }

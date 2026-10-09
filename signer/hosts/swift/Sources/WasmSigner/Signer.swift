@@ -244,6 +244,58 @@ public final class Signer {
         return self
     }
 
+    /// A new mnemonic from 16 to 32 bytes of entropy (12 to 24 words), as UTF-8 bytes to show and then
+    /// clear. Nothing is loaded. The entropy is zeroed, and so is the module's copy of the words.
+    public func mnemonicFromEntropy(_ entropy: inout [UInt8]) throws -> [UInt8] {
+        let n = UInt32(entropy.count)
+        return try generate(&entropy, "mnemonic_from_entropy", "signer_mnemonic_output") {
+            try self.call("signer_mnemonic_from_entropy", [.i32(n)])
+        }
+    }
+
+    /// A new mnemonic from dice rolls, the characters 1 to 6: at least 50 for 12 words, 99 for 24.
+    public func mnemonicFromDice(_ rolls: inout [UInt8], words: UInt32 = 24) throws -> [UInt8] {
+        guard words == 12 || words == 24 else { throw SignerError.invalidInput("dice make 12 or 24 words, not \(words)") }
+        let n = UInt32(rolls.count)
+        return try generate(&rolls, "mnemonic_from_dice", "signer_mnemonic_output") {
+            try self.call("signer_mnemonic_from_dice", [.i32(n), .i32(words)])
+        }
+    }
+
+    /// The SeedQR of a 12 or 24 word mnemonic, to show as a backup: the Standard digits as ASCII (QR
+    /// numeric mode), or with `compact` the CompactSeedQR's bytes (QR byte mode). It is the seed itself,
+    /// so clear it once shown. The mnemonic is zeroed, and so is the module's copy.
+    public func seedQRFromMnemonic(_ mnemonic: inout [UInt8], compact: Bool = false) throws -> [UInt8] {
+        let n = UInt32(mnemonic.count)
+        return try generate(&mnemonic, "seedqr_from_mnemonic", "signer_seedqr_output") {
+            try self.call("signer_seedqr_from_mnemonic", [.i32(n), .i32(compact ? 1 : 0)])
+        }
+    }
+
+    /// The BIP85 child mnemonic of the loaded seed (m/83696968'/39'/0'/words'/index'), as UTF-8 bytes to
+    /// show and then clear. English; `words` is 12, 18 or 24. The module's copy is zeroed.
+    public func bip85Mnemonic(words: UInt32 = 24, index: UInt32 = 0) throws -> [UInt8] {
+        guard fingerprint != "00000000" else { throw SignerError.invalidInput("no seed is loaded") }
+        var none: [UInt8] = []
+        return try generate(&none, "bip85_mnemonic", "signer_mnemonic_output") {
+            try self.call("signer_bip85_mnemonic", [.i32(words), .i32(index)])
+        }
+    }
+
+    private func generate(_ input: inout [UInt8], _ name: String, _ output: String,
+                          _ make: () throws -> Int32) throws -> [UInt8] {
+        defer { for i in input.indices { input[i] = 0 } }
+        let cap = inputCapacity
+        guard input.count <= cap else { throw SignerError.tooLarge(size: input.count, capacity: cap) }
+        try write(input, at: Int(try call("signer_input")))
+        let n = Int(try make())
+        guard n > 0 else { throw SignerError.unexpectedModule("\(name) failed") }
+        let at = Int(try call(output))
+        let out = try bytes(at, n)
+        try write([UInt8](repeating: 0, count: n), at: at)
+        return out
+    }
+
     /// For a seed you already have. 64 bytes.
     @discardableResult
     public func loadSeed(_ seed: [UInt8]) throws -> Signer {

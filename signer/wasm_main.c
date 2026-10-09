@@ -29,8 +29,10 @@ static core_prevtx_t prevtx[PLAN_MAX_INPUTS];
 static core_review_t review;
 static core_display_t display;
 static core_sig_t sigs[PLAN_MAX_INPUTS];
-static uint8_t in[512]; /* mnemonic || passphrase, or a 64-byte seed */
+static uint8_t in[512]; /* a mnemonic or SeedQR || passphrase, a seed, entropy or dice; always wiped after */
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
+static char mnemonic[256]; /* a newly made mnemonic, until the host has read it */
+static uint8_t seedqr[96]; /* a SeedQR made from a mnemonic, likewise */
 
 unsigned char *EXPORT(signer_input)(void) {
     return in;
@@ -59,6 +61,12 @@ char *EXPORT(signer_xpub_output)(void) {
 }
 char *EXPORT(signer_desc_output)(void) {
     return desc;
+}
+char *EXPORT(signer_mnemonic_output)(void) {
+    return mnemonic;
+}
+unsigned char *EXPORT(signer_seedqr_output)(void) {
+    return seedqr;
 }
 
 int EXPORT(signer_init)(int testnet) {
@@ -116,6 +124,8 @@ void EXPORT(signer_unload)(void) {
     wipe(prevtx_buf, sizeof(prevtx_buf));
     wipe(sigs, sizeof(sigs));
     wipe(&display, sizeof(display));
+    wipe(mnemonic, sizeof(mnemonic));
+    wipe(seedqr, sizeof(seedqr));
 }
 
 unsigned EXPORT(signer_fingerprint)(void) {
@@ -158,4 +168,42 @@ int EXPORT(signer_find_address)(unsigned len, unsigned account, unsigned count) 
     int rc = len <= sizeof(in) ? core_find_address((const char *)in, len, account, count) : -CORE_ERR_FORMAT;
     wipe(in, sizeof(in));
     return rc;
+}
+
+/* A new mnemonic from the entropy in in, or from dice rolls (1 to 6) in in. Returns its length in
+ * signer_mnemonic_output(), or 0. Nothing is loaded: the words are to be written down first */
+int EXPORT(signer_mnemonic_from_entropy)(unsigned len) {
+    int n;
+    wipe(mnemonic, sizeof(mnemonic));
+    n = len <= sizeof(in) ? bip39_mnemonic_from_entropy(in, len, mnemonic, sizeof(mnemonic)) : 0;
+    if (!n) wipe(mnemonic, sizeof(mnemonic));
+    wipe(in, sizeof(in));
+    return n;
+}
+
+int EXPORT(signer_mnemonic_from_dice)(unsigned len, unsigned words) {
+    int n;
+    wipe(mnemonic, sizeof(mnemonic));
+    n = len <= sizeof(in) ? bip39_mnemonic_from_dice(in, len, words, mnemonic, sizeof(mnemonic)) : 0;
+    if (!n) wipe(mnemonic, sizeof(mnemonic));
+    wipe(in, sizeof(in));
+    return n;
+}
+
+/* The SeedQR for the mnemonic in in, to show as a backup: the Standard digits, or the CompactSeedQR's
+ * bytes. Returns its length in signer_seedqr_output(), or 0 */
+int EXPORT(signer_seedqr_from_mnemonic)(unsigned mn_len, int compact) {
+    int n;
+    wipe(seedqr, sizeof(seedqr));
+    n = mn_len <= sizeof(in) ? seedqr_encode(in, mn_len, compact, seedqr, sizeof(seedqr)) : 0;
+    if (!n) wipe(seedqr, sizeof(seedqr));
+    wipe(in, sizeof(in));
+    return n;
+}
+
+/* The BIP85 child mnemonic of the loaded seed, into signer_mnemonic_output(). Returns its length, or 0 */
+int EXPORT(signer_bip85_mnemonic)(unsigned words, unsigned index) {
+    int n = core_bip85_mnemonic(words, index, mnemonic, sizeof(mnemonic));
+    if (!n) wipe(mnemonic, sizeof(mnemonic));
+    return n;
 }
