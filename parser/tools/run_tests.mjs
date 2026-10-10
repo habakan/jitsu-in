@@ -24,7 +24,7 @@ const UR_ERR_MISMATCH = -4, UR_ERR_TYPE = -7;
 // The defect in invalid_with_msg[15] is the value length of PSBT_IN_MUSIG2_PARTIAL_SIG (0x1c);
 // its message omits musig2
 const MUSIG2_BY_FIELD = new Set([15]);
-const PLAN_SIZE = 5016;
+const PLAN_SIZE = 6712, WSCRIPTS = 5016, WSCRIPT_SIZE = 106;
 
 const moduleBytes = readFileSync(WASM);
 const runtime = process.env.PARSER_RUNTIME ?? "v8";
@@ -106,6 +106,7 @@ class Parser {
         spk: hex(b.slice(o + 49, o + 49 + b[o + 48])),
         key: keypath(o + 132),
         sighash_type: b[o + 172],
+        wscript: hex(b.slice(WSCRIPTS + WSCRIPT_SIZE * i + 1, WSCRIPTS + WSCRIPT_SIZE * i + 1 + b[WSCRIPTS + WSCRIPT_SIZE * i])),
       };
     });
     const outputs = [...Array(nOut)].map((_, i) => {
@@ -198,7 +199,7 @@ for (const path of vectorFiles(/^own_.*\.psbt$/)) {
         `${name}: counts`);
   plan.inputs.forEach((got, i) => {
     const want = exp.inputs[i];
-    for (const k of ["prev_txid", "prev_vout", "sequence", "amount", "spk", "key", "sighash_type"]) {
+    for (const k of ["prev_txid", "prev_vout", "sequence", "amount", "spk", "key", "sighash_type", "wscript"]) {
       check(same(got[k], want[k]), `${name}: input ${i} ${k}: ${JSON.stringify(got[k])} != ${JSON.stringify(want[k])}`);
     }
     // That those bytes really are the transaction the input claims is checked against Bitcoin Core,

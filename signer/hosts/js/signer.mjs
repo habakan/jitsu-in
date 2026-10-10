@@ -7,7 +7,7 @@
 // the structs themselves and `make check-layout` fails if these drift from it.
 
 const L = {
-  plan: { size: 5016, nInputs: 16, nOutputs: 17 },
+  plan: { size: 6712, nInputs: 16, nOutputs: 17 },
   review: { size: 64, totalIn: 0, totalOut: 8, fee: 16, owner: 24, willSign: 40, nSign: 56 },
   display: {
     size: 2968, fee: 0, spend: 8, nOutputs: 16, outputs: 24,
@@ -468,7 +468,8 @@ export class Signer {
     return this.#mem.slice(at, at + 65);
   }
 
-  /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
+  /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, or for 48 the key
+   *  expression of m/48'/coin'/account'/2' that goes into wsh(sortedmulti()), for making a watch-only
    *  wallet elsewhere. `account` is below 2^31. */
   xpub({ purpose = 84, account = 0 } = {}) {
     if (!Number.isInteger(purpose) || !Number.isInteger(account) || purpose < 0 || account < 0 || account >= 2 ** 32) {

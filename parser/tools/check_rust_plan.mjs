@@ -1,4 +1,4 @@
-// Compares the C and the Rust parser through the real ABI: the whole 5,016-byte plan, byte for
+// Compares the C and the Rust parser through the real ABI: the whole 6,712-byte plan, byte for
 // byte, plus the prevtx offsets and the signed PSBT that finalize produces.
 //
 // The plan is the interface, so comparing it whole is comparing everything a signer would see. A
@@ -12,7 +12,7 @@ const [cPath, rsPath, vecDir] = process.argv.slice(2);
 const load = async (p) => (await WebAssembly.instantiate(readFileSync(p), {})).instance.exports;
 const C = await load(cPath);
 const R = await load(rsPath);
-const PLAN = 5016;
+const PLAN = 6712;
 const hex = (b) => Buffer.from(b).toString("hex");
 
 let checks = 0, differ = 0;

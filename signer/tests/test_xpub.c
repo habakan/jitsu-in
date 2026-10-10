@@ -61,6 +61,18 @@ int main(void) {
     printf("  %s\n", desc);
     CHECK(!strncmp(desc, "sh(wpkh([73c5da0a/49h/0h/0h]xpub", 32) && strstr(desc, "/<0;1>/*))"), "BIP49 descriptor");
 
+    /* BIP48 P2WSH (m/48'/0'/0'/2'), the key expression a sortedmulti() takes; embit derives the same xpub */
+    CHECK(core_account_xpub(48, 0, xpub, desc) == CORE_OK, "mainnet BIP48 xpub");
+    printf("  %s\n", desc);
+    CHECK(!strcmp(xpub,
+                  "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR2"
+                  "8mCyxUFL4r6KFrf"),
+          "BIP48 xpub");
+    CHECK(!strncmp(desc, "[73c5da0a/48h/0h/0h/2h]xpub6DkFA", 32) && strstr(desc, "KFrf/<0;1>/*") &&
+              desc[strlen(desc) - 1] == '*',
+          "BIP48 key expression");
+    CHECK(core_account_xpub(48, 3, xpub, desc) == CORE_OK && strstr(desc, "/48h/0h/3h/2h]"), "BIP48 account 3");
+
     CHECK(core_account_xpub(86, H - 1, xpub, desc) == CORE_OK && strstr(desc, "/86h/0h/2147483647h]"),
           "the largest account");
     CHECK(core_account_xpub(84, 1, xpub, desc) == CORE_OK && strstr(desc, "/84h/0h/1h]"), "account 1");
@@ -85,6 +97,9 @@ int main(void) {
     }
     CHECK(core_account_xpub(86, 0, xpub, desc) == CORE_OK, "testnet BIP86 xpub");
     CHECK(!strncmp(xpub, "tpub", 4) && strstr(desc, "tr([73c5da0a/86h/1h/0h]"), "testnet BIP86 shape");
+    CHECK(core_account_xpub(48, 0, xpub, desc) == CORE_OK && !strncmp(xpub, "tpub", 4) &&
+              !strncmp(desc, "[73c5da0a/48h/1h/0h/2h]tpub", 27),
+          "testnet BIP48 shape");
 
     core_unload();
     CHECK(core_account_xpub(84, 0, xpub, desc) == CORE_ERR_NO_SEED, "no seed -> no xpub");

@@ -16,7 +16,7 @@ fun main(args: Array<String>) {
     fun call(n: String, vararg a: Long) = p.export(n).apply(*a)?.firstOrNull()?.toInt() ?: 0
     mem.write(call("parser_input"), psbt)
     require(call("parser_parse", psbt.size.toLong(), 0x73c5da0aL) == 0)
-    val plan = mem.readBytes(call("parser_plan"), 5016)
+    val plan = mem.readBytes(call("parser_plan"), 6712)
     val nIn = plan[16].toInt() and 0xff
     val inputAt = call("parser_input")
     val prev = (0 until nIn).map { i ->

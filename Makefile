@@ -251,7 +251,7 @@ build/parser-rs.wasm: $(RUST_WASM)
 	$(WASM_OPT) $< -Oz --strip-debug --strip-producers $(RS_FEATURES) -o $@
 	@shasum -a 256 $@
 
-# The whole 5,016-byte plan, the prevtx offsets and what finalize produces, compared against the C
+# The whole 6,712-byte plan, the prevtx offsets and what finalize produces, compared against the C
 # through the real ABI. Comparing the plan whole means a field this check does not know about cannot
 # hide a difference
 check-rust-plan: build/parser.wasm build/parser-rs.wasm parser/build/vectors/own_p2wpkh_1in.psbt

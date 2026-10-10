@@ -36,6 +36,14 @@ const ACCOUNTS = [
     tprv: "tprv8fMn4hSKPRC1oaCPqxDb1JWtgkpeiQvZhsr8W2xuy3GEMkzoArcAWTfJxYb6Wj8XNNDWEjfYKK4wGQXh3ZUXhDF2NcnsALpWTeSwarJt7Vc",
     xpub: "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ" },
 ];
+// BIP48 P2WSH 2-of-3: ours at m/48'/0'/0'/2', with the cosigners from BIP39's "zoo ... wrong" and
+// "legal winner ... yellow" vectors, as parser/tools/gen_vectors.py builds them
+const MULTISIG = {
+  tprv: "tprv8hRqYMHqbXZkDN5eTQCeeUqJMd8BtX7fPGBofh6N6fiwNTNYjPE9HP4TdVMX8Tud62RaiqNchAYQnCaa4nHkoLBZmQ8xHEufrZqqmCLPspf",
+  xpub: "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf",
+  cosigners: ["[3f635a63/48h/0h/0h/2h]tpubDFfBj3CGmAdW4oT1kbwY9bajaFrzRGxoZuH3bfqECrkhhUNBJr6biaHooTNdWP8E7U3mwZdxZDSSvXgp4GvW6tNQ38PzXFX4GB4vp5RLCfW",
+              "[b8688df1/48h/0h/0h/2h]tpubDFnc6MoxQh6V2NoQKZmq4a9HFuNxMD2cR785reRSe54JwcYH6KK5NQjAspMUmQp5qXdscseFqD4H3VuRVvNhizP4Ku87N5BfuBUQJGrfe1Y"],
+};
 const FINGERPRINT = "73c5da0a";
 const MNEMONIC = "abandon ".repeat(11) + "about";
 const WALLET = "diff";
@@ -88,6 +96,12 @@ for (const a of ACCOUNTS) {
     imports.push({ desc: `${desc}#${ck}`, timestamp: "now", active: true, internal, range: [0, 20] });
   }
 }
+for (const [chain, internal] of [[0, false], [1, true]]) {
+  const keys = [`[${FINGERPRINT}/48h/0h/0h/2h]${MULTISIG.tprv}`, ...MULTISIG.cosigners].map((k) => `${k}/${chain}/*`);
+  const desc = `wsh(sortedmulti(2,${keys.join(",")}))`;
+  const ck = JSON.parse(cli("getdescriptorinfo", desc)).checksum;
+  imports.push({ desc: `${desc}#${ck}`, timestamp: "now", active: true, internal, range: [0, 20] });
+}
 const res = JSON.parse(wallet("importdescriptors", JSON.stringify(imports)));
 if (!res.every((r) => r.success)) {
   console.error(`importdescriptors failed: ${JSON.stringify(res)}`);
@@ -101,6 +115,10 @@ const signerWasm = readFileSync(signerPath);
   s.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
   if (s.fingerprint !== FINGERPRINT) {
     console.error(`the committed fingerprint is ${FINGERPRINT}, signer.wasm derives ${s.fingerprint}`);
+    process.exit(1);
+  }
+  if (s.xpub({ purpose: 48 }).xpub !== MULTISIG.xpub) {
+    console.error(`the committed m/48'/0'/0'/2' xpub is not the one signer.wasm derives: ${s.xpub({ purpose: 48 }).xpub}`);
     process.exit(1);
   }
   for (const a of ACCOUNTS) {
@@ -143,8 +161,20 @@ const signerWasm = readFileSync(signerPath);
       }
     }
   }
+  {
+    const { xpub, descriptor } = s.xpub({ purpose: 48 });
+    for (const chain of [0, 1]) {
+      const cos = MULTISIG.cosigners.map((k) => `${k}/${chain}/*`);
+      const ours = derive(`wsh(sortedmulti(2,${descriptor.replace(xpub, toTpub(xpub)).replace("/<0;1>/*", `/${chain}/*`)},${cos}))`);
+      const core = derive(`wsh(sortedmulti(2,[${FINGERPRINT}/48h/0h/0h/2h]${MULTISIG.tprv}/${chain}/*,${cos}))`);
+      if (ours !== core) {
+        console.error(`${descriptor} in wsh(sortedmulti()) gives other addresses than Core's key on chain ${chain}`);
+        process.exit(1);
+      }
+    }
+  }
   s.unload();
-  console.log("the exported sh(wpkh()), wpkh() and tr() descriptors give the addresses Core derives from the keys");
+  console.log("the exported sh(wpkh()), wpkh(), tr() and BIP48 descriptors give the addresses Core derives from the keys");
 }
 
 // --- BIP137 against Core's signmessagewithprivkey, which signs as P2PKH: both are RFC6979 with no extra

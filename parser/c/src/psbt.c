@@ -104,6 +104,10 @@ static int is_wpkh(const plan_script_t *s) {
 static int is_p2tr(const plan_script_t *s) {
     return s->len == 34 && s->bytes[0] == 0x51 && s->bytes[1] == 32;
 }
+/* That the witness script hashes to it, and is a multisig with our key, is for the signer to establish */
+static int is_p2wsh(const plan_script_t *s) {
+    return s->len == 34 && s->bytes[0] == 0 && s->bytes[1] == 32;
+}
 
 typedef struct {
     int bad_script_sig, too_many, bad_spk;
@@ -181,7 +185,7 @@ static int parse_input(rd_t *r, unsigned idx, uint32_t fp) {
     kv_t kv[MAX_KV];
     size_t n;
     plan_input_t *in = &plan.inputs[idx];
-    const kv_t *wu = NULL, *nwu = NULL;
+    const kv_t *wu = NULL, *nwu = NULL, *ws = NULL;
     cand_t bip32 = {0}, tap = {0};
     int finalized = 0, has_tapsig = 0, has_merkle = 0, signed_by_cand = 0, wpkh_redeem = 0;
     uint32_t sighash = 0xffffffffu;
@@ -210,6 +214,7 @@ static int parse_input(rd_t *r, unsigned idx, uint32_t fp) {
         case 0x05:
             if (e->klen != 1) return P_ERR_FORMAT;
             wpkh_redeem |= e->key[0] == 0x04 && e->vlen == 22 && e->val[0] == 0 && e->val[1] == 20;
+            if (e->key[0] == 0x05) ws = e;
             break;
         case 0x06: {
             cand_t ignore = {0}; /* uncompressed keys cannot be used for P2WPKH; only validate the format */
@@ -288,6 +293,9 @@ static int parse_input(rd_t *r, unsigned idx, uint32_t fp) {
     if (is_wpkh(&in->spk) && (in->spk.len == 22 || wpkh_redeem) && bip32.found && !signed_by_cand) {
         c = &bip32;
         in->sighash_type = sighash == 0xffffffffu ? 0x01 : (uint8_t)sighash;
+    } else if (is_p2wsh(&in->spk) && ws && ws->vlen <= PLAN_MAX_WSCRIPT && bip32.found && !signed_by_cand) {
+        c = &bip32;
+        in->sighash_type = sighash == 0xffffffffu ? 0x01 : (uint8_t)sighash;
     } else if (is_p2tr(&in->spk) && tap.found && !has_merkle && !has_tapsig) {
         c = &tap;
         in->sighash_type = sighash == 0xffffffffu ? 0x00 : (uint8_t)sighash;
@@ -296,6 +304,10 @@ static int parse_input(rd_t *r, unsigned idx, uint32_t fp) {
         in->key.depth = c->depth;
         in->key.fingerprint = fp;
         memcpy(in->key.path, c->path, sizeof(c->path));
+        if (is_p2wsh(&in->spk)) {
+            plan.wscripts[idx].len = (uint8_t)ws->vlen;
+            memcpy(plan.wscripts[idx].bytes, ws->val, ws->vlen);
+        }
     } else {
         in->sighash_type = 0;
     }
@@ -411,8 +423,8 @@ int EXPORT(parser_finalize)(unsigned n) {
         if (s->input >= plan.n_inputs || by_input[s->input] >= 0) return -P_ERR_SIG;
         in = &plan.inputs[s->input];
         if (in->key.depth == 0) return -P_ERR_SIG;
-        if (is_wpkh(&in->spk) ? (s->pubkey[0] != 2 && s->pubkey[0] != 3) || s->sig_len < 9 || s->sig_len > 73
-                              : s->pubkey[0] != 0 || (s->sig_len != 64 && s->sig_len != 65))
+        if (!is_p2tr(&in->spk) ? (s->pubkey[0] != 2 && s->pubkey[0] != 3) || s->sig_len < 9 || s->sig_len > 73
+                               : s->pubkey[0] != 0 || (s->sig_len != 64 && s->sig_len != 65))
             return -P_ERR_SIG;
         by_input[s->input] = (int)k;
     }
@@ -424,7 +436,7 @@ int EXPORT(parser_finalize)(unsigned n) {
         o += in_map_end[i] - prev;
         prev = in_map_end[i];
         /* every length is below 0xfd, so each compact size is one byte */
-        if (is_wpkh(&plan.inputs[i].spk)) {
+        if (!is_p2tr(&plan.inputs[i].spk)) {
             out_buf[o++] = 34;
             out_buf[o++] = 0x02;
             memcpy(out_buf + o, s->pubkey, 33), o += 33;

@@ -20,6 +20,7 @@
     ]
    },
    "sighash_type": 1,
+   "wscript": "",
    "has_prevtx": true
   },
   {
@@ -30,6 +31,7 @@
    "spk": "00142969a6f2d38cd9a270153743e271487c1785494c",
    "key": null,
    "sighash_type": 0,
+   "wscript": "",
    "has_prevtx": true
   }
  ],

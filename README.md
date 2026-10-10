@@ -84,8 +84,9 @@ make check-hosts-agree       # and require all of them to produce the same bytes
 
 Single-signature P2WPKH ([BIP84](https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki)),
 P2SH-P2WPKH ([BIP49](https://github.com/bitcoin/bips/blob/master/bip-0049.mediawiki))
-and P2TR key path ([BIP86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki)),
-`SIGHASH_ALL` and Taproot's `SIGHASH_DEFAULT`. No multisig, no script trees, no legacy P2PKH
+P2TR key path ([BIP86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki)) and P2WSH
+multisig of at most three keys ([BIP48](https://github.com/bitcoin/bips/blob/master/bip-0048.mediawiki)),
+`SIGHASH_ALL` and Taproot's `SIGHASH_DEFAULT`. No taproot multisig, no script trees, no legacy P2PKH
 signing.
 
 ## Licence

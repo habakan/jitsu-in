@@ -14,7 +14,7 @@ import com.dylibso.chicory.wasm.Parser as WasmParser
 // Layout of what the host decodes. signer/tests/layout.c prints these from the structs
 // themselves and `make check-layout` fails if this table drifts from them.
 private object L {
-    const val PLAN_SIZE = 5016
+    const val PLAN_SIZE = 6712
     const val PLAN_N_INPUTS = 16
     const val PLAN_N_OUTPUTS = 17
 
@@ -400,7 +400,8 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
         return bytes(call("signer_message_sig"), 65)
     }
 
-    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, or for 48 the key
+     * expression of m/48'/coin'/account'/2' that goes into wsh(sortedmulti()), for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     fun xpub(purpose: Int = 84, account: Int = 0): AccountKey {
         val rc = call("signer_xpub", purpose.toLong(), account.toLong())

@@ -6,11 +6,13 @@
 //! from the documentation, and nothing here may move without that documentation changing.
 
 pub const MAGIC: u32 = 0x4e4c_5042; // "BPLN"
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const MAX_INPUTS: usize = 16;
 pub const MAX_OUTPUTS: usize = 16;
 pub const MAX_SPK: usize = 83; // the standard OP_RETURN limit; P2TR and P2WSH need 34
 pub const MAX_DEPTH: usize = 8;
+// sortedmulti of at most three keys: OP_m, 3 x (push + 33), OP_n, OP_CHECKMULTISIG
+pub const MAX_WSCRIPT: usize = 105;
 
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -48,6 +50,23 @@ impl Script {
     pub fn is_p2tr(&self) -> bool {
         self.len == 34 && self.bytes[0] == 0x51 && self.bytes[1] == 32
     }
+
+    /// `0020{32 bytes}`. That the witness script hashes to it, and is a multisig with our key, is
+    /// for the signer to establish.
+    pub fn is_p2wsh(&self) -> bool {
+        self.len == 34 && self.bytes[0] == 0 && self.bytes[1] == 32
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct WScript {
+    pub len: u8,
+    pub bytes: [u8; MAX_WSCRIPT],
+}
+
+impl WScript {
+    pub const ZERO: WScript = WScript { len: 0, bytes: [0; MAX_WSCRIPT] };
 }
 
 #[repr(C)]
@@ -108,12 +127,15 @@ pub struct Plan {
     pub n_outputs: u8,
     pub inputs: [Input; MAX_INPUTS],
     pub outputs: [Output; MAX_OUTPUTS],
+    /// A P2WSH input's witness script, only for one to be signed.
+    pub wscripts: [WScript; MAX_INPUTS],
 }
 
 impl Plan {
     pub const ZERO: Plan = Plan {
         magic: 0, version: 0, tx_version: 0, locktime: 0, n_inputs: 0, n_outputs: 0,
         inputs: [Input::ZERO; MAX_INPUTS], outputs: [Output::ZERO; MAX_OUTPUTS],
+        wscripts: [WScript::ZERO; MAX_INPUTS],
     };
 }
 
@@ -140,4 +162,5 @@ const _: () = assert!(core::mem::size_of::<Sig>() == 108);
 const _: () = assert!(core::mem::size_of::<Input>() == 176);
 const _: () = assert!(core::mem::size_of::<Output>() == 136);
 const _: () = assert!(core::mem::offset_of!(Plan, inputs) == 24);
-const _: () = assert!(core::mem::size_of::<Plan>() == 5016);
+const _: () = assert!(core::mem::offset_of!(Plan, wscripts) == 5016);
+const _: () = assert!(core::mem::size_of::<Plan>() == 6712);

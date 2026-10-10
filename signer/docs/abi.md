@@ -43,7 +43,7 @@ way it is not for `parser.wasm`.
 ```
 signer_init(testnet)
 signer_seed_from_mnemonic(...)   or   signer_seed_from_seedqr(...)   or   signer_load_seed()
-signer_plan()        <- write the 5016-byte plan_t here
+signer_plan()        <- write the 6712-byte plan_t here
 signer_set_prevtx(i, off, len)   for each input, after writing into signer_prevtx()
 signer_review()      -> re-derives keys, decides what is ours, computes the fee
 signer_display()     -> the strings and amounts to show
@@ -64,7 +64,7 @@ review fails the hash, and a plan swapped in before it is the plan that gets dis
 |---|---|
 | `signer_input() -> ptr` | the mnemonic or a SeedQR payload followed by the passphrase, a 64-byte seed, entropy or dice rolls for a new mnemonic, an address to find, or a message to sign |
 | `signer_input_cap() -> u32` | how many bytes that is (512); check before writing |
-| `signer_plan() -> ptr` | the `plan_t`, 5016 bytes, copied verbatim from `parser_plan()` |
+| `signer_plan() -> ptr` | the `plan_t`, 6712 bytes, copied verbatim from `parser_plan()` |
 | `signer_prevtx() -> ptr` | the `non_witness_utxo` bytes, laid out however you like within 32768 |
 | `signer_review_output() -> ptr` | `core_review_t`, 64 bytes |
 | `signer_display_output() -> ptr` | `core_display_t`, 2968 bytes |
@@ -138,7 +138,7 @@ be the bytes Core gives for the same key. P2TR has no BIP137 form; BIP322 is not
 | 3 | `NOT_OURS` | an input claims our fingerprint, but its key does not produce its script |
 | 4 | `NOTHING_TO_SIGN` | no input in the plan is ours |
 | 5 | `SIGHASH` | a sighash type this signer does not allow |
-| 6 | `SCRIPT` | an input to be signed is not P2WPKH, P2SH-P2WPKH or P2TR |
+| 6 | `SCRIPT` | an input to be signed is not P2WPKH, P2SH-P2WPKH, P2TR, or P2WSH with a multisig of at most three keys |
 | 7 | `PREVTX_MISSING` | two or more inputs including SegWit v0, and no previous transaction |
 | 8 | `PREVTX_MISMATCH` | the previous transaction disagrees with the claimed amount, txid or vout |
 | 9 | `FEE` | the fee does not add up, or overflows |
@@ -211,11 +211,14 @@ Trezor, Jade and BDK all do too. So the same key over the same plan always gives
 
 That is a property worth having: this module in a browser reproduces the device's signature exactly,
 and CI requires both to equal what Bitcoin Core produces for the same PSBT
-(`make check-core-diff`). **It also means this must be revisited before multisig**, where BIP340
-says deterministic nonces are unsafe.
+(`make check-core-diff`). P2WSH multisig is ECDSA under OP_CHECKMULTISIG, where each cosigner signs
+on its own and RFC6979 stays safe; **it must be revisited before MuSig2 or FROST**, where BIP340 says
+deterministic nonces are unsafe.
 
 ## What this module does not do
 
-Single-signature P2WPKH (BIP84), P2SH-P2WPKH (BIP49) and P2TR key path (BIP86), `SIGHASH_ALL` and Taproot's
-`SIGHASH_DEFAULT`. No multisig, no script trees, no legacy P2PKH signing. The full list is in
+P2WPKH (BIP84), P2SH-P2WPKH (BIP49), P2TR key path (BIP86) and P2WSH multisig of at most three keys
+(BIP48), `SIGHASH_ALL` and Taproot's `SIGHASH_DEFAULT`. P2WSH change is shown as an external output: the
+signer holds no cosigner keys to recognise it by. No taproot multisig, no script trees, no legacy P2PKH
+signing. The full list is in
 jitsu-in-pico's `docs/limitations.md`.

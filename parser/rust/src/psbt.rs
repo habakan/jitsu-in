@@ -6,7 +6,7 @@
 //!
 //! [BIP174]: https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki
 
-use crate::plan::{self, KeyPath, Plan, Script};
+use crate::plan::{self, KeyPath, Plan, Script, MAX_WSCRIPT};
 use crate::reader::Reader;
 use crate::tx;
 
@@ -277,6 +277,7 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
 
     let mut wu: Option<&[u8]> = None;
     let mut nwu: Option<&[u8]> = None;
+    let mut ws: Option<&[u8]> = None;
     let mut bip32 = Cand::NONE;
     let mut tap = Cand::NONE;
     let mut finalized = false;
@@ -317,6 +318,9 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
                     return Err(Err::Format);
                 }
                 wpkh_redeem |= e.key[0] == 0x04 && e.val.len() == 22 && e.val[0] == 0 && e.val[1] == 20;
+                if e.key[0] == 0x05 {
+                    ws = Some(e.val);
+                }
             }
             0x06 => {
                 // An uncompressed key cannot be used for P2WPKH, so one is validated and discarded
@@ -461,6 +465,9 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
     let chosen = if in_.spk.is_wpkh() && (in_.spk.len == 22 || wpkh_redeem) && bip32.found && !signed_by_cand {
         in_.sighash_type = if sighash == 0xffff_ffff { 0x01 } else { sighash as u8 };
         Some(bip32)
+    } else if in_.spk.is_p2wsh() && ws.is_some_and(|w| w.len() <= MAX_WSCRIPT) && bip32.found && !signed_by_cand {
+        in_.sighash_type = if sighash == 0xffff_ffff { 0x01 } else { sighash as u8 };
+        Some(bip32)
     } else if in_.spk.is_p2tr() && tap.found && !has_merkle && !has_tapsig {
         in_.sighash_type = if sighash == 0xffff_ffff { 0x00 } else { sighash as u8 };
         Some(tap)
@@ -471,6 +478,11 @@ fn parse_input(r: &mut Reader, idx: usize, fp: u32, in_buf_base: usize, out: &mu
     match chosen {
         Some(c) if !finalized => {
             in_.key = KeyPath { depth: c.depth, fingerprint: fp, path: c.path };
+            if let (true, Some(w)) = (in_.spk.is_p2wsh(), ws) {
+                let dst = &mut out.plan.wscripts[idx];
+                dst.len = w.len() as u8;
+                dst.bytes[..w.len()].copy_from_slice(w);
+            }
         }
         _ => in_.sighash_type = 0,
     }

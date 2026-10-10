@@ -235,6 +235,85 @@ for (const [what, opts] of [["BIP44", { purpose: 44 }], ["a hardened account", {
   P2.unload();
 }
 
+// --- BIP48 P2WSH multisig: signed only once the witness script is a multisig of at most three keys, hashes to
+// the input's script and holds our key. Core signs the same PSBTs byte for byte: check-core-diff
+{
+  const W = await Signer.load(signerWasm);
+  W.init().seedFromMnemonic(new TextEncoder().encode(MNEMONIC));
+  const FP = parseInt("73c5da0a", 16);
+  const IN = (i) => 24 + 176 * i, WS = (i) => 5016 + 106 * i;
+  const sha = (b) => createHash("sha256").update(b).digest();
+  const refused = (what, plan, prevTxs, re) => {
+    try {
+      W.setPlan(plan).setPrevTxs(prevTxs).review();
+      ok(what, false);
+    } catch (e) {
+      ok(what, re.test(e.message));
+    }
+  };
+  for (const [name, n] of [["own_p2wsh_2of3_1in", 1], ["own_p2wsh_2of3_cosigned", 1], ["own_mixed_p2wsh_nwu", 2]]) {
+    const v = planFor(`${root}parser/build/vectors/${name}.psbt`, FP);
+    check(`${name}: every input of ours is signed`, W.setPlan(v.plan).setPrevTxs(v.prevTxs).review().nSign, n);
+    if (!name.includes("mixed")) {
+      ok(`${name}: the P2WSH change is shown as an external address`,
+         W.display().outputs.every((o) => o.owner === OWNER.EXTERNAL && o.text.startsWith("bc1q")) &&
+         W.display().outputs.some((o) => o.text.length === 62));
+    }
+    const sv = W.sign();
+    ok(`${name}: ECDSA with a compressed key for each`,
+       sv.length === n && sv.every((s) => s.sig[0] === 0x30 && s.sig.at(-1) === 1 && (s.pubkey[0] === 2 || s.pubkey[0] === 3)));
+  }
+  {
+    const m = planFor(`${root}parser/build/vectors/own_with_p2wsh_2of4_input.psbt`, FP);
+    const rm = W.setPlan(m.plan).setPrevTxs(m.prevTxs).review();
+    ok("a four-key witness script is not ours to sign; the P2WPKH beside it is", rm.nSign === 1 && rm.willSign[0] && !rm.willSign[1]);
+  }
+  const base = planFor(`${root}parser/build/vectors/own_p2wsh_2of3_1in.psbt`, FP);
+  const fresh = () => Uint8Array.from(base.plan);
+  // a witness script and an input script that agree with each other, but not with this test's intent
+  const rehash = (plan) => plan.set(sha(plan.subarray(WS(0) + 1, WS(0) + 1 + plan[WS(0)])), IN(0) + 49 + 2);
+  {
+    const plan = fresh();
+    for (let k = 0; k < 3; k++) plan[WS(0) + 1 + 1 + 34 * k + 5] ^= 1;  // a byte of every key, ours among them
+    refused("a witness script that does not hash to the input's script is refused", plan, base.prevTxs, /NOT_OURS/);
+    rehash(plan);
+    refused("a multisig without our key is refused", plan, base.prevTxs, /NOT_OURS/);
+  }
+  for (const [what, mutate] of [
+    ["OP_CHECKMULTISIGVERIFY", (pl) => { pl[WS(0) + pl[WS(0)]] = 0xaf; }],
+    ["a threshold above the key count", (pl) => { pl[WS(0) + 1] = 0x54; }],
+    ["a key count that is not the number of keys", (pl) => { pl[WS(0) + pl[WS(0)] - 1] = 0x52; }],
+    ["an uncompressed key prefix", (pl) => { pl[WS(0) + 1 + 2] = 0x04; }],
+  ]) {
+    const plan = fresh();
+    mutate(plan);
+    rehash(plan);
+    refused(`a witness script with ${what} is refused`, plan, base.prevTxs, /SCRIPT/);
+  }
+  {
+    const plan = fresh();
+    plan.fill(0, WS(0), WS(0) + 106);
+    refused("a P2WSH input to be signed without its witness script is refused", plan, base.prevTxs, /SCRIPT/);
+  }
+  {
+    const plan = fresh();
+    plan[IN(0) + 172] = 0x03;
+    refused("a P2WSH input with SIGHASH_SINGLE is refused", plan, base.prevTxs, /SIGHASH/);
+  }
+  {
+    const plan = fresh();
+    plan[WS(0)] -= 1;  // 2-of-3 fills all 105 bytes, so shortening it leaves OP_CHECKMULTISIG past the end
+    refused("a byte past the witness script's length is refused", plan, base.prevTxs, /FORMAT/);
+    const p2 = fresh();
+    p2.set(p2.subarray(WS(0), WS(0) + 106), WS(1));
+    refused("a witness script for an input that is not there is refused", p2, base.prevTxs, /FORMAT/);
+    const p3 = planFor(`${root}parser/build/vectors/own_p2wpkh_1in.psbt`, FP);
+    p3.plan.set(base.plan.subarray(WS(0), WS(0) + 106), WS(0));
+    refused("a witness script beside a P2WPKH input is refused", p3.plan, p3.prevTxs, /FORMAT/);
+  }
+  W.unload();
+}
+
 // --- BIP137 message signing, verified with Node's own ECDSA against BIP84's published m/84'/0'/0'/0/0 key
 {
   const M = await Signer.load(signerWasm);
