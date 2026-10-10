@@ -80,6 +80,15 @@ check-wamr: build/parser.wasm build/signer.wasm build/wamr.node
 	diff build/host-v8.out build/host-wamr.out && echo "V8 and WAMR agree"
 .PHONY: check-wamr
 
+# The Python host on WAMR against the JavaScript host on V8: the path a SeedSigner fork would take
+check-python: build/parser.wasm build/signer.wasm $(WAMR_BUILD)/libiwasm.$(WAMR_LIB_EXT)
+	$(MAKE) -C parser build/vectors/own_p2wpkh_1in.psbt
+	node signer/hosts/js/dump.mjs build/signer.wasm build/parser.wasm $(PSBT_VECTOR) > build/host-v8.out
+	JITSU_IN_LIBIWASM=$(abspath $(WAMR_BUILD))/libiwasm.$(WAMR_LIB_EXT) \
+	  python3 signer/hosts/python/dump.py build/signer.wasm build/parser.wasm $(PSBT_VECTOR) > build/host-python.out
+	diff build/host-v8.out build/host-python.out && echo "JavaScript on V8 and Python on WAMR agree"
+.PHONY: check-python
+
 check-deps:
 	@test -d $(SECP) || { echo "run make deps first"; exit 1; }
 	@cd $(SECP) && test "$$(git rev-parse HEAD)" = "$(SECP_REV)" \

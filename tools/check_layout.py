@@ -123,6 +123,15 @@ def main():
         elif int(m.group(1)) != want:
             bad.append(f"Signer.swift: {name} is {m.group(1)}, C says {want}")
 
+    # The Python host library's constants, the same names as Kotlin's
+    py = Path("signer/hosts/python/jitsu_in/signer.py").read_text()
+    for name, want in want_kt.items():
+        m = re.search(r"^" + name + r" = (\d+)", py, re.M)
+        if not m:
+            bad.append(f"signer.py: {name} not found")
+        elif int(m.group(1)) != want:
+            bad.append(f"signer.py: {name} is {m.group(1)}, C says {want}")
+
     # The error codes, in the library and in the spec
     for code, name in [(v, k) for k, v in truth["errors"].items()]:
         if f'{code}: "{name}"' not in js.replace("'", '"'):
@@ -143,7 +152,7 @@ def main():
 
     for b in bad:
         print(f"  {b}")
-    print(f"check-layout: {'FAILED' if bad else 'the spec, all three host libraries and the structs agree'}")
+    print(f"check-layout: {'FAILED' if bad else 'the spec, all four host libraries and the structs agree'}")
     return 1 if bad else 0
 
 
