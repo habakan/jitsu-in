@@ -91,6 +91,7 @@ impl Encoder {
         ur_type: &[u8],
         data: *const u8,
         len: usize,
+        wrap: bool,
         max_fragment_len: usize,
     ) -> Result<usize, Err> {
         *self = Encoder::new();
@@ -101,7 +102,7 @@ impl Encoder {
         self.type_len = ur_type.len();
         self.data = data;
         self.data_len = len;
-        self.head_len = cbor_head(&mut self.head, 2, len as u64);
+        self.head_len = if wrap { cbor_head(&mut self.head, 2, len as u64) } else { 0 };
         self.message_len = self.head_len + len;
         self.frag_len = nominal_fragment_len(self.message_len, 10, max_fragment_len);
         self.seq_len = (self.message_len + self.frag_len - 1) / self.frag_len;

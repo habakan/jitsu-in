@@ -199,6 +199,22 @@ class Parser(parserWasm: ByteArray, sha256: String? = null) {
     /** Parts received so far. For a progress display only. */
     val urProgress: Int get() = call("parser_ur_progress")
 
+    /** What the UR [urReceive] completed was: false a PSBT, true bytes (a BSMS record or a descriptor, as text). */
+    val urIsBytes: Boolean get() = call("parser_ur_kind") == 1
+
+    /** Encode CBOR signer.wasm made (accountCbor or multisigCbor) as crypto-account or crypto-output payloads. */
+    fun urEncodeCbor(account: Boolean, cbor: ByteArray, fragmentLen: Int = 100): UrEncoder {
+        planAvailable = false
+        memory.write(call("parser_output"), cbor)
+        val seqLen = call("parser_ur_encode_cbor", if (account) 1L else 2L, cbor.size.toLong(), fragmentLen.toLong())
+        if (seqLen < 0) throw ParserException(seqLen, "UR_ERR")
+        return UrEncoder(seqLen) {
+            val n = call("parser_ur_encode_next")
+            if (n < 0) throw ParserException(n, "UR_ERR")
+            String(bytes(call("parser_input"), n))
+        }
+    }
+
     /** Encode the PSBT currently in the output buffer (what [finalize] produced) as QR payloads. */
     fun urEncode(psbtLen: Int, fragmentLen: Int = 100): UrEncoder {
         planAvailable = false

@@ -101,6 +101,16 @@ fun main(args: Array<String>) {
         check(got != null && got.contentEquals(out), "round trip is byte identical")
     }
 
+    // bytes come back with their kind; CBOR goes out under the type asked for
+    run {
+        val p = Parser(parserWasm)
+        p.urReset()
+        val got = p.urReceive("ur:bytes/hdeymejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtgwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsdwkbrkch")
+        check(got != null && got.isNotEmpty() && p.urIsBytes, "a bytes UR is handed back as bytes")
+        val seq = p.urEncodeCbor(false, byteArrayOf(0xa0.toByte()))
+        check(seq.seqLen == 1 && seq.next().startsWith("UR:CRYPTO-OUTPUT/"), "CBOR as a crypto-output")
+    }
+
     // a signature that does not fit its slot is refused before anything is written
     run {
         val p = Parser(parserWasm)

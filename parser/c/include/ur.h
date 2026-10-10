@@ -53,14 +53,14 @@ int ur_cbor_bytes(const uint8_t *m, size_t n, const uint8_t **data, size_t *len)
 /* Parts expected (0 until the first multipart part) and distinct fragments recovered so far */
 void ur_decoder_progress(unsigned *expected, unsigned *received);
 
-/* Encoder for a message that is a CBOR byte string holding data (as for crypto-psbt), built on the fly from
- * data without copying. Parts follow the reference encoder: seq_num 1..seq_len are the pure fragments, later
- * ones are mixed. Fragments are at most UR_MAX_FRAGMENT bytes */
+/* Encoder for a message that is a CBOR byte string holding data (as for crypto-psbt) or, without wrap, data
+ * that is CBOR already; built on the fly from data without copying. Parts follow the reference encoder:
+ * seq_num 1..seq_len are the pure fragments, later ones are mixed. Fragments are at most UR_MAX_FRAGMENT bytes */
 #define UR_MAX_FRAGMENT 1000
 
 size_t ur_nominal_fragment_len(size_t message_len, size_t min_len, size_t max_len);
 /* Returns seq_len, or a negative UR_ERR_* */
-long ur_encoder_start(const char *type, const uint8_t *data, size_t len, size_t max_fragment_len);
+long ur_encoder_start(const char *type, const uint8_t *data, size_t len, int wrap, size_t max_fragment_len);
 /* Writes the next part, uppercase for QR alphanumeric mode; returns its length or a negative UR_ERR_* */
 long ur_encoder_next(char *out, size_t cap);
 

@@ -17,9 +17,10 @@
 
 /* Three return conventions, and which one a function uses follows from what it does:
  *   init / seed / seedqr / load_seed / set_prevtx  1 on success, 0 on failure (they can only fail one way)
- *   review / display / xpub / message     CORE_OK (0) on success, CORE_ERR_* otherwise
+ *   review / display / xpub / message / multisig_load  CORE_OK (0) on success, CORE_ERR_* otherwise
  *   sign                                  the number of signatures, or -CORE_ERR_*
  *   find_address                          chain << 20 | index, or -CORE_ERR_*
+ *   account_cbor / multisig_cbor          the CBOR's length, or -CORE_ERR_*
  * Buffer accessors return a pointer, fingerprint returns the value, unload returns nothing. */
 
 /* Where the host writes. All static: this module never allocates */
@@ -29,13 +30,16 @@ static core_prevtx_t prevtx[PLAN_MAX_INPUTS];
 static core_review_t review;
 static core_display_t display;
 static core_sig_t sigs[PLAN_MAX_INPUTS];
-static uint8_t in[512]; /* a mnemonic or SeedQR || passphrase, a seed, entropy or dice; always wiped after */
+/* a mnemonic or SeedQR || passphrase, a seed, entropy or dice, a multisig setup; always wiped after */
+static uint8_t in[1024];
 static char xpub[CORE_XPUB_MAX], desc[CORE_DESC_MAX];
 static char mnemonic[256]; /* a newly made mnemonic, until the host has read it */
 static uint8_t seedqr[96]; /* a SeedQR made from a mnemonic, likewise */
 _Static_assert(CORE_MESSAGE_MAX <= sizeof(in), "a message to sign has to fit in the input buffer");
 static core_message_t message;
 static uint8_t message_sig[65];
+static core_multisig_t multisig;
+static uint8_t cbor[1024]; /* a crypto-account or crypto-output, for parser_ur_encode_cbor() */
 
 unsigned char *EXPORT(signer_input)(void) {
     return in;
@@ -76,6 +80,12 @@ core_message_t *EXPORT(signer_message_output)(void) {
 }
 unsigned char *EXPORT(signer_message_sig)(void) {
     return message_sig;
+}
+core_multisig_t *EXPORT(signer_multisig_output)(void) {
+    return &multisig;
+}
+unsigned char *EXPORT(signer_cbor_output)(void) {
+    return cbor;
 }
 
 int EXPORT(signer_init)(int testnet) {
@@ -137,6 +147,8 @@ void EXPORT(signer_unload)(void) {
     wipe(seedqr, sizeof(seedqr));
     wipe(&message, sizeof(message));
     wipe(message_sig, sizeof(message_sig));
+    wipe(&multisig, sizeof(multisig));
+    wipe(cbor, sizeof(cbor));
 }
 
 unsigned EXPORT(signer_fingerprint)(void) {
@@ -229,4 +241,27 @@ int EXPORT(signer_message_review)(unsigned len, unsigned purpose, unsigned accou
 }
 int EXPORT(signer_message_sign)(void) {
     return core_message_sign(message_sig);
+}
+
+/* in holds a descriptor, BSMS record or Coldcard setup file. What to show before trusting it goes to
+ * signer_multisig_output() */
+int EXPORT(signer_multisig_load)(unsigned len) {
+    int rc = len <= sizeof(in) ? core_multisig_load((const char *)in, len, &multisig) : CORE_ERR_FORMAT;
+    wipe(in, sizeof(in));
+    return rc;
+}
+void EXPORT(signer_multisig_unload)(void) {
+    core_multisig_unload();
+    wipe(&multisig, sizeof(multisig));
+}
+
+int EXPORT(signer_account_cbor)(unsigned account) {
+    int n = core_account_cbor(account, cbor, sizeof(cbor));
+    if (n < 0) wipe(cbor, sizeof(cbor));
+    return n;
+}
+int EXPORT(signer_multisig_cbor)(void) {
+    int n = core_multisig_cbor(cbor, sizeof(cbor));
+    if (n < 0) wipe(cbor, sizeof(cbor));
+    return n;
 }

@@ -68,6 +68,8 @@ export class Parser {
     urReceive(part: string | Uint8Array): Uint8Array<ArrayBuffer> | null;
     /** Parts received so far. For a progress display only. */
     get urProgress(): number;
+    /** What the UR urReceive() completed was: "psbt", or "bytes" (a BSMS record or a descriptor, as text). */
+    get urKind(): "bytes" | "psbt";
     /**
      * Encode a signed PSBT as animated QR parts.
      * @returns {{ seqLen: number, next: () => string }}
@@ -77,6 +79,17 @@ export class Parser {
      * @param {number} [fragmentLen]
      */
     urEncode(psbtLen: number, fragmentLen?: number): {
+        seqLen: number;
+        next: () => string;
+    };
+    /**
+     * Encode CBOR signer.wasm made (accountCbor() or multisigCbor()) as crypto-account or crypto-output parts.
+     * @param {"crypto-account" | "crypto-output"} type
+     * @param {Uint8Array} cbor
+     * @param {number} [fragmentLen]
+     * @returns {{ seqLen: number, next: () => string }}
+     */
+    urEncodeCbor(type: "crypto-account" | "crypto-output", cbor: Uint8Array, fragmentLen?: number): {
         seqLen: number;
         next: () => string;
     };
@@ -127,6 +140,8 @@ export type ParserExports = {
     parser_ur_reset: () => void;
     parser_ur_receive: (len: number) => number;
     parser_ur_progress: () => number;
+    parser_ur_kind: () => number;
+    parser_ur_encode_cbor: (kind: number, len: number, fragmentLen: number) => number;
     parser_ur_encode_start: (len: number, fragmentLen: number) => number;
     parser_ur_encode_next: () => number;
 };

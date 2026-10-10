@@ -93,7 +93,7 @@ def build(name, inputs, outputs, cosigned=False):
         s = spk(path) if path else script.p2wpkh(key("m/1h/%d" % n))
         vout.append(TransactionOutput(amount, s))
         exp_out.append({"amount": amount, "spk": s.data.hex(),
-                        "key": keypath(path) if path and not path.startswith("m/48h") else None})
+                        "key": keypath(path) if path else None})
     psbt = PSBT(Transaction(version=2, vin=vin, vout=vout))
     for inp, (path, _, _, nwu), (ptx, v, s, amount) in zip(psbt.inputs, inputs, prevs):
         inp.witness_utxo = TransactionOutput(amount, s)
@@ -144,7 +144,7 @@ build("own_mixed_p2sh_nwu", [(A + "/0/0", 100000, 0, True), (S + "/0/1", 50000, 
       [(None, 100000), (S + "/1/0", 49000)])
 build("own_with_p2sh_multisig_input", [(A + "/0/0", 100000, 0, True), ("m/45h/0/0/0", 30000, 0, True)],
       [(None, 100000), (A + "/1/0", 29000)])
-# P2WSH change is shown as an external output: the signer cannot tell the cosigners' keys from anyone else's
+# P2WSH change carries our key; the signer calls it change only once a registered wallet gives the cosigners'
 W = "m/48h/0h/0h/2h"
 build("own_p2wsh_2of3_1in", [(W + "/0/0", 100000, 0, False)], [(None, 60000), (W + "/1/0", 39000)])
 build("own_p2wsh_2of3_cosigned", [(W + "/0/1", 100000, 1, True)], [(None, 60000), (W + "/1/1", 39000)],

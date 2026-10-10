@@ -45,6 +45,11 @@ def main():
         "message.textKind": truth["core_message_t"]["text_kind"],
         "message.text": truth["core_message_t"]["text"],
         "message.textCap": truth["core_message_t"]["text_cap"],
+        "multisig.size": truth["core_multisig_t"]["size"],
+        "multisig.fingerprints": truth["core_multisig_t"]["fingerprints"],
+        "multisig.receive": truth["core_multisig_t"]["receive"],
+        "multisig.descriptor": truth["core_multisig_t"]["descriptor"],
+        "multisig.descriptorCap": truth["core_multisig_t"]["descriptor_cap"],
     }
     for name, want in want_js.items():
         key = name.split(".")[1]
@@ -83,6 +88,11 @@ def main():
         "MSG_TEXT_KIND": truth["core_message_t"]["text_kind"],
         "MSG_TEXT": truth["core_message_t"]["text"],
         "MSG_TEXT_CAP": truth["core_message_t"]["text_cap"],
+        "MS_SIZE": truth["core_multisig_t"]["size"],
+        "MS_FINGERPRINTS": truth["core_multisig_t"]["fingerprints"],
+        "MS_RECEIVE": truth["core_multisig_t"]["receive"],
+        "MS_DESCRIPTOR": truth["core_multisig_t"]["descriptor"],
+        "MS_DESCRIPTOR_CAP": truth["core_multisig_t"]["descriptor_cap"],
     }
     for name, want in want_kt.items():
         m = re.search(r"\bconst val " + name + r" = (\d+)", kt)
@@ -115,6 +125,11 @@ def main():
         "msgTextKind": truth["core_message_t"]["text_kind"],
         "msgText": truth["core_message_t"]["text"],
         "msgTextCap": truth["core_message_t"]["text_cap"],
+        "msSize": truth["core_multisig_t"]["size"],
+        "msFingerprints": truth["core_multisig_t"]["fingerprints"],
+        "msReceive": truth["core_multisig_t"]["receive"],
+        "msDescriptor": truth["core_multisig_t"]["descriptor"],
+        "msDescriptorCap": truth["core_multisig_t"]["descriptor_cap"],
     }
     for name, want in want_sw.items():
         m = re.search(r"\b" + name + r" = (\d+)", sw)
@@ -135,6 +150,7 @@ def main():
         (f"`core_display_t` ({truth['core_display_t']['size']} bytes)", None),
         (f"`plan_sig_t` ({truth['plan_sig_t']['size']} bytes)", None),
         (f"`core_message_t` ({truth['core_message_t']['size']} bytes)", None),
+        (f"`core_multisig_t` ({truth['core_multisig_t']['size']} bytes)", None),
     ]:
         if label not in spec:
             bad.append(f"abi.md: does not say {label}")

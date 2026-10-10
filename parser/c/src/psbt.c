@@ -352,9 +352,9 @@ static int parse_output(rd_t *r, unsigned idx, uint32_t fp) {
             break;
         }
     }
-    const cand_t *c = is_wpkh(&o->spk) && bip32.found              ? &bip32
-                      : is_p2tr(&o->spk) && tap.found && !has_tree ? &tap
-                                                                   : NULL;
+    const cand_t *c = (is_wpkh(&o->spk) || is_p2wsh(&o->spk)) && bip32.found ? &bip32
+                      : is_p2tr(&o->spk) && tap.found && !has_tree           ? &tap
+                                                                             : NULL;
     if (c) {
         o->key.depth = c->depth;
         o->key.fingerprint = fp;
@@ -454,7 +454,7 @@ int EXPORT(parser_finalize)(unsigned n) {
 
 /* ---- UR (animated QR) ---- */
 
-static int ur_ready;
+static int ur_ready, ur_kind;
 
 /* Starts a new UR. The reassembly buffer is out_buf, which is free until parser_finalize() */
 void EXPORT(parser_ur_reset)(void) {
@@ -474,12 +474,18 @@ int EXPORT(parser_ur_receive)(unsigned len) {
     if (!ur_ready) parser_ur_reset();
     if (len > PSBT_MAX) return UR_ERR_LIMIT;
     if ((n = ur_decoder_receive((char *)in_buf, len)) <= 0) return (int)n;
-    if ((strcmp(ur_decoder_type(), "crypto-psbt") && strcmp(ur_decoder_type(), "psbt")) ||
+    ur_kind = strcmp(ur_decoder_type(), "bytes") ? 0 : 1;
+    if ((ur_kind == 0 && strcmp(ur_decoder_type(), "crypto-psbt") && strcmp(ur_decoder_type(), "psbt")) ||
         !ur_cbor_bytes(ur_decoder_message(), (size_t)n, &psbt, &psbt_len))
         return UR_ERR_TYPE;
     if (psbt_len > PSBT_MAX) return UR_ERR_LIMIT;
     memmove(in_buf, psbt, psbt_len);
     return (int)psbt_len;
+}
+
+/* What the last complete UR was: 0 a PSBT, 1 bytes (a BSMS record or a descriptor, as text) */
+unsigned EXPORT(parser_ur_kind)(void) {
+    return (unsigned)ur_kind;
 }
 
 /* Parts expected (upper 16 bits; 0 until the first multipart part) and fragments recovered (lower 16 bits) */
@@ -495,7 +501,15 @@ unsigned EXPORT(parser_ur_progress)(void) {
 int EXPORT(parser_ur_encode_start)(unsigned len, unsigned max_fragment_len) {
     if (len > sizeof(out_buf)) return UR_ERR_LIMIT;
     parsed = 0;
-    return (int)ur_encoder_start("crypto-psbt", out_buf, len, max_fragment_len);
+    return (int)ur_encoder_start("crypto-psbt", out_buf, len, 1, max_fragment_len);
+}
+
+/* The same for CBOR the host wrote to parser_output() as it is: kind 1 crypto-account, 2 crypto-output, the
+ * public keys signer.wasm describes */
+int EXPORT(parser_ur_encode_cbor)(unsigned kind, unsigned len, unsigned max_fragment_len) {
+    if (len > sizeof(out_buf) || kind < 1 || kind > 2) return UR_ERR_LIMIT;
+    parsed = 0;
+    return (int)ur_encoder_start(kind == 1 ? "crypto-account" : "crypto-output", out_buf, len, 0, max_fragment_len);
 }
 
 /* Writes the next part to parser_input() and returns its length. Parts after the pure ones are mixed, so

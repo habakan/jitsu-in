@@ -10,8 +10,10 @@ parser_plan
 parser_prevtx_len
 parser_prevtx_off
 parser_sigs
+parser_ur_encode_cbor
 parser_ur_encode_next
 parser_ur_encode_start
+parser_ur_kind
 parser_ur_progress
 parser_ur_receive
 parser_ur_reset

@@ -24,6 +24,7 @@ enum {
     CORE_ERR_NOT_REVIEWED,
     CORE_ERR_CRYPTO,
     CORE_ERR_NOT_FOUND, /* core_find_address: none of the addresses searched is this one */
+    CORE_ERR_WALLET,    /* a multisig without our key, or whose BSMS address disagrees; an input not of it */
 };
 
 typedef enum { CORE_MAINNET = 0, CORE_TESTNET = 1 } core_network_t;
@@ -101,5 +102,23 @@ int core_message_review(const uint8_t *msg, size_t len, unsigned purpose, uint32
 int core_message_sign(uint8_t sig[65]);
 
 int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]);
+
+/* Registers a P2WSH sortedmulti wallet of at most three keys from a descriptor, a BSMS 1.0 record or a Coldcard
+ * setup file. From then on its inputs are signed only when their witness script is the wallet's, and its outputs
+ * at our key's paths are shown as change. Unloading the seed unloads it too */
+#define CORE_MULTISIG_DESC_MAX 640
+typedef struct {
+    uint8_t threshold, n, ours; /* ours indexes fingerprints[] */
+    uint32_t fingerprints[3];
+    char receive[ADDRESS_MAX]; /* the first receive address, to compare with the coordinator's */
+    char descriptor[CORE_MULTISIG_DESC_MAX];
+} core_multisig_t;
+int core_multisig_load(const char *text, size_t len, core_multisig_t *out);
+void core_multisig_unload(void);
+
+/* CBOR for a crypto-account UR (the account's single-sig keys and its BIP48 key) and a crypto-output UR (the
+ * registered wallet). The length written, or -CORE_ERR_* */
+int core_account_cbor(uint32_t account, uint8_t *out, size_t cap);
+int core_multisig_cbor(uint8_t *out, size_t cap);
 
 #endif

@@ -26,6 +26,8 @@ const PLAN_SIZE = 6712;
  *   parser_ur_reset: () => void,
  *   parser_ur_receive: (len: number) => number,
  *   parser_ur_progress: () => number,
+ *   parser_ur_kind: () => number,
+ *   parser_ur_encode_cbor: (kind: number, len: number, fragmentLen: number) => number,
  *   parser_ur_encode_start: (len: number, fragmentLen: number) => number,
  *   parser_ur_encode_next: () => number,
  * }} ParserExports
@@ -292,6 +294,9 @@ export class Parser {
   /** Parts received so far. For a progress display only. */
   get urProgress() { return this.exports.parser_ur_progress(); }
 
+  /** What the UR urReceive() completed was: "psbt", or "bytes" (a BSMS record or a descriptor, as text). */
+  get urKind() { return this.exports.parser_ur_kind() === 1 ? "bytes" : "psbt"; }
+
   /**
    * Encode a signed PSBT as animated QR parts.
    * @returns {{ seqLen: number, next: () => string }}
@@ -303,6 +308,29 @@ export class Parser {
   urEncode(psbtLen, fragmentLen = 100) {
     this.#planAvailable = false;
     const seqLen = this.exports.parser_ur_encode_start(psbtLen, fragmentLen);
+    if (seqLen < 0) throw new ParserError(seqLen, "UR_ERR");
+    return {
+      seqLen,
+      next: () => {
+        const n = this.exports.parser_ur_encode_next();
+        if (n < 0) throw new ParserError(n, "UR_ERR");
+        return new TextDecoder().decode(this.#bytes(this.exports.parser_input(), n));
+      },
+    };
+  }
+
+  /**
+   * Encode CBOR signer.wasm made (accountCbor() or multisigCbor()) as crypto-account or crypto-output parts.
+   * @param {"crypto-account" | "crypto-output"} type
+   * @param {Uint8Array} cbor
+   * @param {number} [fragmentLen]
+   * @returns {{ seqLen: number, next: () => string }}
+   */
+  urEncodeCbor(type, cbor, fragmentLen = 100) {
+    this.#planAvailable = false;
+    this.#refresh();
+    this.mem.set(cbor, this.#check(this.exports.parser_output(), cbor.length));
+    const seqLen = this.exports.parser_ur_encode_cbor(type === "crypto-account" ? 1 : 2, cbor.length, fragmentLen);
     if (seqLen < 0) throw new ParserError(seqLen, "UR_ERR");
     return {
       seqLen,

@@ -31,13 +31,17 @@ private enum L {
     static let msgSize = 1101
     static let msgAddress = 0, msgTextKind = 75, msgText = 76, msgTextCap = 1025
 
+    static let msSize = 732
+    static let msThreshold = 0, msN = 1, msOurs = 2, msFingerprints = 4
+    static let msReceive = 16, msReceiveCap = 75, msDescriptor = 91, msDescriptorCap = 640
+
     static let maxInputs = 16, maxOutputs = 16
     static let xpubMax = 120, descMax = 180, prevtxMax = 32768
 }
 
 private let coreErr = [
     "OK", "FORMAT", "NO_SEED", "NOT_OURS", "NOTHING_TO_SIGN", "SIGHASH", "SCRIPT",
-    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND",
+    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND", "WALLET",
 ]
 
 public enum SignerError: Error, CustomStringConvertible {
@@ -114,6 +118,15 @@ public struct Signature {
 
 public struct AccountKey {
     public let xpub: String
+    public let descriptor: String
+}
+
+/// A registered multisig: `ours` indexes `fingerprints`; `receive` is its first address, to compare with the coordinator's
+public struct Multisig {
+    public let threshold: Int
+    public let ours: Int
+    public let fingerprints: [String]
+    public let receive: String
     public let descriptor: String
 }
 
@@ -466,5 +479,42 @@ public final class Signer {
             xpub: try cstr(Int(try call("signer_xpub_output")), L.xpubMax),
             descriptor: try cstr(Int(try call("signer_desc_output")), L.descMax)
         )
+    }
+
+    /// Registers a P2WSH sortedmulti wallet of at most three keys, from a descriptor, a BSMS 1.0 record or a
+    /// Coldcard setup file. Show what this returns, the receive address above all, before trusting it. Loading
+    /// another seed unloads it.
+    public func multisigLoad(_ text: [UInt8]) throws -> Multisig {
+        let cap = inputCapacity
+        guard text.count <= cap else { throw SignerError.tooLarge(size: text.count, capacity: cap) }
+        try write(text, at: Int(try call("signer_input")))
+        let rc = try call("signer_multisig_load", [.i32(UInt32(text.count))])
+        guard rc == 0 else { throw SignerError.refused(stage: "multisigLoad", code: rc) }
+        let at = Int(try call("signer_multisig_output"))
+        let fps = try bytes(at + L.msFingerprints, 4 * Int(try u8(at + L.msN)))
+        return Multisig(
+            threshold: Int(try u8(at + L.msThreshold)),
+            ours: Int(try u8(at + L.msOurs)),
+            fingerprints: stride(from: 0, to: fps.count, by: 4).map { i in
+                String(format: "%08x", (0..<4).reduce(UInt32(0)) { $0 | UInt32(fps[i + $1]) << (8 * UInt32($1)) })
+            },
+            receive: try cstr(at + L.msReceive, L.msReceiveCap),
+            descriptor: try cstr(at + L.msDescriptor, L.msDescriptorCap)
+        )
+    }
+
+    public func multisigUnload() throws { _ = try call("signer_multisig_unload") }
+
+    /// CBOR for a crypto-account UR: the account's sh(wpkh()), wpkh(), tr() and BIP48 keys.
+    public func accountCbor(account: UInt32 = 0) throws -> [UInt8] {
+        try cbor("accountCbor", try call("signer_account_cbor", [.i32(account)]))
+    }
+
+    /// CBOR for a crypto-output UR of the registered wallet.
+    public func multisigCbor() throws -> [UInt8] { try cbor("multisigCbor", try call("signer_multisig_cbor")) }
+
+    private func cbor(_ stage: String, _ rc: Int32) throws -> [UInt8] {
+        guard rc >= 0 else { throw SignerError.refused(stage: stage, code: -rc) }
+        return try bytes(Int(try call("signer_cbor_output")), Int(rc))
     }
 }

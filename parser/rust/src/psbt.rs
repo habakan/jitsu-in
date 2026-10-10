@@ -536,7 +536,7 @@ fn parse_output(r: &mut Reader, idx: usize, fp: u32, out: &mut Parsed) -> Res {
     }
 
     let o = &mut out.plan.outputs[idx];
-    let chosen = if o.spk.is_wpkh() && bip32.found {
+    let chosen = if (o.spk.is_wpkh() || o.spk.is_p2wsh()) && bip32.found {
         Some(bip32)
     } else if o.spk.is_p2tr() && tap.found && !has_tree {
         Some(tap)

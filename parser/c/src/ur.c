@@ -451,14 +451,14 @@ static size_t cbor_head(uint8_t *out, int major, uint64_t v) {
     return 1 + (size_t)extra;
 }
 
-long ur_encoder_start(const char *type, const uint8_t *data, size_t len, size_t max_fragment_len) {
+long ur_encoder_start(const char *type, const uint8_t *data, size_t len, int wrap, size_t max_fragment_len) {
     uint32_t c = 0xffffffffu;
     memset(&e, 0, sizeof(e));
     if (strlen(type) >= sizeof(e.type) || max_fragment_len < 10 || max_fragment_len > UR_MAX_FRAGMENT)
         return UR_ERR_LIMIT;
     strcpy(e.type, type);
     e.data = data, e.data_len = len;
-    e.head_len = cbor_head(e.head, 2, len);
+    e.head_len = wrap ? cbor_head(e.head, 2, len) : 0;
     e.message_len = e.head_len + len;
     e.frag_len = ur_nominal_fragment_len(e.message_len, 10, max_fragment_len);
     e.seq_len = (e.message_len + e.frag_len - 1) / e.frag_len;

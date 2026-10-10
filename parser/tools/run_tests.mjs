@@ -355,12 +355,33 @@ for (const v of ur.vectors.filter((v) => v.type === "crypto-psbt")) {
         `${name}: round trip`);
 }
 
-// --- a UR that is not a PSBT, and a part from another message in the middle of one
+// --- bytes (a BSMS record or a descriptor) is handed back with its kind; any other type is refused
 {
   const bytesUr = "ur:bytes/hdeymejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtgwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsdwkbrkch";
   const p = new Parser();
   p.call("parser_ur_reset");
-  check(p.ur(bytesUr) === UR_ERR_TYPE, "bytes UR rejected");
+  const n = p.ur(bytesUr);
+  check(n > 0 && p.call("parser_ur_kind") === 1, "bytes UR accepted as kind 1");
+  p.call("parser_ur_reset");
+  check(p.ur(bytesUr.replace("ur:bytes/", "ur:crypto-seed/")) === UR_ERR_TYPE, "another type rejected");
+}
+
+// --- CBOR the host wrote, as it is: a byte string encoded raw is the crypto-psbt encoding under another type
+{
+  const p = new Parser();
+  const data = Buffer.from("00112233445566778899aabbccddeeff".repeat(20), "hex");
+  const cbor = Buffer.concat([Buffer.from([0x59, data.length >> 8, data.length & 0xff]), data]);
+  const parts = (kind) => {
+    const seq = kind ? p.call("parser_ur_encode_cbor", kind, cbor.length, 100) : p.call("parser_ur_encode_start", data.length, 100);
+    return Array.from({ length: seq + 2 }, () => Buffer.from(p.read(p.call("parser_input"), p.call("parser_ur_encode_next"))).toString("utf8"));
+  };
+  p.write(data, p.call("parser_output"));
+  const psbtParts = parts(0);
+  p.write(cbor, p.call("parser_output"));
+  const account = parts(1), output = parts(2);
+  check(account.every((x, i) => x === psbtParts[i].replace("UR:CRYPTO-PSBT/", "UR:CRYPTO-ACCOUNT/")) &&
+        output.every((x, i) => x === psbtParts[i].replace("UR:CRYPTO-PSBT/", "UR:CRYPTO-OUTPUT/")), "raw CBOR as crypto-account and crypto-output");
+  check(p.call("parser_ur_encode_cbor", 3, cbor.length, 100) === -5, "an unknown kind refused");
 }
 {
   const multi = ur.vectors.filter((v) => v.seq_len > 3);

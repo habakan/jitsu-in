@@ -237,7 +237,7 @@ do {
 
 // --- an oversized mnemonic is rejected before anything is written
 do {
-    var big = [UInt8](repeating: 0x78, count: 600), none: [UInt8] = []
+    var big = [UInt8](repeating: 0x78, count: 1100), none: [UInt8] = []
     try s.seedFromMnemonic(&big, passphrase: &none)
     ok("an oversized mnemonic is refused", false)
 } catch {
@@ -376,13 +376,37 @@ do {
         }
     }
     do {
-        var big = [UInt8](repeating: 0, count: 400), pw = [UInt8](repeating: 0x78, count: 200)
+        var big = [UInt8](repeating: 0, count: 800), pw = [UInt8](repeating: 0x78, count: 300)
         try q.seedFromSeedQR(&big, passphrase: &pw)
         ok("an oversized SeedQR is refused", false)
     } catch {
         ok("an oversized SeedQR is refused", "\(error)".contains("does not fit"))
     }
     q.unload()
+}
+
+// --- a registered 2 of 3: Core's receive address, and the CBOR that urtypes reads back
+do {
+    let m = try freshSigner()
+    let hex = { (b: [UInt8]) in b.map { String(format: "%02x", $0) }.joined() }
+    check("crypto-account CBOR", hex(try m.accountCbor()), "a2011a73c5da0a0284d90134d90190d90194d9012fa403582102f1f347891b20f7568eae3ec9869fbfb67bcab6f358326f10ecc42356bd55939d0458206eaae365ae0e0a0aab84325cfe7cd76c3b909035f889e7d3f1b847a9a0797ecb06d90130a201861831f500f500f5021a73c5da0a081a3d05ff75d90134d90194d9012fa403582102707a62fdacc26ea9b63b1c197906f56ee0180d0bcf1966e1a2da34f5f3a09a9b0458204a53a0ab21b9dc95869c4e92a161194e03c0ef3ff5014ac692f433c4765490fc06d90130a201861854f500f500f5021a73c5da0a081a7ef32bdbd90134d90199d9012fa403582103418278a2885c8bb98148158d1474634097a179c642f23cf1cc04da629ac6f0fb045820c61a8f27e98182314d2444da3e600eb5836ec8ad183c86c311f95df8082b18aa06d90130a201861856f500f500f5021a73c5da0a081a035270dad90134d90191d9019ad9012fa4035821021a3bf5fbf737d0f36993fd46dc4913093beb532d654fe0dfd98bd27585dc9f29045820bba0c7ca160a870efeb940ab90d0f4284fea1b5e0d2117677e823fc37e2d576306d90130a201881830f500f500f502f5021a73c5da0a081a1cf29716")
+    let k = { (fp: String, x: String) in "[\(fp)/48h/0h/0h/2h]\(x)/<0;1>/*" }
+    let desc = "wsh(sortedmulti(2," +
+        k("73c5da0a", "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf") + "," +
+        k("3f635a63", "xpub6FHZCoNb3tg3o1GAJQxSwgFNF8mLRtTk2GgkF7n5rwzoxBhUEdFWa8cyZRHqytAzKZWsKz8627cQEMCCfR5GDSv6yXegqirpgDUX41Pxybr") + "," +
+        k("b8688df1", "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX") + "))"
+    let w = try m.multisigLoad([UInt8](desc.utf8))
+    check("multisig receive address", w.receive, "bc1qea2gkgeszr7wm66x2ejkgdxm9nhg9462sszn75zmkhazev0t02vs70kkll")
+    check("multisig fingerprints", w.fingerprints.joined(separator: ","), "73c5da0a,3f635a63,b8688df1")
+    ok("multisig descriptor checksum", w.threshold == 2 && w.ours == 0 && w.descriptor.hasSuffix("#d9p6ar8k"))
+    check("crypto-output CBOR", hex(try m.multisigCbor()), "d90191d90197a201020283d9012fa4035821021a3bf5fbf737d0f36993fd46dc4913093beb532d654fe0dfd98bd27585dc9f29045820bba0c7ca160a870efeb940ab90d0f4284fea1b5e0d2117677e823fc37e2d576306d90130a201881830f500f500f502f5021a73c5da0a081a1cf29716d9012fa4035821030e435aae36818255097925c6d2cedae9867961a5ddcc2e80bd6a0d00687286c304582038d3b00251a463b0ffe9b595d21752664c5a231c89fc2fb4f695ab90cdcd77dd06d90130a201881830f500f500f502f5021a3f635a63081aee71f8c5d9012fa40358210339710356a496726c84692621b2b6e3645dd35bc0026c587f16411897990a1e1f045820a732876f758546f2e3aa40a0ba12c5ea24ee18f9086e854e573bea1e219d172f06d90130a201881830f500f500f502f5021ab8688df1081affd9c519")
+    do {
+        _ = try m.multisigLoad([UInt8]("wsh(sortedmulti(1,[00000000/48h/0h/0h/2h]xpub6FHZCoNb3tg3o1GAJQxSwgFNF8mLRtTk2GgkF7n5rwzoxBhUEdFWa8cyZRHqytAzKZWsKz8627cQEMCCfR5GDSv6yXegqirpgDUX41Pxybr/<0;1>/*))".utf8))
+        ok("a wallet without our key is refused", false)
+    } catch {
+        ok("a wallet without our key is refused", "\(error)".contains("WALLET"))
+    }
+    m.unload()
 }
 
 // --- unload clears the key

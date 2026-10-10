@@ -200,7 +200,7 @@ int main(void) {
         uint8_t msg[256];
         long len;
         make_message(msg, sizeof(msg), "Wolf");
-        CHECK(ur_encoder_start("bytes", msg, sizeof(msg), 30) == 9, "encoder seq_len");
+        CHECK(ur_encoder_start("bytes", msg, sizeof(msg), 1, 30) == 9, "encoder seq_len");
         for (int i = 0; i < 20; i++) {
             len = ur_encoder_next(text, sizeof(text));
             int same = len == (long)strlen(REF_PARTS[i]);
@@ -208,7 +208,7 @@ int main(void) {
             CHECK(same, "encoder part %d", i + 1);
         }
         make_message(msg, 50, "Wolf");
-        CHECK(ur_encoder_start("bytes", msg, 50, 1000) == 1, "single part seq_len");
+        CHECK(ur_encoder_start("bytes", msg, 50, 1, 1000) == 1, "single part seq_len");
         len = ur_encoder_next(text, sizeof(text));
         int same = len == (long)strlen(REF_SINGLE_PART);
         for (long k = 0; same && k < len; k++) same = (text[k] | 32) == (REF_SINGLE_PART[k] | 32);

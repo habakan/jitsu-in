@@ -57,6 +57,35 @@ void base58check_data(const uint8_t *p, size_t n, char *out) {
     out[o] = 0;
 }
 
+int base58check_decode(const char *s, size_t len, uint8_t *out, size_t n) {
+    uint8_t buf[BASE58CHECK_MAX_IN + 4] = {0}, chk[32];
+    size_t total = n + 4, ones = 0, zeros = 0;
+    sha256_ctx h;
+
+    if (n > BASE58CHECK_MAX_IN || !len || len > BASE58CHECK_MAX_OUT) return 0;
+    for (size_t i = 0; i < len; i++) {
+        const char *d = s[i] ? strchr(B58, s[i]) : NULL;
+        uint32_t carry = d ? (uint32_t)(d - B58) : 0;
+        if (!d) return 0;
+        for (size_t j = total; j-- > 0;) {
+            carry += 58u * buf[j];
+            buf[j] = (uint8_t)carry;
+            carry >>= 8;
+        }
+        if (carry) return 0;
+    }
+    /* Each leading '1' is a zero byte and nothing else is, or the string was not n + 4 bytes */
+    while (ones < len && s[ones] == '1') ones++;
+    while (zeros < total && !buf[zeros]) zeros++;
+    if (ones != zeros) return 0;
+    sha256_init(&h);
+    sha256_update(&h, buf, n);
+    sha256d_final(&h, chk);
+    if (memcmp(chk, buf + n, 4)) return 0;
+    memcpy(out, buf, n);
+    return 1;
+}
+
 static void base58check(uint8_t version, const uint8_t hash[20], char *out) {
     uint8_t buf[21];
     buf[0] = version;

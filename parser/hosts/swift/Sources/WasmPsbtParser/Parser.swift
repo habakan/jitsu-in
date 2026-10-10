@@ -252,6 +252,25 @@ public final class Parser {
     /// Parts received so far. For a progress display only.
     public var urProgress: Int { (try? Int(call("parser_ur_progress"))) ?? 0 }
 
+    /// What the UR `urReceive` completed was: false a PSBT, true bytes (a BSMS record or a descriptor, as text).
+    public var urIsBytes: Bool { ((try? call("parser_ur_kind")) ?? 0) == 1 }
+
+    /// Encode CBOR signer.wasm made (accountCbor or multisigCbor) as crypto-account or crypto-output payloads.
+    public func urEncodeCbor(account: Bool, cbor: [UInt8], fragmentLen: Int = 100) throws -> UrEncoder {
+        planAvailable = false
+        let off = Int(try call("parser_output"))
+        _ = try bytes(off, cbor.count)        // bounds-check before writing
+        memory.withUnsafeMutableBufferPointer(offset: UInt(off), count: cbor.count) { $0.copyBytes(from: cbor) }
+        let seqLen = try call("parser_ur_encode_cbor",
+                              [.i32(account ? 1 : 2), .i32(UInt32(cbor.count)), .i32(UInt32(fragmentLen))])
+        if seqLen < 0 { throw ParserError.ur(code: seqLen) }
+        return UrEncoder(seqLen: Int(seqLen)) { [self] in
+            let n = try call("parser_ur_encode_next")
+            if n < 0 { throw ParserError.ur(code: n) }
+            return String(decoding: try bytes(Int(try call("parser_input")), Int(n)), as: UTF8.self)
+        }
+    }
+
     /// Encode the PSBT currently in the output buffer (what `finalize` produced) as QR payloads.
     public func urEncode(psbtLen: Int, fragmentLen: Int = 100) throws -> UrEncoder {
         planAvailable = false

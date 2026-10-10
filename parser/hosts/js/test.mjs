@@ -105,6 +105,16 @@ for (const name of vectors) {
   check(got && Buffer.compare(Buffer.from(got), Buffer.from(out)) === 0, "round trip is byte identical");
 }
 
+// --- bytes come back with their kind; CBOR goes out under the type asked for
+{
+  const p = Parser.loadSync(parserWasm);
+  p.urReset();
+  const got = p.urReceive("ur:bytes/hdeymejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtgwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsdwkbrkch");
+  check(got !== null && got.length > 0 && p.urKind === "bytes", "a bytes UR is handed back as bytes");
+  const seq = p.urEncodeCbor("crypto-output", new Uint8Array([0xa0]));
+  check(seq.seqLen === 1 && seq.next().startsWith("UR:CRYPTO-OUTPUT/"), "CBOR as a crypto-output");
+}
+
 // --- a signature that does not fit its slot is refused before anything is written
 {
   const p = Parser.loadSync(parserWasm);

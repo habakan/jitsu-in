@@ -79,6 +79,17 @@ do {
     throwsError("UR_ERR_SCHEME", "not a UR") { _ = try p.urReceive("not a ur") }
 }
 
+// bytes come back with their kind; CBOR goes out under the type asked for
+do {
+    let p = try Parser(parserWasm: parserWasm)
+    try p.urReset()
+    let got = try p.urReceive("ur:bytes/hdeymejtswhhylkepmykhhtsytsnoyoyaxaedsuttydmmhhpktpmsrjtgwdpfnsboxgwlbaawzuefywkdplrsrjynbvygabwjldapfcsdwkbrkch")
+    check(got != nil && !(got ?? []).isEmpty && p.urIsBytes, "a bytes UR is handed back as bytes")
+    let seq = try p.urEncodeCbor(account: false, cbor: [0xa0])
+    let part = try seq.next()
+    check(seq.seqLen == 1 && part.hasPrefix("UR:CRYPTO-OUTPUT/"), "CBOR as a crypto-output")
+}
+
 // UR: encode what finalize produced, feed the parts back, get the same bytes
 do {
     let enc = try Parser(parserWasm: parserWasm)

@@ -15,4 +15,7 @@ int bip32_pubkey(const secp256k1_context *ctx, const uint8_t key[32], uint8_t ou
 /* An unhardened child, given the parent's public key so that a loop over children computes it once */
 int bip32_child(const bip32_node_t *parent, const uint8_t parent_pub[33], uint32_t i, bip32_node_t *out);
 
+/* The same from a public key alone, for a cosigner's xpub */
+int bip32_pub_child(const uint8_t pub[33], const uint8_t chain[32], uint32_t i, uint8_t out[33], uint8_t out_chain[32]);
+
 #endif

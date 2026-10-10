@@ -34,13 +34,17 @@ private object L {
     const val MSG_SIZE = 1101
     const val MSG_ADDRESS = 0; const val MSG_TEXT_KIND = 75; const val MSG_TEXT = 76; const val MSG_TEXT_CAP = 1025
 
+    const val MS_SIZE = 732
+    const val MS_THRESHOLD = 0; const val MS_N = 1; const val MS_OURS = 2; const val MS_FINGERPRINTS = 4
+    const val MS_RECEIVE = 16; const val MS_RECEIVE_CAP = 75; const val MS_DESCRIPTOR = 91; const val MS_DESCRIPTOR_CAP = 640
+
     const val MAX_INPUTS = 16; const val MAX_OUTPUTS = 16
     const val XPUB_MAX = 120; const val DESC_MAX = 180; const val PREVTX_MAX = 32768
 }
 
 private val CORE_ERR = arrayOf(
     "OK", "FORMAT", "NO_SEED", "NOT_OURS", "NOTHING_TO_SIGN", "SIGHASH", "SCRIPT",
-    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND",
+    "PREVTX_MISSING", "PREVTX_MISMATCH", "FEE", "NOT_REVIEWED", "CRYPTO", "NOT_FOUND", "WALLET",
 )
 
 class SignerException(val stage: String, val code: Int) : Exception(
@@ -75,6 +79,9 @@ class Display(val fee: Long, val spend: Long, val outputs: List<DisplayOutput>)
 class Signature(val input: Int, val pubkey: ByteArray, val sig: ByteArray, val raw: ByteArray)
 
 class AccountKey(val xpub: String, val descriptor: String)
+
+/** A registered multisig: `ours` indexes `fingerprints`; `receive` is its first address, to compare with the coordinator's */
+class Multisig(val threshold: Int, val ours: Int, val fingerprints: List<String>, val receive: String, val descriptor: String)
 data class AddressPath(val chain: Int, val index: Int)
 
 class Signer(signerWasm: ByteArray, sha256: String? = null) {
@@ -410,5 +417,39 @@ class Signer(signerWasm: ByteArray, sha256: String? = null) {
             xpub = cstr(call("signer_xpub_output"), L.XPUB_MAX),
             descriptor = cstr(call("signer_desc_output"), L.DESC_MAX),
         )
+    }
+
+    /**
+     * Registers a P2WSH sortedmulti wallet of at most three keys, from a descriptor, a BSMS 1.0 record or a
+     * Coldcard setup file. Show what this returns, the receive address above all, before trusting it. Loading
+     * another seed unloads it.
+     */
+    fun multisigLoad(text: ByteArray): Multisig {
+        require(text.size <= inputCapacity) { "${text.size} bytes of multisig setup does not fit in $inputCapacity" }
+        memory.write(call("signer_input"), text)
+        val rc = call("signer_multisig_load", text.size.toLong())
+        if (rc != 0) throw SignerException("multisigLoad", rc)
+        val at = call("signer_multisig_output")
+        val fps = bytes(at + L.MS_FINGERPRINTS, 4 * u8(at + L.MS_N))
+        return Multisig(
+            threshold = u8(at + L.MS_THRESHOLD),
+            ours = u8(at + L.MS_OURS),
+            fingerprints = fps.toList().chunked(4).map { b -> "%08x".format((0..3).fold(0) { acc, i -> acc or ((b[i].toInt() and 0xff) shl (8 * i)) }) },
+            receive = cstr(at + L.MS_RECEIVE, L.MS_RECEIVE_CAP),
+            descriptor = cstr(at + L.MS_DESCRIPTOR, L.MS_DESCRIPTOR_CAP),
+        )
+    }
+
+    fun multisigUnload() { call("signer_multisig_unload") }
+
+    /** CBOR for a crypto-account UR: the account's sh(wpkh()), wpkh(), tr() and BIP48 keys. */
+    fun accountCbor(account: Int = 0): ByteArray = cbor("accountCbor", call("signer_account_cbor", account.toLong()))
+
+    /** CBOR for a crypto-output UR of the registered wallet. */
+    fun multisigCbor(): ByteArray = cbor("multisigCbor", call("signer_multisig_cbor"))
+
+    private fun cbor(name: String, rc: Int): ByteArray {
+        if (rc < 0) throw SignerException(name, -rc)
+        return bytes(call("signer_cbor_output"), rc)
     }
 }

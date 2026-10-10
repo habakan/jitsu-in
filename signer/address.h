@@ -15,5 +15,7 @@ int address_encode(const uint8_t *spk, size_t len, int testnet, char out[ADDRESS
 #define BASE58CHECK_MAX_IN 78
 #define BASE58CHECK_MAX_OUT 120
 void base58check_data(const uint8_t *p, size_t n, char *out);
+/* The reverse, for exactly n bytes: 1 only when the string is that long and its checksum holds */
+int base58check_decode(const char *s, size_t len, uint8_t *out, size_t n);
 
 #endif

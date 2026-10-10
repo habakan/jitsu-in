@@ -172,6 +172,7 @@ use crate::ur;
 static mut DECODER: ur::Decoder = ur::Decoder::new();
 static mut ENCODER: ur::Encoder = ur::Encoder::new();
 static mut UR_READY: bool = false;
+static mut UR_KIND: u32 = 0;
 
 /// Drops decoder state before a new animated QR.
 #[no_mangle]
@@ -208,10 +209,13 @@ pub extern "C" fn parser_ur_receive(len: u32) -> i32 {
         Ok(0) => return 0,
         Ok(n) => n as usize,
     };
-    // Complete: it has to be a PSBT, and it has to be a CBOR byte string
+    // Complete: it has to be a PSBT or bytes, and it has to be a CBOR byte string
     let ty = &d.ur_type;
-    let is_psbt = ty.starts_with(b"crypto-psbt\0") || ty.starts_with(b"psbt\0");
-    if !is_psbt {
+    let is_bytes = ty.starts_with(b"bytes\0");
+    unsafe {
+        UR_KIND = is_bytes as u32;
+    }
+    if !is_bytes && !ty.starts_with(b"crypto-psbt\0") && !ty.starts_with(b"psbt\0") {
         return ur::Err::Type as i32;
     }
     let msg: &[u8] = unsafe { core::slice::from_raw_parts(d.message(), n) };
@@ -230,6 +234,12 @@ pub extern "C" fn parser_ur_receive(len: u32) -> i32 {
         dst.copy_from_slice(src);
     }
     psbt_len as i32
+}
+
+/// What the last complete UR was: 0 a PSBT, 1 bytes (a BSMS record or a descriptor, as text).
+#[no_mangle]
+pub extern "C" fn parser_ur_kind() -> u32 {
+    unsafe { UR_KIND }
 }
 
 /// Parts expected in the upper 16 bits, 0 until the first multipart part, and distinct fragments
@@ -253,7 +263,26 @@ pub extern "C" fn parser_ur_encode_start(len: u32, max_fragment_len: u32) -> i32
         IS_PARSED = false;
     }
     let e: &mut ur::Encoder = unsafe { &mut *(&raw mut ENCODER) };
-    match e.start(b"crypto-psbt", (&raw const PSBT_OUT) as *const u8, len, max_fragment_len as usize) {
+    match e.start(b"crypto-psbt", (&raw const PSBT_OUT) as *const u8, len, true, max_fragment_len as usize) {
+        Ok(n) => n as i32,
+        Err(err) => err as i32,
+    }
+}
+
+/// The same for CBOR the host wrote to `parser_output()` as it is: kind 1 crypto-account, 2
+/// crypto-output, the public keys signer.wasm describes.
+#[no_mangle]
+pub extern "C" fn parser_ur_encode_cbor(kind: u32, len: u32, max_fragment_len: u32) -> i32 {
+    let len = len as usize;
+    if len > PSBT_OUT_MAX || !(1..=2).contains(&kind) {
+        return ur::Err::Limit as i32;
+    }
+    unsafe {
+        IS_PARSED = false;
+    }
+    let ty: &[u8] = if kind == 1 { b"crypto-account" } else { b"crypto-output" };
+    let e: &mut ur::Encoder = unsafe { &mut *(&raw mut ENCODER) };
+    match e.start(ty, (&raw const PSBT_OUT) as *const u8, len, false, max_fragment_len as usize) {
         Ok(n) => n as i32,
         Err(err) => err as i32,
     }

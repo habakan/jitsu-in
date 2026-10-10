@@ -60,6 +60,17 @@ int main(void) {
     F(core_message_t, text);
     printf("  \"text_cap\": %d\n },\n", 2 * CORE_MESSAGE_MAX + 1);
 
+    printf(" \"core_multisig_t\": {\n");
+    printf("  \"size\": %zu,\n", sizeof(core_multisig_t));
+    F(core_multisig_t, threshold);
+    F(core_multisig_t, n);
+    F(core_multisig_t, ours);
+    F(core_multisig_t, fingerprints);
+    F(core_multisig_t, receive);
+    F(core_multisig_t, descriptor);
+    printf("  \"receive_cap\": %d,\n", ADDRESS_MAX);
+    printf("  \"descriptor_cap\": %d\n },\n", CORE_MULTISIG_DESC_MAX);
+
     printf(" \"limits\": {\n");
     printf("  \"max_inputs\": %d,\n", PLAN_MAX_INPUTS);
     printf("  \"max_outputs\": %d,\n", PLAN_MAX_OUTPUTS);
@@ -73,8 +84,8 @@ int main(void) {
            CORE_ERR_NO_SEED, CORE_ERR_NOT_OURS, CORE_ERR_NOTHING_TO_SIGN);
     printf("  \"SIGHASH\": %d, \"SCRIPT\": %d, \"PREVTX_MISSING\": %d, \"PREVTX_MISMATCH\": %d,\n", CORE_ERR_SIGHASH,
            CORE_ERR_SCRIPT, CORE_ERR_PREVTX_MISSING, CORE_ERR_PREVTX_MISMATCH);
-    printf("  \"FEE\": %d, \"NOT_REVIEWED\": %d, \"CRYPTO\": %d, \"NOT_FOUND\": %d\n },\n", CORE_ERR_FEE,
-           CORE_ERR_NOT_REVIEWED, CORE_ERR_CRYPTO, CORE_ERR_NOT_FOUND);
+    printf("  \"FEE\": %d, \"NOT_REVIEWED\": %d, \"CRYPTO\": %d, \"NOT_FOUND\": %d, \"WALLET\": %d\n },\n",
+           CORE_ERR_FEE, CORE_ERR_NOT_REVIEWED, CORE_ERR_CRYPTO, CORE_ERR_NOT_FOUND, CORE_ERR_WALLET);
 
     printf(" \"owner\": {\"EXTERNAL\": %d, \"CHANGE\": %d, \"SELF\": %d},\n", CORE_OUT_EXTERNAL, CORE_OUT_CHANGE,
            CORE_OUT_SELF);

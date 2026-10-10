@@ -41,9 +41,13 @@ unsigned char *parser_output(void);
 void parser_ur_reset(void);
 int parser_ur_receive(unsigned len);
 unsigned parser_ur_progress(void);
+/* 0 when the completed UR was a PSBT, 1 when it was bytes, whose payload is in parser_input() likewise */
+unsigned parser_ur_kind(void);
 /* Signed PSBT as an animated QR: parser_ur_encode_start(len returned by parser_finalize(), max fragment bytes),
  * then parser_ur_encode_next() for each frame, reading the text from parser_input() */
 int parser_ur_encode_start(unsigned len, unsigned max_fragment_len);
+/* Kind 1 crypto-account or 2 crypto-output, from len bytes of CBOR the host wrote to parser_output() */
+int parser_ur_encode_cbor(unsigned kind, unsigned len, unsigned max_fragment_len);
 int parser_ur_encode_next(void);
 
 #endif

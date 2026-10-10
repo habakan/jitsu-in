@@ -86,8 +86,9 @@ Single-signature P2WPKH ([BIP84](https://github.com/bitcoin/bips/blob/master/bip
 P2SH-P2WPKH ([BIP49](https://github.com/bitcoin/bips/blob/master/bip-0049.mediawiki))
 P2TR key path ([BIP86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki)) and P2WSH
 multisig of at most three keys ([BIP48](https://github.com/bitcoin/bips/blob/master/bip-0048.mediawiki)),
-`SIGHASH_ALL` and Taproot's `SIGHASH_DEFAULT`. No taproot multisig, no script trees, no legacy P2PKH
-signing.
+`SIGHASH_ALL` and Taproot's `SIGHASH_DEFAULT`. A multisig registered from a descriptor, a BSMS record or a
+Coldcard setup file has its change recognised, and the public keys go out as crypto-account and crypto-output
+URs. No taproot multisig, no script trees, no legacy P2PKH signing.
 
 ## Licence
 

@@ -37,9 +37,11 @@ before reading or writing — the module is untrusted from the host's point of v
 | `parser_finalize` | `(n: i32) -> i32` | Insert the first `n` signatures. Returns the signed PSBT length, or `-P_ERR_SIG` |
 | `parser_output` | `() -> i32` | Offset of the signed PSBT written by `parser_finalize` |
 | `parser_ur_reset` | `() -> ()` | Drop decoder state before a new animated QR |
-| `parser_ur_receive` | `(len: i32) -> i32` | Feed one UR part from the input buffer. `>0`: PSBT length, now in the input buffer. `0`: more parts needed. `<0`: `UR_ERR_*` |
+| `parser_ur_receive` | `(len: i32) -> i32` | Feed one UR part from the input buffer. `>0`: PSBT (or bytes) length, now in the input buffer. `0`: more parts needed. `<0`: `UR_ERR_*` |
 | `parser_ur_progress` | `() -> i32` | Parts received so far (for a progress display only) |
+| `parser_ur_kind` | `() -> i32` | What the completed UR was: `0` a PSBT (`crypto-psbt` or `psbt`), `1` `bytes`, such as a BSMS record or a descriptor for `signer_multisig_load` |
 | `parser_ur_encode_start` | `(len: i32, max_fragment_len: i32) -> i32` | Begin encoding the signed PSBT in the output buffer. Returns `seq_len`, or a negative `UR_ERR_*` |
+| `parser_ur_encode_cbor` | `(kind: i32, len: i32, max_fragment_len: i32) -> i32` | Begin encoding `len` bytes of CBOR the host wrote to the output buffer, as they are: kind `1` crypto-account, `2` crypto-output (from `signer_account_cbor` / `signer_multisig_cbor`) |
 | `parser_ur_encode_next` | `() -> i32` | Write the next part as uppercase text into the input buffer. Returns its length, or a negative `UR_ERR_*` |
 
 `fingerprint` is the signer's master fingerprint — the first 4 bytes of `HASH160(master pubkey)`
