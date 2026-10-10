@@ -7,7 +7,7 @@ import Foundation
 import WasmKit
 import WasmSigner
 
-let planSize = 5016
+let planSize = 6712
 var pass = 0, fail = 0
 
 func check<T: Equatable>(_ what: String, _ got: T, _ want: T) {

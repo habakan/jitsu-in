@@ -12,8 +12,8 @@ import com.dylibso.chicory.runtime.Instance
 import com.dylibso.chicory.wasm.Parser as WasmParser
 
 private const val MAGIC = 0x4e4c5042           // "BPLN"
-private const val ABI_VERSION = 1
-private const val PLAN_SIZE = 5016
+private const val ABI_VERSION = 2
+private const val PLAN_SIZE = 6712
 
 // Layout of plan_t, from docs/abi.md. Kept in one place so a version bump touches one table.
 private object L {

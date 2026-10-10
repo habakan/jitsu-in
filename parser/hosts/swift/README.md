@@ -23,7 +23,7 @@ import WasmPsbtParser
 
 let parser = try Parser(parserWasm: parserWasmBytes)      // once
 let plan = try parser.parse(psbt, fingerprint: 0x73c5da0a) // per transaction
-let rawPlan = try parser.rawPlan()                        // 5,016-byte plan_t for a matching signer.wasm
+let rawPlan = try parser.rawPlan()                        // 6,712-byte plan_t for a matching signer.wasm
 
 print("\(plan.inputs.count) in / \(plan.outputs.count) out, fee \(plan.fee)")
 for out in plan.outputs {
@@ -44,7 +44,7 @@ Add it to your own package:
 
 `plan.outputs[i]` — `amount`, `spk`, `key`.
 
-`try parser.rawPlan()` returns a copy of the 5,016-byte ABI-v1 `plan_t`, for passing to a matching
+`try parser.rawPlan()` returns a copy of the 6,712-byte ABI-v2 `plan_t`, for passing to a matching
 `signer.wasm`. Call it after a successful `parse()`; the next `parse()`, `urReceive()`, or `urEncode()` invalidates it.
 
 `key` is a `KeyOrigin?` — BIP380's name for this. It prints as `73c5da0a/84h/0h/0h/0/0`.

@@ -61,6 +61,6 @@ The [platform diagram](everywhere.md) lists where the modules have run and what 
 
 Signing is deterministic — ECDSA grinds for a low R as Bitcoin Core does, and Schnorr passes a zero
 `aux_rand` — so "the same signature" means identical bytes, not merely another valid one. That is
-what lets a browser reproduce a hardware signer's output exactly. **It also has to be revisited
-before multisig**, where [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
-says deterministic nonces are unsafe.
+what lets a browser reproduce a hardware signer's output exactly. P2WSH multisig keeps it: each
+cosigner makes its own ECDSA signature. **It has to be revisited before MuSig2 or FROST**, where
+[BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) says deterministic nonces are unsafe.

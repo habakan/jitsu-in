@@ -20,7 +20,8 @@
     ]
    },
    "sighash_type": 0,
-   "has_prevtx": false
+   "has_prevtx": false,
+   "wscript": ""
   },
   {
    "prev_txid": "71a1aef9ba41e6bad057cabe4cfaa8e652efe4b402c3913e92b6ebbad9393f45",
@@ -39,7 +40,8 @@
     ]
    },
    "sighash_type": 0,
-   "has_prevtx": false
+   "has_prevtx": false,
+   "wscript": ""
   }
  ],
  "outputs": [

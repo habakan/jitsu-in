@@ -25,7 +25,7 @@ tools/         checking the shape of the output, the layout, and fetching the pi
 ```
 
 The parser has C and Rust implementations. Both are built, and `make check-rust-plan` requires them
-to return the same 5,016-byte plan for every vector and for 20,000 mutated PSBTs. Comparing the two
+to return the same 6,712-byte plan for every vector and for 20,000 mutated PSBTs. Comparing the two
 implementations has also exposed a gap that neither implementation's tests found on their own.
 
 `make` builds the C; `make PARSER_IMPL=rust` builds the Rust; `make which-parser` says which one

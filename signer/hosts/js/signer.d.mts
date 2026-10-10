@@ -210,7 +210,8 @@ export class Signer {
     /** The BIP137 signature of the message messageReview() showed: 65 bytes, header then r and s. Most
      *  wallets want it in base64. */
     messageSign(): Uint8Array<ArrayBuffer>;
-    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
+    /** The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, or for 48 the key
+     *  expression of m/48'/coin'/account'/2' that goes into wsh(sortedmulti()), for making a watch-only
      *  wallet elsewhere. `account` is below 2^31. */
     xpub({ purpose, account }?: {
         purpose?: number | undefined;

@@ -11,13 +11,13 @@ import Crypto
 import WasmKit
 
 private let magicValue: UInt32 = 0x4e4c_5042   // "BPLN"
-private let abiVersion: UInt32 = 1
+private let abiVersion: UInt32 = 2
 
 // Layout of plan_t, from docs/abi.md. Kept in one place so a version bump touches one table.
 private enum L {
     static let magic = 0, version = 4, txVersion = 8, locktime = 12, nInputs = 16, nOutputs = 17
     static let inputs = 24, inputSize = 176, outputs = 2840, outputSize = 136
-    static let planSize = 5016
+    static let planSize = 6712
     static let inPrevTxid = 0, inPrevVout = 32, inSequence = 36
     static let inAmount = 40, inSpk = 48, inKey = 132, inSighash = 172
     static let outAmount = 0, outSpk = 8, outKey = 92

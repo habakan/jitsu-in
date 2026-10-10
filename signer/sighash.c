@@ -28,20 +28,12 @@ static void h_output(sha256_ctx *h, const plan_output_t *o) {
     h_script(h, &o->spk);
 }
 
-int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, const uint8_t pkh[20], uint8_t out[32]) {
+/* code is the scriptCode with its compact size, which is one byte for both scripts here */
+static void bip143(const plan_t *p, unsigned index, const uint8_t *code, size_t code_len, uint8_t out[32]) {
     const plan_input_t *in = &p->inputs[index];
     uint8_t prevouts[32], sequences[32], outputs[32];
-    static const uint8_t code_head[4] = {0x19, 0x76, 0xa9, 0x14}, code_tail[2] = {0x88, 0xac};
     sha256_ctx h;
 
-    uint8_t redeem[22] = {0x00, 20}, sh[20];
-    if (index >= p->n_inputs) return 0;
-    memcpy(redeem + 2, pkh, 20);
-    hash160(redeem, sizeof(redeem), sh);
-    if (!(in->spk.len == 22 && !memcmp(in->spk.bytes, redeem, 22)) &&
-        !(in->spk.len == 23 && in->spk.bytes[0] == 0xa9 && in->spk.bytes[1] == 20 && in->spk.bytes[22] == 0x87 &&
-          !memcmp(in->spk.bytes + 2, sh, 20)))
-        return 0; /* the key hash is not what this input's script pays to */
     sha256_init(&h);
     for (unsigned i = 0; i < p->n_inputs; i++) h_outpoint(&h, &p->inputs[i]);
     sha256d_final(&h, prevouts);
@@ -57,15 +49,41 @@ int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, const uint8_t pkh[20]
     sha256_update(&h, prevouts, 32);
     sha256_update(&h, sequences, 32);
     h_outpoint(&h, in);
-    sha256_update(&h, code_head, 4);
-    sha256_update(&h, pkh, 20);
-    sha256_update(&h, code_tail, 2);
+    sha256_update(&h, code, code_len);
     h_le(&h, in->amount, 8);
     h_le(&h, in->sequence, 4);
     sha256_update(&h, outputs, 32);
     h_le(&h, p->locktime, 4);
     h_le(&h, 1, 4);
     sha256d_final(&h, out);
+}
+
+int sighash_bip143_p2wpkh(const plan_t *p, unsigned index, const uint8_t pkh[20], uint8_t out[32]) {
+    const plan_input_t *in = &p->inputs[index];
+    uint8_t redeem[22] = {0x00, 20}, sh[20], code[26] = {0x19, 0x76, 0xa9, 0x14};
+
+    if (index >= p->n_inputs) return 0;
+    memcpy(redeem + 2, pkh, 20);
+    hash160(redeem, sizeof(redeem), sh);
+    if (!(in->spk.len == 22 && !memcmp(in->spk.bytes, redeem, 22)) &&
+        !(in->spk.len == 23 && in->spk.bytes[0] == 0xa9 && in->spk.bytes[1] == 20 && in->spk.bytes[22] == 0x87 &&
+          !memcmp(in->spk.bytes + 2, sh, 20)))
+        return 0; /* the key hash is not what this input's script pays to */
+    memcpy(code + 4, pkh, 20);
+    code[24] = 0x88, code[25] = 0xac;
+    bip143(p, index, code, sizeof(code), out);
+    return 1;
+}
+
+int sighash_bip143_p2wsh(const plan_t *p, unsigned index, const plan_wscript_t *ws, uint8_t out[32]) {
+    const plan_input_t *in = &p->inputs[index];
+    uint8_t h[32];
+
+    if (index >= p->n_inputs || ws->len > PLAN_MAX_WSCRIPT) return 0;
+    sha256(ws->bytes, ws->len, h);
+    if (!(in->spk.len == 34 && in->spk.bytes[0] == 0 && in->spk.bytes[1] == 32 && !memcmp(in->spk.bytes + 2, h, 32)))
+        return 0; /* the witness script is not what this input's script pays to */
+    bip143(p, index, &ws->len, 1u + ws->len, out);
     return 1;
 }
 

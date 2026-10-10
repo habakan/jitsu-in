@@ -138,9 +138,9 @@ Offsets are what the accessors return today. **Do not hard-code them**; call the
 | Buffer | Offset | Size |
 |---|---:|---:|
 | input | 17,744 | 32,768 |
-| plan | 50,512 | 5,016 |
-| sigs | 55,536 | 1,728 (16 × 108) |
-| output | 57,264 | 34,816 |
+| plan | 50,512 | 6,712 |
+| sigs | 57,232 | 1,728 (16 × 108) |
+| output | 58,960 | 34,816 |
 
 ## `plan_t`
 
@@ -148,13 +148,15 @@ The parser's whole output. No pointers and no `long`, so wasm32, rv32 and 64-bit
 
 ```c
 #define PLAN_MAGIC       0x4e4c5042u /* "BPLN" */
-#define PLAN_VERSION     1
+#define PLAN_VERSION     2
 #define PLAN_MAX_INPUTS  16
 #define PLAN_MAX_OUTPUTS 16
 #define PLAN_MAX_SPK     83
 #define PLAN_MAX_DEPTH   8
+#define PLAN_MAX_WSCRIPT 105 /* sortedmulti of at most three keys */
 
 typedef struct { uint8_t len; uint8_t bytes[83]; } plan_script_t;          /* 84 */
+typedef struct { uint8_t len; uint8_t bytes[105]; } plan_wscript_t;        /* 106 */
 
 typedef struct {
     uint8_t  depth;         /* 0 = this is not ours */
@@ -185,7 +187,8 @@ typedef struct {
     uint8_t  n_inputs, n_outputs;
     plan_input_t  inputs[16];
     plan_output_t outputs[16];
-} plan_t;                                                                  /* 5016 */
+    plan_wscript_t wscripts[16]; /* a P2WSH input's witness script, only for one to be signed */
+} plan_t;                                                                  /* 6712 */
 ```
 
 Field offsets a non-C host needs:
@@ -193,13 +196,14 @@ Field offsets a non-C host needs:
 | | offset | |
 |---|---:|---|
 | `plan_t.magic` | 0 | u32, must be `0x4e4c5042` |
-| `plan_t.version` | 4 | u32, must be 1 |
+| `plan_t.version` | 4 | u32, must be 2 |
 | `plan_t.tx_version` | 8 | i32 |
 | `plan_t.locktime` | 12 | u32 |
 | `plan_t.n_inputs` | 16 | u8 |
 | `plan_t.n_outputs` | 17 | u8 |
 | `plan_t.inputs` | 24 | stride 176 |
 | `plan_t.outputs` | 2,840 | stride 136 |
+| `plan_t.wscripts` | 5,016 | stride 106: 1 byte length + 105 bytes |
 | `plan_input_t.amount` | 40 | u64 little-endian |
 | `plan_input_t.spk` | 48 | 1 byte length + 83 bytes |
 | `plan_input_t.key` | 132 | |
@@ -212,14 +216,15 @@ Field offsets a non-C host needs:
 
 All integers are little-endian, as in the WebAssembly linear memory.
 
-A host **must** check `magic == 0x4e4c5042` and `version == 1` before trusting the rest.
+A host **must** check `magic == 0x4e4c5042` and `version == 2` before trusting the rest. Version 2 added
+`wscripts` after `outputs`; every earlier offset is unchanged.
 
 ## `plan_sig_t`
 
 ```c
 typedef struct {
     uint8_t input;      /* index into plan.inputs */
-    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH and P2SH-P2WPKH; 0x00 + x-only output key for P2TR */
+    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH, P2SH-P2WPKH and P2WSH; 0x00 + x-only output key for P2TR */
     uint8_t sig_len;
     uint8_t sig[73];    /* DER + sighash byte for ECDSA; 64 or 65 bytes for Schnorr */
 } plan_sig_t;           /* 108 */

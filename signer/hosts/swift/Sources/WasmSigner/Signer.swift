@@ -13,7 +13,7 @@ import WasmKit
 // What the host decodes. signer/tests/layout.c prints these from the structs themselves
 // and `make check-layout` fails if this table drifts from them.
 private enum L {
-    static let planSize = 5016, planNInputs = 16, planNOutputs = 17
+    static let planSize = 6712, planNInputs = 16, planNOutputs = 17
 
     static let rvSize = 64
     static let rvTotalIn = 0, rvTotalOut = 8, rvFee = 16
@@ -456,7 +456,8 @@ public final class Signer {
         return try bytes(Int(try call("signer_message_sig")), 65)
     }
 
-    /// The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, for making a watch-only
+    /// The account xpub and its sh(wpkh()) (purpose 49), wpkh() (84) or tr() (86) descriptor, or for 48 the key
+    /// expression of m/48'/coin'/account'/2' that goes into wsh(sortedmulti()), for making a watch-only
     /// wallet elsewhere. `account` is below 2^31.
     public func xpub(purpose: UInt32 = 84, account: UInt32 = 0) throws -> AccountKey {
         let rc = try call("signer_xpub", [.i32(purpose), .i32(account)])

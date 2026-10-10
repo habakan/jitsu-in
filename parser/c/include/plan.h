@@ -8,16 +8,22 @@
 #include <stdint.h>
 
 #define PLAN_MAGIC 0x4e4c5042u /* "BPLN" */
-#define PLAN_VERSION 1
+#define PLAN_VERSION 2
 #define PLAN_MAX_INPUTS 16
 #define PLAN_MAX_OUTPUTS 16
 #define PLAN_MAX_SPK 83 /* standard OP_RETURN limit; P2TR / P2WSH are 34 */
 #define PLAN_MAX_DEPTH 8
+#define PLAN_MAX_WSCRIPT 105 /* sortedmulti of at most three keys: OP_m, 3 x (push + 33), OP_n, OP_CHECKMULTISIG */
 
 typedef struct {
     uint8_t len;
     uint8_t bytes[PLAN_MAX_SPK];
 } plan_script_t;
+
+typedef struct {
+    uint8_t len;
+    uint8_t bytes[PLAN_MAX_WSCRIPT];
+} plan_wscript_t;
 
 typedef struct {
     uint8_t depth;
@@ -48,12 +54,13 @@ typedef struct {
     uint8_t n_inputs, n_outputs;
     plan_input_t inputs[PLAN_MAX_INPUTS];
     plan_output_t outputs[PLAN_MAX_OUTPUTS];
+    plan_wscript_t wscripts[PLAN_MAX_INPUTS]; /* a P2WSH input's witness script, only for one to be signed */
 } plan_t;
 
 /* A signature made by the signer. The host writes it to parser.wasm's signature buffer and parser.wasm inserts it */
 typedef struct {
     uint8_t input;
-    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH and P2SH-P2WPKH; 0x00 + x-only output key for P2TR */
+    uint8_t pubkey[33]; /* compressed pubkey for P2WPKH, P2SH-P2WPKH and P2WSH; 0x00 + x-only output key for P2TR */
     uint8_t sig_len;
     uint8_t sig[73]; /* DER + sighash byte for ECDSA; 64 or 65 bytes for Schnorr */
 } plan_sig_t;
@@ -62,6 +69,7 @@ _Static_assert(sizeof(plan_sig_t) == 108, "plan_sig_t layout");
 _Static_assert(sizeof(plan_input_t) == 176, "plan_input_t layout");
 _Static_assert(sizeof(plan_output_t) == 136, "plan_output_t layout");
 _Static_assert(offsetof(plan_t, inputs) == 24, "plan_t layout");
-_Static_assert(sizeof(plan_t) == 5016, "plan_t layout");
+_Static_assert(offsetof(plan_t, wscripts) == 5016, "plan_t layout");
+_Static_assert(sizeof(plan_t) == 6712, "plan_t layout");
 
 #endif

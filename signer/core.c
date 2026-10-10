@@ -29,13 +29,25 @@ static uint32_t msg_path[5];
 static size_t msg_len;
 static int msg_reviewed;
 
-enum { SPK_OTHER, SPK_P2WPKH, SPK_P2SH_P2WPKH, SPK_P2TR };
+enum { SPK_OTHER, SPK_P2WPKH, SPK_P2SH_P2WPKH, SPK_P2TR, SPK_P2WSH };
 
 static int spk_type(const plan_script_t *s) {
     if (s->len == 22 && s->bytes[0] == 0x00 && s->bytes[1] == 20) return SPK_P2WPKH;
     if (s->len == 23 && s->bytes[0] == 0xa9 && s->bytes[1] == 20 && s->bytes[22] == 0x87) return SPK_P2SH_P2WPKH;
     if (s->len == 34 && s->bytes[0] == 0x51 && s->bytes[1] == 32) return SPK_P2TR;
+    if (s->len == 34 && s->bytes[0] == 0x00 && s->bytes[1] == 32) return SPK_P2WSH;
     return SPK_OTHER;
+}
+
+/* OP_m, n compressed keys, OP_n, OP_CHECKMULTISIG with 1 <= m <= n <= 3. Returns n, or 0 for any other script */
+static unsigned multisig_keys(const plan_wscript_t *w) {
+    unsigned n = w->len >= 3 ? (w->len - 3u) / 34u : 0, m = w->bytes[0] - 0x50u;
+    if (n == 0 || w->len != 3 + 34 * n || m < 1 || m > n || w->bytes[w->len - 2] != 0x50 + n ||
+        w->bytes[w->len - 1] != 0xae)
+        return 0;
+    for (unsigned i = 0; i < n; i++)
+        if (w->bytes[1 + 34 * i] != 33 || (w->bytes[2 + 34 * i] != 2 && w->bytes[2 + 34 * i] != 3)) return 0;
+    return n;
 }
 
 /* BIP86 tweak, no script tree: moves the secret key to the output key and returns the x-only form */
@@ -63,8 +75,8 @@ static size_t wpkh_spk(const uint8_t pub[33], int nested, uint8_t spk[23]) {
     return 23;
 }
 
-static int owns(const plan_keypath_t *key, const plan_script_t *spk, bip32_node_t *node) {
-    uint8_t pub[33], mine[23], xonly[32];
+static int owns(const plan_keypath_t *key, const plan_script_t *spk, const plan_wscript_t *ws, bip32_node_t *node) {
+    uint8_t pub[33], mine[32], xonly[32];
     secp256k1_keypair kp;
     int type = spk_type(spk), ok = 0;
 
@@ -73,6 +85,14 @@ static int owns(const plan_keypath_t *key, const plan_script_t *spk, bip32_node_
         ok = wpkh_spk(pub, type == SPK_P2SH_P2WPKH, mine) == spk->len && !memcmp(mine, spk->bytes, spk->len);
     } else if (type == SPK_P2TR && taproot_tweak(node->key, xonly, &kp)) {
         ok = !memcmp(xonly, spk->bytes + 2, 32);
+    } else if (type == SPK_P2WSH && ws && bip32_pubkey(ctx, node->key, pub)) {
+        unsigned n = multisig_keys(ws);
+        sha256(ws->bytes, ws->len, mine);
+        ok = n && !memcmp(mine, spk->bytes + 2, 32);
+        for (unsigned i = 0, found = 0; ok && i <= n; i++) {
+            if (i == n) ok = found;
+            else found |= !memcmp(ws->bytes + 2 + 34 * i, pub, 33);
+        }
     }
     wipe(&kp, sizeof(kp));
     if (!ok) wipe(node, sizeof(*node));
@@ -106,6 +126,14 @@ static int format_ok(const plan_t *p) {
         }
         if (in->amount > MAX_MONEY || !script_ok(&in->spk) || !keypath_ok(&in->key)) return 0;
         if (in->key.depth == 0 && in->sighash_type) return 0;
+    }
+    for (unsigned i = 0; i < PLAN_MAX_INPUTS; i++) {
+        const plan_wscript_t *w = &p->wscripts[i];
+        if (w->len > PLAN_MAX_WSCRIPT) return 0;
+        for (unsigned k = w->len; k < PLAN_MAX_WSCRIPT; k++)
+            if (w->bytes[k]) return 0;
+        if (w->len && (i >= p->n_inputs || spk_type(&p->inputs[i].spk) != SPK_P2WSH || !p->inputs[i].key.depth))
+            return 0;
     }
     for (unsigned i = 0; i < PLAN_MAX_OUTPUTS; i++) {
         const plan_output_t *o = &p->outputs[i];
@@ -157,7 +185,7 @@ static int output_owner(const plan_t *p, const core_review_t *r, const plan_outp
     for (unsigned i = 0; i < p->n_inputs; i++) {
         const plan_keypath_t *ik = &p->inputs[i].key;
         if (r->will_sign[i] && ik->depth == 5 && !memcmp(ik->path, k->path, 3 * sizeof(uint32_t))) {
-            int ok = owns(k, &o->spk, &node);
+            int ok = owns(k, &o->spk, NULL, &node);
             wipe(&node, sizeof(node));
             return !ok ? CORE_OUT_EXTERNAL : k->path[3] ? CORE_OUT_CHANGE : CORE_OUT_SELF;
         }
@@ -217,9 +245,9 @@ int core_review(const plan_t *p, const core_prevtx_t prev[PLAN_MAX_INPUTS], core
         r->total_in += in->amount;
         if (r->total_in > MAX_MONEY) return CORE_ERR_FORMAT;
         if (in->key.depth == 0 || in->key.fingerprint != master_fp) continue;
-        if (type == SPK_OTHER) return CORE_ERR_SCRIPT;
+        if (type == SPK_OTHER || (type == SPK_P2WSH && !multisig_keys(&p->wscripts[i]))) return CORE_ERR_SCRIPT;
         if (type != SPK_P2TR ? in->sighash_type != 0x01 : in->sighash_type > 0x01) return CORE_ERR_SIGHASH;
-        if (!owns(&in->key, &in->spk, &node)) return CORE_ERR_NOT_OURS;
+        if (!owns(&in->key, &in->spk, &p->wscripts[i], &node)) return CORE_ERR_NOT_OURS;
         wipe(&node, sizeof(node));
         r->will_sign[i] = 1;
         r->n_sign++;
@@ -303,7 +331,7 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
     secp256k1_xonly_pubkey xpub;
     bip32_node_t node;
     size_t len = 72;
-    int ok = owns(&in->key, &in->spk, &node);
+    int ok = owns(&in->key, &in->spk, &p->wscripts[i], &node);
 
     s->input = (uint8_t)i;
     if (ok && spk_type(&in->spk) != SPK_P2TR) {
@@ -312,7 +340,8 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
         uint32_t counter = 0;
         ok = bip32_pubkey(ctx, node.key, s->pubkey);
         hash160(s->pubkey, 33, pkh);
-        ok = ok && sighash_bip143_p2wpkh(p, i, pkh, digest);
+        ok = ok && (spk_type(&in->spk) == SPK_P2WSH ? sighash_bip143_p2wsh(p, i, &p->wscripts[i], digest)
+                                                    : sighash_bip143_p2wpkh(p, i, pkh, digest));
         do {
             ok = ok && secp256k1_ecdsa_sign(ctx, &sig, digest, node.key, NULL, counter ? extra : NULL) &&
                  secp256k1_ecdsa_signature_serialize_compact(ctx, compact, &sig);
@@ -327,7 +356,7 @@ static int sign_input(const plan_t *p, unsigned i, core_sig_t *s) {
     } else if (ok) {
         /* aux is zero. BIP340's security does not depend on its quality, and being deterministic means
          * the same PSBT always yields the same signature, which another implementation can reproduce.
-         * Core, Trezor, Jade and BDK all do this. **Revisit before adding multisig**: BIP340 says
+         * Core, Trezor, Jade and BDK all do this. **Revisit before MuSig2 or FROST**: BIP340 says
          * deterministic nonces are unsafe there */
         ok = taproot_tweak(node.key, xonly, &kp) && sighash_bip341_keypath(ctx, p, i, in->sighash_type, digest) &&
              secp256k1_schnorrsig_sign32(ctx, s->sig, digest, &kp, NULL) &&
@@ -513,27 +542,29 @@ int core_message_sign(uint8_t sig[65]) {
  * the PC and it can watch the wallet without ever holding a key */
 int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX], char desc[CORE_DESC_MAX]) {
     const uint32_t coin = network == CORE_TESTNET ? 1u : 0u;
-    uint32_t path[3] = {purpose | H, coin | H, account | H};
+    /* BIP48 adds the script type, 2' for P2WSH */
+    const unsigned depth = purpose == 48 ? 4 : 3;
+    uint32_t path[4] = {purpose | H, coin | H, account | H, 2 | H};
     bip32_node_t parent, node;
     uint8_t pub[33], h[20], ser[78];
     char fp[9], acct[11];
     int rc = CORE_ERR_CRYPTO;
 
     if (!master_fp) return CORE_ERR_NO_SEED;
-    if ((purpose != 49 && purpose != 84 && purpose != 86) || account >= H) return CORE_ERR_FORMAT;
-    /* Derived in two steps because the serialization needs the parent's (m/purpose'/coin') fingerprint */
-    if (!bip32_derive(ctx, &master, path, 2, &parent) || !bip32_pubkey(ctx, parent.key, pub)) goto done;
+    if ((purpose != 48 && purpose != 49 && purpose != 84 && purpose != 86) || account >= H) return CORE_ERR_FORMAT;
+    /* Derived in two steps because the serialization needs the parent's fingerprint */
+    if (!bip32_derive(ctx, &master, path, depth - 1, &parent) || !bip32_pubkey(ctx, parent.key, pub)) goto done;
     hash160(pub, sizeof(pub), h);
-    if (!bip32_derive(ctx, &parent, path + 2, 1, &node) || !bip32_pubkey(ctx, node.key, pub)) goto done;
+    if (!bip32_derive(ctx, &parent, path + depth - 1, 1, &node) || !bip32_pubkey(ctx, node.key, pub)) goto done;
 
     /* version(4) depth(1) parent fingerprint(4) child number(4) chain code(32) pubkey(33) */
     {
         const uint32_t ver = network == CORE_TESTNET ? 0x043587cfu : 0x0488b21eu;
         unsigned o = 0;
         for (int i = 3; i >= 0; i--) ser[o++] = (uint8_t)(ver >> (8 * i));
-        ser[o++] = 3;
+        ser[o++] = (uint8_t)depth;
         memcpy(ser + o, h, 4), o += 4;
-        for (int i = 3; i >= 0; i--) ser[o++] = (uint8_t)(path[2] >> (8 * i));
+        for (int i = 3; i >= 0; i--) ser[o++] = (uint8_t)(path[depth - 1] >> (8 * i));
         memcpy(ser + o, node.chain, 32), o += 32;
         memcpy(ser + o, pub, 33);
     }
@@ -550,22 +581,26 @@ int core_account_xpub(unsigned purpose, uint32_t account, char out[CORE_XPUB_MAX
         for (unsigned i = 0; i < n; i++) acct[i] = rev[n - 1 - i];
         acct[n] = 0;
     }
-    /* An output descriptor Sparrow and others read as is; <0;1> covers receive and change in one line.
-     * Built by hand because snprintf drags the whole of stdio into the wasm build */
+    /* An output descriptor Sparrow and others read as is; <0;1> covers receive and change in one line. For BIP48
+     * it is the key expression that goes into sortedmulti(). Built by hand: snprintf drags stdio into the wasm */
     {
         const char *parts[] = {purpose == 86   ? "tr(["
                                : purpose == 49 ? "sh(wpkh(["
+                               : purpose == 48 ? "["
                                                : "wpkh([",
                                fp,
                                purpose == 86   ? "/86h/"
                                : purpose == 49 ? "/49h/"
+                               : purpose == 48 ? "/48h/"
                                                : "/84h/",
                                coin ? "1" : "0",
                                "h/",
                                acct,
-                               "h]",
+                               purpose == 48 ? "h/2h]" : "h]",
                                out,
-                               purpose == 49 ? "/<0;1>/*))" : "/<0;1>/*)"};
+                               purpose == 49   ? "/<0;1>/*))"
+                               : purpose == 48 ? "/<0;1>/*"
+                                               : "/<0;1>/*)"};
         size_t o = 0;
         for (unsigned k = 0; k < sizeof(parts) / sizeof(*parts); k++) {
             size_t n = strlen(parts[k]);

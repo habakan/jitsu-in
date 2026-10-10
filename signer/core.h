@@ -17,7 +17,7 @@ enum {
     CORE_ERR_NOT_OURS, /* an input claims our fingerprint, but its key does not produce its script */
     CORE_ERR_NOTHING_TO_SIGN,
     CORE_ERR_SIGHASH,        /* a sighash type we do not allow */
-    CORE_ERR_SCRIPT,         /* an input to be signed is not P2WPKH, P2SH-P2WPKH or P2TR */
+    CORE_ERR_SCRIPT,         /* an input to be signed is not P2WPKH, P2SH-P2WPKH, P2TR or a P2WSH multisig */
     CORE_ERR_PREVTX_MISSING, /* two or more inputs including SegWit v0, and no non_witness_utxo */
     CORE_ERR_PREVTX_MISMATCH,
     CORE_ERR_FEE,
@@ -82,7 +82,8 @@ int core_bip85_mnemonic(unsigned words, uint32_t index, char *out, size_t cap);
 int core_find_address(const char *addr, size_t len, uint32_t account, uint32_t count);
 
 /* The account xpub (m/purpose'/coin'/account') and its sh(wpkh()), wpkh() or tr() descriptor, so the PC
- * side can be watch-only. purpose is 49, 84 or 86 and account below 2^31; CORE_OK, or _FORMAT / _NO_SEED */
+ * side can be watch-only. purpose is 48, 49, 84 or 86 and account below 2^31; 48 is m/48'/coin'/account'/2'
+ * (P2WSH) and gives the key expression for sortedmulti(). CORE_OK, or _FORMAT / _NO_SEED */
 #define CORE_XPUB_MAX 120
 #define CORE_DESC_MAX 180
 /* BIP137, purpose 49 or 84. Review shows the key's address and the message, in hex unless it is printable

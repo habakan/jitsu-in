@@ -61,7 +61,7 @@ fun main(args: Array<String>) {
         check(plan.inputs[0].key.toString() == "73c5da0a/84h/0h/0h/0/0", "keypath prints as ${plan.inputs[0].key}")
         check(plan.inputs[0].key!!.fingerprint == fp, "fingerprint is kept as a number")
         val raw = parser.rawPlan()
-        check(raw.size == 5016, "raw plan is ${raw.size} bytes")
+        check(raw.size == 6712, "raw plan is ${raw.size} bytes")
         check(raw.sliceArray(0..3).contentEquals(byteArrayOf(0x42, 0x50, 0x4c, 0x4e)), "raw plan has BPLN magic")
         check(raw[16].toInt() == plan.inputs.size && raw[17].toInt() == plan.outputs.size, "raw plan counts match")
     }

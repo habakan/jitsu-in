@@ -20,6 +20,7 @@
     ]
    },
    "sighash_type": 1,
+   "wscript": "",
    "has_prevtx": true
   },
   {
@@ -39,6 +40,7 @@
     ]
    },
    "sighash_type": 1,
+   "wscript": "",
    "has_prevtx": true
   }
  ],
